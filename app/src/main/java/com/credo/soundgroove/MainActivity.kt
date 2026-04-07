@@ -12,6 +12,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,6 +28,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
 import com.credo.soundgroove.ui.theme.SoundGrooveTheme
 
 data class Song(
@@ -37,42 +40,47 @@ data class Song(
 )
 
 class MainActivity : ComponentActivity() {
+    private lateinit var player: ExoPlayer
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        player = ExoPlayer.Builder(this).build()
         enableEdgeToEdge()
         setContent {
             SoundGrooveTheme {
-                HomeScreen()
+                HomeScreen(player)
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        player.release()
     }
 }
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(player: ExoPlayer) {
     val context = LocalContext.current
     var songs by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var currentSong by remember { mutableStateOf<Song?>(null) }
+    var isPlaying by remember { mutableStateOf(false) }
+
     var hasPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_MEDIA_AUDIO
+                context, Manifest.permission.READ_MEDIA_AUDIO
             ) == PackageManager.PERMISSION_GRANTED
         )
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasPermission = granted
-    }
+    ) { granted -> hasPermission = granted }
 
     LaunchedEffect(hasPermission) {
-        if (hasPermission) {
-            songs = loadSongs(context)
-        } else {
-            permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
-        }
+        if (hasPermission) songs = loadSongs(context)
+        else permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
     }
 
     Column(
@@ -90,7 +98,7 @@ fun HomeScreen() {
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         Text(
             text = "${songs.size} chansons trouvées",
@@ -98,7 +106,7 @@ fun HomeScreen() {
             fontSize = 14.sp
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Row(
             modifier = Modifier
@@ -116,40 +124,86 @@ fun HomeScreen() {
             )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        if (!hasPermission) {
-            Text(
-                text = "⚠️ Autorise l'accès à ta musique pour continuer.",
-                color = Color(0xFFFFCC00),
-                fontSize = 14.sp
-            )
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(songs) { song ->
-                    SongItem(song)
+        // Mini lecteur
+        currentSong?.let { song ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF1DB954), shape = RoundedCornerShape(12.dp))
+                    .padding(12.dp)
+                    .clickable {
+                        if (isPlaying) player.pause()
+                        else player.play()
+                        isPlaying = !isPlaying
+                    },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = if (isPlaying) "⏸" else "▶", fontSize = 20.sp)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = song.title,
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = song.artist,
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 11.sp,
+                        maxLines = 1
+                    )
                 }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(songs) { song ->
+                SongItem(
+                    song = song,
+                    isPlaying = currentSong?.id == song.id && isPlaying,
+                    onClick = {
+                        currentSong = song
+                        val mediaItem = MediaItem.fromUri(song.uri)
+                        player.setMediaItem(mediaItem)
+                        player.prepare()
+                        player.play()
+                        isPlaying = true
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-fun SongItem(song: Song) {
+fun SongItem(song: Song, isPlaying: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF1A1A1A), shape = RoundedCornerShape(12.dp))
+            .background(
+                if (isPlaying) Color(0xFF1A2A1A) else Color(0xFF1A1A1A),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable { onClick() }
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
                 .size(48.dp)
-                .background(Color(0xFF2A2A2A), shape = RoundedCornerShape(8.dp)),
+                .background(
+                    if (isPlaying) Color(0xFF1DB954) else Color(0xFF2A2A2A),
+                    shape = RoundedCornerShape(8.dp)
+                ),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = "🎵", fontSize = 20.sp)
+            Text(text = if (isPlaying) "▶" else "🎵", fontSize = 20.sp)
         }
 
         Spacer(modifier = Modifier.width(12.dp))
@@ -157,7 +211,7 @@ fun SongItem(song: Song) {
         Column {
             Text(
                 text = song.title,
-                color = Color.White,
+                color = if (isPlaying) Color(0xFF1DB954) else Color.White,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
