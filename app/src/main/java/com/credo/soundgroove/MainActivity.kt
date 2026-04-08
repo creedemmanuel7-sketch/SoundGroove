@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,14 +34,16 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.credo.soundgroove.ui.theme.*
-import com.credo.soundgroove.ui.theme.SoundGrooveTheme
 
 data class Song(
     val id: Long,
     val title: String,
     val artist: String,
-    val uri: Uri
+    val uri: Uri,
+    val albumArtUri: Uri?
 )
 
 class MainActivity : ComponentActivity() {
@@ -52,7 +55,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             SoundGrooveTheme {
-                HomeScreen(player)
+                MainScreen(player)
             }
         }
     }
@@ -64,7 +67,8 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun HomeScreen(player: ExoPlayer) {
+fun MainScreen(player: ExoPlayer) {
+    var selectedTab by remember { mutableStateOf(0) }
     val context = LocalContext.current
     var songs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var currentSong by remember { mutableStateOf<Song?>(null) }
@@ -100,70 +104,16 @@ fun HomeScreen(player: ExoPlayer) {
                 )
             )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp)
-        ) {
-            Spacer(modifier = Modifier.height(52.dp))
+        Column(modifier = Modifier.fillMaxSize()) {
 
-            // Header
-            Text(
-                text = "Bonsoir, Gérald 👋",
-                color = TextPrimary,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Ready to groove ?",
-                color = TextSecondary,
-                fontSize = 14.sp
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Barre de recherche
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(CardSurface, shape = RoundedCornerShape(16.dp))
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(text = "🔍", fontSize = 16.sp)
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "Rechercher une chanson...",
-                    color = TextSecondary,
-                    fontSize = 14.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Titre section
-            Text(
-                text = "Toutes les chansons  •  ${songs.size}",
-                color = TextSecondary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Liste
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(bottom = if (currentSong != null) 80.dp else 0.dp)
-            ) {
-                items(songs) { song ->
-                    SongItem(
-                        song = song,
-                        isPlaying = currentSong?.id == song.id && isPlaying,
-                        onClick = {
+            // Contenu principal
+            Box(modifier = Modifier.weight(1f)) {
+                when (selectedTab) {
+                    0 -> HomeTab(
+                        songs = songs,
+                        currentSong = currentSong,
+                        isPlaying = isPlaying,
+                        onSongClick = { song ->
                             currentSong = song
                             val mediaItem = MediaItem.fromUri(song.uri)
                             player.setMediaItem(mediaItem)
@@ -172,21 +122,156 @@ fun HomeScreen(player: ExoPlayer) {
                             isPlaying = true
                         }
                     )
+                    1 -> PlaceholderTab("🔍", "Recherche", "Bientôt disponible")
+                    2 -> PlaceholderTab("👤", "Profil", "Bientôt disponible")
+                }
+            }
+
+            // Mini lecteur
+            currentSong?.let { song ->
+                MiniPlayer(
+                    song = song,
+                    isPlaying = isPlaying,
+                    onPlayPause = {
+                        if (isPlaying) player.pause() else player.play()
+                        isPlaying = !isPlaying
+                    }
+                )
+            }
+
+            // Barre de navigation
+            BottomNavBar(
+                selectedTab = selectedTab,
+                onTabSelected = { selectedTab = it }
+            )
+        }
+    }
+}
+
+@Composable
+fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
+    val tabs = listOf(
+        Pair("🏠", "Accueil"),
+        Pair("🔍", "Recherche"),
+        Pair("👤", "Profil")
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF1A0A2E))
+            .padding(vertical = 8.dp, horizontal = 16.dp),
+        horizontalArrangement = Arrangement.SpaceAround,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        tabs.forEachIndexed { index, (icon, label) ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .clickable { onTabSelected(index) }
+                    .padding(8.dp)
+            ) {
+                Text(text = icon, fontSize = 22.sp)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = label,
+                    color = if (selectedTab == index) LightPurple else TextSecondary,
+                    fontSize = 10.sp,
+                    fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
+                )
+                if (selectedTab == index) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(4.dp)
+                            .background(LightPurple, CircleShape)
+                    )
                 }
             }
         }
+    }
+}
 
-        // Mini lecteur en bas
-        currentSong?.let { song ->
-            MiniPlayer(
-                song = song,
-                isPlaying = isPlaying,
-                onPlayPause = {
-                    if (isPlaying) player.pause() else player.play()
-                    isPlaying = !isPlaying
-                },
-                modifier = Modifier.align(Alignment.BottomCenter)
+@Composable
+fun HomeTab(
+    songs: List<Song>,
+    currentSong: Song?,
+    isPlaying: Boolean,
+    onSongClick: (Song) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp)
+    ) {
+        Spacer(modifier = Modifier.height(52.dp))
+
+        Text(
+            text = "Bonsoir, Gérald 👋",
+            color = TextPrimary,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Ready to groove ?",
+            color = TextSecondary,
+            fontSize = 14.sp
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(CardSurface, shape = RoundedCornerShape(16.dp))
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "🔍", fontSize = 16.sp)
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = "Rechercher une chanson...",
+                color = TextSecondary,
+                fontSize = 14.sp
             )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text(
+            text = "Toutes les chansons  •  ${songs.size}",
+            color = TextSecondary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(songs) { song ->
+                SongItem(
+                    song = song,
+                    isPlaying = currentSong?.id == song.id && isPlaying,
+                    onClick = { onSongClick(song) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PlaceholderTab(icon: String, title: String, subtitle: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = icon, fontSize = 48.sp)
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(text = title, color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = subtitle, color = TextSecondary, fontSize = 14.sp)
         }
     }
 }
@@ -195,67 +280,69 @@ fun HomeScreen(player: ExoPlayer) {
 fun MiniPlayer(
     song: Song,
     isPlaying: Boolean,
-    onPlayPause: () -> Unit,
-    modifier: Modifier = Modifier
+    onPlayPause: () -> Unit
 ) {
-    Box(
-        modifier = modifier
+    Row(
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 16.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
             .background(
-                Brush.horizontalGradient(
-                    colors = listOf(MediumPurple, DarkPurple)
-                ),
+                Brush.horizontalGradient(listOf(MediumPurple, DarkPurple)),
                 shape = RoundedCornerShape(20.dp)
             )
-            .padding(12.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+        // Pochette
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(CardSurface),
+            contentAlignment = Alignment.Center
         ) {
-            // Icône chanson
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(LightPurple.copy(alpha = 0.3f), shape = RoundedCornerShape(10.dp)),
-                contentAlignment = Alignment.Center
-            ) {
+            if (song.albumArtUri != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(song.albumArtUri)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
                 Text(text = "🎵", fontSize = 20.sp)
             }
+        }
 
-            Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = song.title,
-                    color = TextPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = song.artist,
-                    color = PurpleAccent,
-                    fontSize = 11.sp,
-                    maxLines = 1
-                )
-            }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = song.title,
+                color = TextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = song.artist,
+                color = PurpleAccent,
+                fontSize = 11.sp,
+                maxLines = 1
+            )
+        }
 
-            // Bouton play/pause
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(LightPurple, shape = CircleShape)
-                    .clickable { onPlayPause() },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = if (isPlaying) "⏸" else "▶",
-                    fontSize = 16.sp
-                )
-            }
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(LightPurple, CircleShape)
+                .clickable { onPlayPause() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = if (isPlaying) "⏸" else "▶", fontSize = 16.sp)
         }
     }
 }
@@ -266,30 +353,38 @@ fun SongItem(song: Song, isPlaying: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                if (isPlaying) CardSurface.copy(alpha = 0.9f) else CardSurface.copy(alpha = 0.5f),
+                if (isPlaying) CardSurface.copy(alpha = 0.9f)
+                else CardSurface.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(14.dp)
             )
             .clickable { onClick() }
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Pochette d'album
         Box(
             modifier = Modifier
                 .size(46.dp)
-                .background(
-                    if (isPlaying)
-                        Brush.radialGradient(listOf(LightPurple, MediumPurple))
-                    else
-                        Brush.radialGradient(listOf(DarkPurple, CardSurface)),
-                    shape = RoundedCornerShape(10.dp)
-                )
-                .clip(RoundedCornerShape(10.dp)),
+                .clip(RoundedCornerShape(10.dp))
+                .background(DarkPurple),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = if (isPlaying) "▶" else "🎵",
-                fontSize = 18.sp
-            )
+            if (song.albumArtUri != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(song.albumArtUri)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Text(
+                    text = if (isPlaying) "▶" else "🎵",
+                    fontSize = 18.sp
+                )
+            }
         }
 
         Spacer(modifier = Modifier.width(12.dp))
@@ -313,11 +408,7 @@ fun SongItem(song: Song, isPlaying: Boolean, onClick: () -> Unit) {
         }
 
         if (isPlaying) {
-            Text(
-                text = "♫",
-                color = CyanAccent,
-                fontSize = 18.sp
-            )
+            Text(text = "♫", color = CyanAccent, fontSize = 18.sp)
         }
     }
 }
@@ -328,6 +419,7 @@ fun loadSongs(context: android.content.Context): List<Song> {
         MediaStore.Audio.Media._ID,
         MediaStore.Audio.Media.TITLE,
         MediaStore.Audio.Media.ARTIST,
+        MediaStore.Audio.Media.ALBUM_ID
     )
     val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
     val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
@@ -339,15 +431,20 @@ fun loadSongs(context: android.content.Context): List<Song> {
         val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
         val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
         val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+        val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
 
         while (cursor.moveToNext()) {
             val id = cursor.getLong(idCol)
             val title = cursor.getString(titleCol)
             val artist = cursor.getString(artistCol)
+            val albumId = cursor.getLong(albumIdCol)
             val uri = ContentUris.withAppendedId(
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
             )
-            songs.add(Song(id, title, artist, uri))
+            val albumArtUri = ContentUris.withAppendedId(
+                Uri.parse("content://media/external/audio/albumart"), albumId
+            )
+            songs.add(Song(id, title, artist, uri, albumArtUri))
         }
     }
     return songs
