@@ -199,6 +199,15 @@ fun HomeTab(
     isPlaying: Boolean,
     onSongClick: (Song) -> Unit
 ) {
+    // 👇 ICI - juste après l'accolade ouvrante de la fonction
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredSongs = remember(searchQuery, songs) {
+        if (searchQuery.isEmpty()) songs
+        else songs.filter { song ->
+            song.title.contains(searchQuery, ignoreCase = true) ||
+                    song.artist.contains(searchQuery, ignoreCase = true)
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -225,22 +234,42 @@ fun HomeTab(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(CardSurface, shape = RoundedCornerShape(16.dp))
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(text = "🔍", fontSize = 16.sp)
             Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = "Rechercher une chanson...",
-                color = TextSecondary,
-                fontSize = 14.sp
+            androidx.compose.material3.TextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = {
+                    Text(
+                        text = "Rechercher une chanson...",
+                        color = TextSecondary,
+                        fontSize = 14.sp
+                    )
+                },
+                colors = androidx.compose.material3.TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    cursorColor = LightPurple
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
             )
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
         Text(
-            text = "Toutes les chansons  •  ${songs.size}",
+            text = if (searchQuery.isEmpty())
+                "Toutes les chansons  •  ${songs.size}"
+            else
+                "${filteredSongs.size} résultat(s) pour \"$searchQuery\"",
             color = TextSecondary,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium
@@ -248,8 +277,9 @@ fun HomeTab(
 
         Spacer(modifier = Modifier.height(12.dp))
 
+        // 👇 ICI - items(filteredSongs) au lieu de items(songs)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(songs) { song ->
+            items(filteredSongs) { song ->
                 SongItem(
                     song = song,
                     isPlaying = currentSong?.id == song.id && isPlaying,
