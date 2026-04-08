@@ -73,6 +73,7 @@ fun MainScreen(player: ExoPlayer) {
     var songs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var currentSong by remember { mutableStateOf<Song?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
+    var showPlayer by remember { mutableStateOf(false) }
 
     var hasPermission by remember {
         mutableStateOf(
@@ -105,8 +106,6 @@ fun MainScreen(player: ExoPlayer) {
             )
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-
-            // Contenu principal
             Box(modifier = Modifier.weight(1f)) {
                 when (selectedTab) {
                     0 -> HomeTab(
@@ -120,6 +119,7 @@ fun MainScreen(player: ExoPlayer) {
                             player.prepare()
                             player.play()
                             isPlaying = true
+                            showPlayer = true
                         }
                     )
                     1 -> PlaceholderTab("🔍", "Recherche", "Bientôt disponible")
@@ -127,7 +127,6 @@ fun MainScreen(player: ExoPlayer) {
                 }
             }
 
-            // Mini lecteur
             currentSong?.let { song ->
                 MiniPlayer(
                     song = song,
@@ -135,14 +134,27 @@ fun MainScreen(player: ExoPlayer) {
                     onPlayPause = {
                         if (isPlaying) player.pause() else player.play()
                         isPlaying = !isPlaying
-                    }
+                    },
+                    onOpen = { showPlayer = true }  // 👈 ajoute ça
                 )
             }
 
-            // Barre de navigation
             BottomNavBar(
                 selectedTab = selectedTab,
                 onTabSelected = { selectedTab = it }
+            )
+        }
+
+        // Écran Player par-dessus tout
+        if (showPlayer && currentSong != null) {
+            PlayerScreen(
+                song = currentSong!!,
+                isPlaying = isPlaying,
+                onPlayPause = {
+                    if (isPlaying) player.pause() else player.play()
+                    isPlaying = !isPlaying
+                },
+                onClose = { showPlayer = false }
             )
         }
     }
@@ -199,7 +211,6 @@ fun HomeTab(
     isPlaying: Boolean,
     onSongClick: (Song) -> Unit
 ) {
-    // 👇 ICI - juste après l'accolade ouvrante de la fonction
     var searchQuery by remember { mutableStateOf("") }
     val filteredSongs = remember(searchQuery, songs) {
         if (searchQuery.isEmpty()) songs
@@ -208,6 +219,7 @@ fun HomeTab(
                     song.artist.contains(searchQuery, ignoreCase = true)
         }
     }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -277,7 +289,6 @@ fun HomeTab(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 👇 ICI - items(filteredSongs) au lieu de items(songs)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(filteredSongs) { song ->
                 SongItem(
@@ -310,7 +321,8 @@ fun PlaceholderTab(icon: String, title: String, subtitle: String) {
 fun MiniPlayer(
     song: Song,
     isPlaying: Boolean,
-    onPlayPause: () -> Unit
+    onPlayPause: () -> Unit,
+    onOpen: () -> Unit  // 👈 ajoute ça
 ) {
     Row(
         modifier = Modifier
@@ -320,10 +332,10 @@ fun MiniPlayer(
                 Brush.horizontalGradient(listOf(MediumPurple, DarkPurple)),
                 shape = RoundedCornerShape(20.dp)
             )
+            .clickable { onOpen() }  // 👈 ajoute ça
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Pochette
         Box(
             modifier = Modifier
                 .size(44.dp)
@@ -391,7 +403,6 @@ fun SongItem(song: Song, isPlaying: Boolean, onClick: () -> Unit) {
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Pochette d'album
         Box(
             modifier = Modifier
                 .size(46.dp)
@@ -478,4 +489,148 @@ fun loadSongs(context: android.content.Context): List<Song> {
         }
     }
     return songs
+}
+@Composable
+fun PlayerScreen(
+    song: Song,
+    isPlaying: Boolean,
+    onPlayPause: () -> Unit,
+    onClose: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF2D1B4E),
+                        Color(0xFF1A0A2E),
+                        Color(0xFF0D0D1A)
+                    )
+                )
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(48.dp))
+
+            // Bouton retour
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "↓",
+                    color = TextPrimary,
+                    fontSize = 28.sp,
+                    modifier = Modifier.clickable { onClose() }
+                )
+                Text(
+                    text = "En lecture",
+                    color = TextSecondary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(text = "⋮", color = TextPrimary, fontSize = 24.sp)
+            }
+
+            Spacer(modifier = Modifier.height(48.dp))
+
+            // Pochette grande
+            Box(
+                modifier = Modifier
+                    .size(280.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(DarkPurple),
+                contentAlignment = Alignment.Center
+            ) {
+                if (song.albumArtUri != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(song.albumArtUri)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Text(text = "🎵", fontSize = 80.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            // Titre et artiste
+            Text(
+                text = song.title,
+                color = TextPrimary,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = song.artist,
+                color = LightPurple,
+                fontSize = 16.sp
+            )
+
+            Spacer(modifier = Modifier.height(48.dp))
+
+            // Contrôles
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Précédent
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(CardSurface, CircleShape)
+                        .clickable { },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "⏮", fontSize = 22.sp)
+                }
+
+                // Play/Pause
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(LightPurple, MediumPurple)
+                            ),
+                            CircleShape
+                        )
+                        .clickable { onPlayPause() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (isPlaying) "⏸" else "▶",
+                        fontSize = 28.sp
+                    )
+                }
+
+                // Suivant
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(CardSurface, CircleShape)
+                        .clickable { },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "⏭", fontSize = 22.sp)
+                }
+            }
+        }
+    }
 }
