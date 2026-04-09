@@ -516,6 +516,8 @@ fun PlayerScreen(
     player: ExoPlayer
 ) {
     var progress by remember { mutableStateOf(0f) }
+    var isShuffled by remember { mutableStateOf(false) }
+    var repeatMode by remember { mutableStateOf(0) } // 0=off, 1=all, 2=one
     var duration by remember { mutableStateOf(0L) }
     var currentPosition by remember { mutableStateOf(0L) }
 
@@ -698,10 +700,17 @@ fun PlayerScreen(
                 Box(
                     modifier = Modifier
                         .size(44.dp)
-                        .background(CardSurface, CircleShape),
+                        .background(
+                            if (isShuffled) LightPurple else CardSurface,
+                            CircleShape
+                        )
+                        .clickable {
+                            isShuffled = !isShuffled
+                            player.shuffleModeEnabled = isShuffled
+                        },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "⇄", color = TextSecondary, fontSize = 18.sp)
+                    Text(text = "⇄", color = if (isShuffled) Color.White else TextSecondary, fontSize = 18.sp)
                 }
 
                 // Précédent
@@ -748,10 +757,28 @@ fun PlayerScreen(
                 Box(
                     modifier = Modifier
                         .size(44.dp)
-                        .background(CardSurface, CircleShape),
+                        .background(
+                            if (repeatMode > 0) LightPurple else CardSurface,
+                            CircleShape
+                        )
+                        .clickable {
+                            repeatMode = (repeatMode + 1) % 3
+                            player.repeatMode = when (repeatMode) {
+                                1 -> ExoPlayer.REPEAT_MODE_ALL
+                                2 -> ExoPlayer.REPEAT_MODE_ONE
+                                else -> ExoPlayer.REPEAT_MODE_OFF
+                            }
+                        },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "↺", color = TextSecondary, fontSize = 18.sp)
+                    Text(
+                        text = when (repeatMode) {
+                            2 -> "↺¹"
+                            else -> "↺"
+                        },
+                        color = if (repeatMode > 0) Color.White else TextSecondary,
+                        fontSize = 18.sp
+                    )
                 }
             }
         }
