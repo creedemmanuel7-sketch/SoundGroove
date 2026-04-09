@@ -649,35 +649,37 @@ fun PlayerScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Barre de progression
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .background(CardSurface, RoundedCornerShape(2.dp))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(progress.coerceIn(0f, 1f))
-                        .height(4.dp)
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(LightPurple, CyanAccent)
-                            ),
-                            RoundedCornerShape(2.dp)
-                        )
+            // Slider de progression interactif
+            var isSeeking by remember { mutableStateOf(false) }
+            var seekPosition by remember { mutableStateOf(0f) }
+
+            androidx.compose.material3.Slider(
+                value = if (isSeeking) seekPosition else progress.coerceIn(0f, 1f),
+                onValueChange = { value ->
+                    isSeeking = true
+                    seekPosition = value
+                },
+                onValueChangeFinished = {
+                    player.seekTo((seekPosition * duration).toLong())
+                    isSeeking = false
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.SliderDefaults.colors(
+                    thumbColor = LightPurple,
+                    activeTrackColor = LightPurple,
+                    inactiveTrackColor = CardSurface
                 )
-            }
+            )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-            // Temps
+// Temps
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = formatTime(currentPosition),
+                    text = formatTime(if (isSeeking) (seekPosition * duration).toLong() else currentPosition),
                     color = TextSecondary,
                     fontSize = 12.sp
                 )
