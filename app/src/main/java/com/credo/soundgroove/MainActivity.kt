@@ -154,7 +154,8 @@ fun MainScreen(player: ExoPlayer) {
                     if (isPlaying) player.pause() else player.play()
                     isPlaying = !isPlaying
                 },
-                onClose = { showPlayer = false }
+                onClose = { showPlayer = false },
+                player = player  // 👈 ajoute ça
             )
         }
     }
@@ -495,15 +496,35 @@ fun PlayerScreen(
     song: Song,
     isPlaying: Boolean,
     onPlayPause: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    player: ExoPlayer
 ) {
+    var progress by remember { mutableStateOf(0f) }
+    var duration by remember { mutableStateOf(0L) }
+    var currentPosition by remember { mutableStateOf(0L) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentPosition = player.currentPosition
+            duration = player.duration.coerceAtLeast(1L)
+            progress = currentPosition.toFloat() / duration.toFloat()
+            kotlinx.coroutines.delay(500)
+        }
+    }
+
+    fun formatTime(ms: Long): String {
+        val seconds = (ms / 1000) % 60
+        val minutes = (ms / 1000) / 60
+        return "%d:%02d".format(minutes, seconds)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF2D1B4E),
+                        Color(0xFF3D2060),
                         Color(0xFF1A0A2E),
                         Color(0xFF0D0D1A)
                     )
@@ -513,38 +534,53 @@ fun PlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(horizontal = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(52.dp))
 
-            // Bouton retour
+            // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "↓",
-                    color = TextPrimary,
-                    fontSize = 28.sp,
-                    modifier = Modifier.clickable { onClose() }
-                )
-                Text(
-                    text = "En lecture",
-                    color = TextSecondary,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(text = "⋮", color = TextPrimary, fontSize = 24.sp)
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(CardSurface, CircleShape)
+                        .clickable { onClose() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "↓", color = TextPrimary, fontSize = 20.sp)
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "EN LECTURE",
+                        color = TextSecondary,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(CardSurface, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "⋮", color = TextPrimary, fontSize = 20.sp)
+                }
             }
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(36.dp))
 
-            // Pochette grande
+            // Pochette
             Box(
                 modifier = Modifier
-                    .size(280.dp)
+                    .size(300.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .background(DarkPurple),
                 contentAlignment = Alignment.Center
@@ -564,25 +600,77 @@ fun PlayerScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             // Titre et artiste
-            Text(
-                text = song.title,
-                color = TextPrimary,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = song.artist,
-                color = LightPurple,
-                fontSize = 16.sp
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = song.title,
+                        color = TextPrimary,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = song.artist,
+                        color = LightPurple,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(text = "♡", color = TextSecondary, fontSize = 24.sp)
+            }
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // Barre de progression
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .background(CardSurface, RoundedCornerShape(2.dp))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progress.coerceIn(0f, 1f))
+                        .height(4.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(LightPurple, CyanAccent)
+                            ),
+                            RoundedCornerShape(2.dp)
+                        )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Temps
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = formatTime(currentPosition),
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = formatTime(duration),
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
 
             // Contrôles
             Row(
@@ -590,25 +678,33 @@ fun PlayerScreen(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Shuffle
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(CardSurface, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "⇄", color = TextSecondary, fontSize = 18.sp)
+                }
+
                 // Précédent
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(52.dp)
                         .background(CardSurface, CircleShape)
-                        .clickable { },
+                        .clickable { player.seekToPreviousMediaItem() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "⏮", fontSize = 22.sp)
+                    Text(text = "◀◀", color = TextPrimary, fontSize = 16.sp)
                 }
 
                 // Play/Pause
                 Box(
                     modifier = Modifier
-                        .size(72.dp)
+                        .size(68.dp)
                         .background(
-                            Brush.radialGradient(
-                                listOf(LightPurple, MediumPurple)
-                            ),
+                            Brush.radialGradient(listOf(LightPurple, MediumPurple)),
                             CircleShape
                         )
                         .clickable { onPlayPause() },
@@ -616,19 +712,30 @@ fun PlayerScreen(
                 ) {
                     Text(
                         text = if (isPlaying) "⏸" else "▶",
-                        fontSize = 28.sp
+                        fontSize = 26.sp,
+                        color = Color.White
                     )
                 }
 
                 // Suivant
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(52.dp)
                         .background(CardSurface, CircleShape)
-                        .clickable { },
+                        .clickable { player.seekToNextMediaItem() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "⏭", fontSize = 22.sp)
+                    Text(text = "▶▶", color = TextPrimary, fontSize = 16.sp)
+                }
+
+                // Repeat
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(CardSurface, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "↺", color = TextSecondary, fontSize = 18.sp)
                 }
             }
         }
