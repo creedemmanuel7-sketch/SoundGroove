@@ -86,6 +86,7 @@ fun MainScreen(player: ExoPlayer) {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasPermission = granted }
+    var recentlyPlayed by remember { mutableStateOf<List<Song>>(emptyList()) }
 
     LaunchedEffect(hasPermission) {
         if (hasPermission) songs = loadSongs(context)
@@ -122,6 +123,7 @@ fun MainScreen(player: ExoPlayer) {
                         songs = songs,
                         currentSong = currentSong,
                         isPlaying = isPlaying,
+                        recentlyPlayed = recentlyPlayed,
                         onSongClick = { song ->
                             currentSong = song
 
@@ -138,7 +140,11 @@ fun MainScreen(player: ExoPlayer) {
                             showPlayer = true
                         }
                     )
-                    1 -> SearchTab(
+
+                    1 -> PlaceholderTab("🎵", "Bibliothèque", "Bientôt disponible")
+
+
+                    2 -> SearchTab(
                         songs = songs,
                         onSongClick = { song ->
                             currentSong = song
@@ -149,8 +155,14 @@ fun MainScreen(player: ExoPlayer) {
                             player.play()
                             isPlaying = true
                             showPlayer = true
+
+                            // Ajouter aux récemment écoutés
+                            recentlyPlayed = (listOf(song) + recentlyPlayed)
+                                .distinctBy { it.id }
+                                .take(6)
+
                         }
-                    )                    2 -> PlaceholderTab("👤", "Profil", "Bientôt disponible")
+                    )                    3 -> PlaceholderTab("👤", "Profil", "Bientôt disponible")
                 }
             }
 
@@ -192,6 +204,7 @@ fun MainScreen(player: ExoPlayer) {
 fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
     val tabs = listOf(
         Pair("🏠", "Accueil"),
+        Pair("🎵", "Bibliothèque"),
         Pair("🔍", "Recherche"),
         Pair("👤", "Profil")
     )
@@ -237,6 +250,7 @@ fun HomeTab(
     songs: List<Song>,
     currentSong: Song?,
     isPlaying: Boolean,
+    recentlyPlayed: List<Song>,
     onSongClick: (Song) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -248,84 +262,276 @@ fun HomeTab(
         }
     }
 
-    Column(
+    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    val greeting = when {
+        hour < 12 -> "Bonjour"
+        hour < 18 -> "Bon après-midi"
+        else -> "Bonsoir"
+    }
+
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp)
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Spacer(modifier = Modifier.height(52.dp))
+        item {
+            Spacer(modifier = Modifier.height(52.dp))
 
-        Text(
-            text = "Bonsoir, Gérald 👋",
-            color = TextPrimary,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "Ready to groove ?",
-            color = TextSecondary,
-            fontSize = 14.sp
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(CardSurface, shape = RoundedCornerShape(16.dp))
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = "🔍", fontSize = 16.sp)
-            Spacer(modifier = Modifier.width(10.dp))
-            androidx.compose.material3.TextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
                     Text(
-                        text = "Rechercher une chanson...",
+                        text = greeting,
+                        color = TextPrimary,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Ready to groove ?",
                         color = TextSecondary,
                         fontSize = 14.sp
                     )
-                },
-                colors = androidx.compose.material3.TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    cursorColor = LightPurple
-                ),
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(CardSurface, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "⚙️", fontSize = 18.sp)
+                }
+            }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Text(
-            text = if (searchQuery.isEmpty())
-                "Toutes les chansons  •  ${songs.size}"
-            else
-                "${filteredSongs.size} résultat(s) pour \"$searchQuery\"",
-            color = TextSecondary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(filteredSongs) { song ->
-                SongItem(
-                    song = song,
-                    isPlaying = currentSong?.id == song.id && isPlaying,
-                    onClick = { onSongClick(song) }
+        item {
+            // Barre de recherche
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(CardSurface, shape = RoundedCornerShape(16.dp))
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = "🔍", fontSize = 16.sp)
+                Spacer(modifier = Modifier.width(10.dp))
+                androidx.compose.material3.TextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = {
+                        Text(
+                            text = "Rechercher une chanson...",
+                            color = TextSecondary,
+                            fontSize = 14.sp
+                        )
+                    },
+                    colors = androidx.compose.material3.TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        cursorColor = LightPurple
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
             }
         }
+
+        // Carte chanson en cours
+        if (currentSong != null && searchQuery.isEmpty()) {
+            item {
+                Text(
+                    text = "EN COURS",
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                        .background(
+                            Brush.horizontalGradient(listOf(DarkPurple, MediumPurple)),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable { }
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = currentSong.artist,
+                                color = PurpleAccent,
+                                fontSize = 13.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = currentSong.title,
+                                color = TextPrimary,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .background(LightPurple.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = if (isPlaying) "▶ En lecture" else "⏸ En pause",
+                                    color = LightPurple,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .size(100.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(CardSurface),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (currentSong.albumArtUri != null) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(currentSong.albumArtUri)
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Text(text = "🎵", fontSize = 40.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Recently Played
+        if (recentlyPlayed.isNotEmpty() && searchQuery.isEmpty()) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "RÉCEMMENT ÉCOUTÉS",
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
+                    Text(
+                        text = "Voir tout",
+                        color = LightPurple,
+                        fontSize = 12.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Grille 2 colonnes
+                val rows = recentlyPlayed.chunked(2)
+                rows.forEach { rowSongs ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        rowSongs.forEach { song ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(1f)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(CardSurface)
+                                    .clickable { onSongClick(song) },
+                                contentAlignment = Alignment.BottomStart
+                            ) {
+                                if (song.albumArtUri != null) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(song.albumArtUri)
+                                            .crossfade(true)
+                                            .build(),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                listOf(Color.Transparent, Color.Black.copy(0.7f))
+                                            )
+                                        )
+                                )
+                                Text(
+                                    text = song.title,
+                                    color = TextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
+                        }
+                        if (rowSongs.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+            }
+        }
+
+        // Liste chansons
+        item {
+            Text(
+                text = if (searchQuery.isEmpty())
+                    "TOUTES LES CHANSONS  •  ${songs.size}"
+                else
+                    "${filteredSongs.size} RÉSULTAT(S) POUR \"${searchQuery.uppercase()}\"",
+                color = TextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
+            )
+        }
+
+        items(filteredSongs) { song ->
+            SongItem(
+                song = song,
+                isPlaying = currentSong?.id == song.id && isPlaying,
+                onClick = { onSongClick(song) }
+            )
+        }
+
+        item { Spacer(modifier = Modifier.height(16.dp)) }
     }
 }
 
