@@ -155,14 +155,20 @@ fun MainScreen(player: ExoPlayer) {
                             isPlaying = true
                             showPlayer = true
                             recentlyPlayed = (listOf(song) + recentlyPlayed)
-                                .distinctBy { it.id }
-                                .take(70)
+                                .distinctBy { it.id }.take(70)
+                        },
+                        onPlayPlaylist = { song, playlist ->
+                            currentSong = song
+                            playSong(song, playlist)
+                            isPlaying = true
+                            showPlayer = true
+                            recentlyPlayed = (listOf(song) + recentlyPlayed)
+                                .distinctBy { it.id }.take(70)
                         },
                         onToggleFavorite = { song ->
                             favoriteSongs = if (favoriteSongs.any { it.id == song.id })
                                 favoriteSongs.filter { it.id != song.id }
-                            else
-                                favoriteSongs + song
+                            else favoriteSongs + song
                         }
                     )
                     2 -> SearchTab(
@@ -1476,12 +1482,14 @@ fun LibraryTab(
     songs: List<Song>,
     favoriteSongs: List<Song>,
     onSongClick: (Song) -> Unit,
+    onPlayPlaylist: (Song, List<Song>) -> Unit,
     onToggleFavorite: (Song) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(0) }
+    var selectedAlbum by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
+    var selectedArtist by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     val tabs = listOf("Chansons", "Albums", "Artistes", "Favoris")
 
-    // Calcul albums
     val albums = remember(songs) {
         songs.groupBy { it.artist }
             .entries
@@ -1489,323 +1497,424 @@ fun LibraryTab(
             .map { Pair(it.key, it.value) }
     }
 
-    // Calcul artistes
     val artists = remember(songs) {
-        songs.map { it.artist }
-            .distinct()
-            .sorted()
+        songs.map { it.artist }.distinct().sorted()
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp)
-    ) {
-        Spacer(modifier = Modifier.height(52.dp))
+    Box(modifier = Modifier.fillMaxSize()) {
 
-        Text(
-            text = "Ma Musique",
-            color = TextPrimary,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Onglets
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // Contenu principal
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
         ) {
-            tabs.forEachIndexed { index, tab ->
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .clickable { selectedTab = index }
-                        .padding(horizontal = 4.dp, vertical = 8.dp)
-                ) {
-                    Text(
-                        text = tab,
-                        color = if (selectedTab == index) LightPurple else TextSecondary,
-                        fontSize = 13.sp,
-                        fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    if (selectedTab == index) {
-                        Box(
-                            modifier = Modifier
-                                .width(24.dp)
-                                .height(2.dp)
-                                .background(LightPurple, RoundedCornerShape(1.dp))
-                        )
-                    }
-                }
-            }
-        }
+            Spacer(modifier = Modifier.height(52.dp))
 
-        Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Ma Musique",
+                color = TextPrimary,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold
+            )
 
-        when (selectedTab) {
-            // Chansons
-            0 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(songs) { song ->
-                    val isFav = favoriteSongs.any { it.id == song.id }
-                    Row(
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Onglets
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                tabs.forEachIndexed { index, tab ->
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .background(CardSurface.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-                            .clickable { onSongClick(song) }
-                            .padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .clickable { selectedTab = index }
+                            .padding(horizontal = 4.dp, vertical = 8.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(DarkPurple),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (song.albumArtUri != null) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(LocalContext.current)
-                                        .data(song.albumArtUri)
-                                        .crossfade(true)
-                                        .build(),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Text(text = "🎵", fontSize = 18.sp)
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = song.title,
-                                color = TextPrimary,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = song.artist,
-                                color = TextSecondary,
-                                fontSize = 12.sp,
-                                maxLines = 1
-                            )
-                        }
                         Text(
-                            text = if (isFav) "♥" else "♡",
-                            color = if (isFav) Color(0xFFFF6B9D) else TextSecondary,
-                            fontSize = 20.sp,
-                            modifier = Modifier
-                                .clickable { onToggleFavorite(song) }
-                                .padding(8.dp)
+                            text = tab,
+                            color = if (selectedTab == index) LightPurple else TextSecondary,
+                            fontSize = 13.sp,
+                            fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
                         )
-                    }
-                }
-                item { Spacer(modifier = Modifier.height(16.dp)) }
-            }
-
-            // Albums
-            1 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                val rows = albums.chunked(2)
-                items(rows) { rowAlbums ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        rowAlbums.forEach { (artist, albumSongs) ->
+                        Spacer(modifier = Modifier.height(4.dp))
+                        if (selectedTab == index) {
                             Box(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(CardSurface)
-                                    .clickable { onSongClick(albumSongs.first()) },
-                                contentAlignment = Alignment.BottomStart
+                                    .width(24.dp)
+                                    .height(2.dp)
+                                    .background(LightPurple, RoundedCornerShape(1.dp))
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            when (selectedTab) {
+                0 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(songs) { song ->
+                        val isFav = favoriteSongs.any { it.id == song.id }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(CardSurface.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                .clickable { onPlayPlaylist(song, songs) }
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(DarkPurple),
+                                contentAlignment = Alignment.Center
                             ) {
-                                val coverSong = albumSongs.firstOrNull { it.albumArtUri != null }
-                                if (coverSong?.albumArtUri != null) {
+                                if (song.albumArtUri != null) {
                                     AsyncImage(
                                         model = ImageRequest.Builder(LocalContext.current)
-                                            .data(coverSong.albumArtUri)
+                                            .data(song.albumArtUri)
                                             .crossfade(true)
                                             .build(),
                                         contentDescription = null,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.fillMaxSize()
                                     )
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(
-                                            Brush.verticalGradient(
-                                                listOf(Color.Transparent, Color.Black.copy(0.8f))
-                                            )
-                                        )
-                                )
-                                Column(modifier = Modifier.padding(8.dp)) {
-                                    Text(
-                                        text = artist,
-                                        color = TextPrimary,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = "${albumSongs.size} titres",
-                                        color = TextSecondary,
-                                        fontSize = 10.sp
-                                    )
+                                } else {
+                                    Text(text = "🎵", fontSize = 18.sp)
                                 }
                             }
-                        }
-                        if (rowAlbums.size == 1) {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
-                item { Spacer(modifier = Modifier.height(16.dp)) }
-            }
-
-            // Artistes
-            2 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(artists) { artist ->
-                    val artistSongs = songs.filter { it.artist == artist }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(CardSurface.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-                            .clickable { onSongClick(artistSongs.first()) }
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(46.dp)
-                                .background(
-                                    Brush.radialGradient(listOf(MediumPurple, DarkPurple)),
-                                    CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = song.title,
+                                    color = TextPrimary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = song.artist,
+                                    color = TextSecondary,
+                                    fontSize = 12.sp,
+                                    maxLines = 1
+                                )
+                            }
                             Text(
-                                text = artist.firstOrNull()?.uppercase() ?: "?",
-                                color = Color.White,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = artist,
-                                color = TextPrimary,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "${artistSongs.size} chanson(s)",
-                                color = TextSecondary,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                }
-                item { Spacer(modifier = Modifier.height(16.dp)) }
-            }
-
-            // Favoris
-            3 -> {
-                if (favoriteSongs.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = "♡", fontSize = 48.sp, color = TextSecondary)
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "Aucun favori encore",
-                                color = TextSecondary,
-                                fontSize = 16.sp
-                            )
-                            Text(
-                                text = "Appuie sur ♡ pour ajouter",
-                                color = TextSecondary,
-                                fontSize = 13.sp
-                            )
-                        }
-                    }
-                } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(favoriteSongs) { song ->
-                            Row(
+                                text = if (isFav) "♥" else "♡",
+                                color = if (isFav) Color(0xFFFF6B9D) else TextSecondary,
+                                fontSize = 20.sp,
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(CardSurface.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-                                    .clickable { onSongClick(song) }
-                                    .padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                                    .clickable { onToggleFavorite(song) }
+                                    .padding(8.dp)
+                            )
+                        }
+                    }
+                    item { Spacer(modifier = Modifier.height(16.dp)) }
+                }
+
+                1 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    val rows = albums.chunked(2)
+                    items(rows) { rowAlbums ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            rowAlbums.forEach { (artist, albumSongs) ->
                                 Box(
                                     modifier = Modifier
-                                        .size(46.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(DarkPurple),
-                                    contentAlignment = Alignment.Center
+                                        .weight(1f)
+                                        .aspectRatio(1f)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(CardSurface)
+                                        .clickable { selectedAlbum = Pair(artist, albumSongs) },
+                                    contentAlignment = Alignment.BottomStart
                                 ) {
-                                    if (song.albumArtUri != null) {
+                                    val coverSong = albumSongs.firstOrNull { it.albumArtUri != null }
+                                    if (coverSong?.albumArtUri != null) {
                                         AsyncImage(
                                             model = ImageRequest.Builder(LocalContext.current)
-                                                .data(song.albumArtUri)
+                                                .data(coverSong.albumArtUri)
                                                 .crossfade(true)
                                                 .build(),
                                             contentDescription = null,
                                             contentScale = ContentScale.Crop,
                                             modifier = Modifier.fillMaxSize()
                                         )
-                                    } else {
-                                        Text(text = "🎵", fontSize = 18.sp)
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    listOf(Color.Transparent, Color.Black.copy(0.8f))
+                                                )
+                                            )
+                                    )
+                                    Column(modifier = Modifier.padding(8.dp)) {
+                                        Text(
+                                            text = artist,
+                                            color = TextPrimary,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "${albumSongs.size} titres",
+                                            color = TextSecondary,
+                                            fontSize = 10.sp
+                                        )
                                     }
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = song.title,
-                                        color = TextPrimary,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = song.artist,
-                                        color = TextSecondary,
-                                        fontSize = 12.sp,
-                                        maxLines = 1
-                                    )
-                                }
+                            }
+                            if (rowAlbums.size == 1) Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                    item { Spacer(modifier = Modifier.height(16.dp)) }
+                }
+
+                2 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(artists) { artist ->
+                        val artistSongs = songs.filter { it.artist == artist }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(CardSurface.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                .clickable { selectedArtist = Pair(artist, artistSongs) }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .background(
+                                        Brush.radialGradient(listOf(MediumPurple, DarkPurple)),
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Text(
-                                    text = "♥",
-                                    color = Color(0xFFFF6B9D),
-                                    fontSize = 20.sp,
-                                    modifier = Modifier
-                                        .clickable { onToggleFavorite(song) }
-                                        .padding(8.dp)
+                                    text = artist.firstOrNull()?.uppercase() ?: "?",
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = artist,
+                                    color = TextPrimary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${artistSongs.size} chanson(s)",
+                                    color = TextSecondary,
+                                    fontSize = 12.sp
                                 )
                             }
                         }
-                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                    }
+                    item { Spacer(modifier = Modifier.height(16.dp)) }
+                }
+
+                3 -> {
+                    if (favoriteSongs.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(text = "♡", fontSize = 48.sp, color = TextSecondary)
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(text = "Aucun favori encore", color = TextSecondary, fontSize = 16.sp)
+                                Text(text = "Appuie sur ♡ pour ajouter", color = TextSecondary, fontSize = 13.sp)
+                            }
+                        }
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(favoriteSongs) { song ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(CardSurface.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                        .clickable { onPlayPlaylist(song, favoriteSongs) }
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(46.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(DarkPurple),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (song.albumArtUri != null) {
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(LocalContext.current)
+                                                    .data(song.albumArtUri)
+                                                    .crossfade(true)
+                                                    .build(),
+                                                contentDescription = null,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        } else {
+                                            Text(text = "🎵", fontSize = 18.sp)
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = song.title,
+                                            color = TextPrimary,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = song.artist,
+                                            color = TextSecondary,
+                                            fontSize = 12.sp,
+                                            maxLines = 1
+                                        )
+                                    }
+                                    Text(
+                                        text = "♥",
+                                        color = Color(0xFFFF6B9D),
+                                        fontSize = 20.sp,
+                                        modifier = Modifier
+                                            .clickable { onToggleFavorite(song) }
+                                            .padding(8.dp)
+                                    )
+                                }
+                            }
+                            item { Spacer(modifier = Modifier.height(16.dp)) }
+                        }
                     }
                 }
+            }
+        }
+
+        // Écran Album par-dessus
+        selectedAlbum?.let { (albumName, albumSongs) ->
+            PlaylistScreen(
+                title = albumName,
+                songs = albumSongs,
+                onClose = { selectedAlbum = null },
+                onPlayAll = { onPlayPlaylist(albumSongs.first(), albumSongs) },
+                onSongClick = { song -> onPlayPlaylist(song, albumSongs) }
+            )
+        }
+
+        // Écran Artiste par-dessus
+        selectedArtist?.let { (artistName, artistSongs) ->
+            PlaylistScreen(
+                title = artistName,
+                songs = artistSongs,
+                onClose = { selectedArtist = null },
+                onPlayAll = { onPlayPlaylist(artistSongs.first(), artistSongs) },
+                onSongClick = { song -> onPlayPlaylist(song, artistSongs) }
+            )
+        }
+    }
+}
+
+@Composable
+fun PlaylistScreen(
+    title: String,
+    songs: List<Song>,
+    onClose: () -> Unit,
+    onPlayAll: () -> Unit,
+    onSongClick: (Song) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFF2D1B4E), Color(0xFF1A0A2E), Color(0xFF0D0D1A))
+                )
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+        ) {
+            Spacer(modifier = Modifier.height(52.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(CardSurface, CircleShape)
+                        .clickable { onClose() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "←", color = TextPrimary, fontSize = 20.sp)
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(
+                        text = title,
+                        color = TextPrimary,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${songs.size} chansons",
+                        color = TextSecondary,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(LightPurple, RoundedCornerShape(12.dp))
+                    .clickable { onPlayAll() }
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = "▶", color = Color.White, fontSize = 16.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Tout jouer",
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(songs) { song ->
+                    SongItem(
+                        song = song,
+                        isPlaying = false,
+                        onClick = { onSongClick(song) }
+                    )
+                }
+                item { Spacer(modifier = Modifier.height(16.dp)) }
             }
         }
     }
