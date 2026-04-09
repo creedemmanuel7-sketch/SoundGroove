@@ -138,8 +138,19 @@ fun MainScreen(player: ExoPlayer) {
                             showPlayer = true
                         }
                     )
-                    1 -> PlaceholderTab("🔍", "Recherche", "Bientôt disponible")
-                    2 -> PlaceholderTab("👤", "Profil", "Bientôt disponible")
+                    1 -> SearchTab(
+                        songs = songs,
+                        onSongClick = { song ->
+                            currentSong = song
+                            val mediaItems = songs.map { s -> MediaItem.fromUri(s.uri) }
+                            val index = songs.indexOf(song)
+                            player.setMediaItems(mediaItems, index, 0L)
+                            player.prepare()
+                            player.play()
+                            isPlaying = true
+                            showPlayer = true
+                        }
+                    )                    2 -> PlaceholderTab("👤", "Profil", "Bientôt disponible")
                 }
             }
 
@@ -780,6 +791,162 @@ fun PlayerScreen(
                         },
                         color = if (repeatMode > 0) Color.White else TextSecondary,
                         fontSize = 18.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SearchTab(
+    songs: List<Song>,
+    onSongClick: (Song) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableStateOf(0) } // 0=Chansons, 1=Artistes, 2=Albums
+    val filters = listOf("Chansons", "Artistes", "Albums")
+
+    val filteredSongs = remember(searchQuery, selectedFilter, songs) {
+        if (searchQuery.isEmpty()) emptyList()
+        else when (selectedFilter) {
+            0 -> songs.filter {
+                it.title.contains(searchQuery, ignoreCase = true)
+            }
+            1 -> songs.filter {
+                it.artist.contains(searchQuery, ignoreCase = true)
+            }
+            2 -> songs.filter {
+                it.artist.contains(searchQuery, ignoreCase = true)
+            }.distinctBy { it.artist }
+            else -> emptyList()
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp)
+    ) {
+        Spacer(modifier = Modifier.height(52.dp))
+
+        Text(
+            text = "Recherche",
+            color = TextPrimary,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Barre de recherche
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(CardSurface, shape = RoundedCornerShape(16.dp))
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "🔍", fontSize = 16.sp)
+            Spacer(modifier = Modifier.width(10.dp))
+            androidx.compose.material3.TextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = {
+                    Text(
+                        text = "Artiste, chanson...",
+                        color = TextSecondary,
+                        fontSize = 14.sp
+                    )
+                },
+                colors = androidx.compose.material3.TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    cursorColor = LightPurple
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Filtres
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            filters.forEachIndexed { index, filter ->
+                Box(
+                    modifier = Modifier
+                        .background(
+                            if (selectedFilter == index) LightPurple
+                            else CardSurface,
+                            RoundedCornerShape(20.dp)
+                        )
+                        .clickable { selectedFilter = index }
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = filter,
+                        color = if (selectedFilter == index) Color.White else TextSecondary,
+                        fontSize = 13.sp,
+                        fontWeight = if (selectedFilter == index) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Résultats
+        if (searchQuery.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "🔍", fontSize = 48.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Tape pour rechercher",
+                        color = TextSecondary,
+                        fontSize = 16.sp
+                    )
+                }
+            }
+        } else if (filteredSongs.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "😕", fontSize = 48.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Aucun résultat pour \"$searchQuery\"",
+                        color = TextSecondary,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        } else {
+            Text(
+                text = "${filteredSongs.size} résultat(s)",
+                color = TextSecondary,
+                fontSize = 13.sp
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(filteredSongs) { song ->
+                    SongItem(
+                        song = song,
+                        isPlaying = false,
+                        onClick = { onSongClick(song) }
                     )
                 }
             }
