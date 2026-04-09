@@ -158,8 +158,10 @@ fun MainScreen(player: ExoPlayer) {
                                 .take(70)
                         }
                     )
-                    3 -> PlaceholderTab("👤", "Profil", "Bientôt disponible")
-                }
+                    3 -> ProfileTab(
+                        songs = songs,
+                        recentlyPlayed = recentlyPlayed
+                    )                }
             }
 
             currentSong?.let { song ->
@@ -1190,4 +1192,277 @@ fun loadSongs(context: android.content.Context): List<Song> {
         }
     }
     return songs
+}
+@Composable
+fun ProfileTab(
+    songs: List<Song>,
+    recentlyPlayed: List<Song>
+) {
+    var userName by remember { mutableStateOf("Credson") }
+    var showEditDialog by remember { mutableStateOf(false) }
+
+    // Calcul top artistes
+    val topArtists = remember(recentlyPlayed) {
+        recentlyPlayed
+            .groupBy { it.artist }
+            .entries
+            .sortedByDescending { it.value.size }
+            .take(5)
+            .map { it.key }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Spacer(modifier = Modifier.height(52.dp))
+
+            // Carte profil
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(CardSurface, RoundedCornerShape(20.dp))
+                    .clickable { showEditDialog = true }
+                    .padding(20.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Avatar
+                    Box(
+                        modifier = Modifier
+                            .size(70.dp)
+                            .background(
+                                Brush.radialGradient(listOf(LightPurple, MediumPurple)),
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = userName.first().uppercase(),
+                            color = Color.White,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Column {
+                        Text(
+                            text = userName,
+                            color = TextPrimary,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Appuie pour modifier",
+                            color = TextSecondary,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            // Stats en grille
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Total chansons
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(CardSurface, RoundedCornerShape(16.dp))
+                        .padding(16.dp)
+                ) {
+                    Column {
+                        Text(text = "🎵", fontSize = 24.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "${songs.size}",
+                            color = LightPurple,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Titres",
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                // Récemment écoutés
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(CardSurface, RoundedCornerShape(16.dp))
+                        .padding(16.dp)
+                ) {
+                    Column {
+                        Text(text = "▶", fontSize = 24.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "${recentlyPlayed.size}",
+                            color = CyanAccent,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Écoutées",
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // Top Artistes
+        if (topArtists.isNotEmpty()) {
+            item {
+                Text(
+                    text = "TOP ARTISTES",
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                topArtists.forEachIndexed { index, artist ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "#${index + 1}",
+                            color = LightPurple,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.width(36.dp)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .background(
+                                    Brush.radialGradient(listOf(MediumPurple, DarkPurple)),
+                                    CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = artist.firstOrNull()?.uppercase() ?: "?",
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = artist,
+                            color = TextPrimary,
+                            fontSize = 15.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Text(
+                text = "RÉCEMMENT ÉCOUTÉS",
+                color = TextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        items(recentlyPlayed.take(5)) { song ->
+            SongItem(song = song, isPlaying = false, onClick = {})
+        }
+
+        item { Spacer(modifier = Modifier.height(16.dp)) }
+    }
+
+    // Dialog modifier profil
+    if (showEditDialog) {
+        var tempName by remember { mutableStateOf(userName) }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.6f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(32.dp)
+                    .background(CardSurface, RoundedCornerShape(20.dp))
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Modifier le profil",
+                    color = TextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                androidx.compose.material3.TextField(
+                    value = tempName,
+                    onValueChange = { tempName = it },
+                    label = { Text("Nom", color = TextSecondary) },
+                    colors = androidx.compose.material3.TextFieldDefaults.colors(
+                        focusedContainerColor = DarkPurple,
+                        unfocusedContainerColor = DarkPurple,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        cursorColor = LightPurple,
+                        focusedIndicatorColor = LightPurple,
+                        unfocusedIndicatorColor = TextSecondary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text(
+                        text = "Annuler",
+                        color = TextSecondary,
+                        modifier = Modifier
+                            .clickable { showEditDialog = false }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(LightPurple, RoundedCornerShape(12.dp))
+                            .clickable {
+                                userName = tempName
+                                showEditDialog = false
+                            }
+                            .padding(horizontal = 20.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "Enregistrer",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
