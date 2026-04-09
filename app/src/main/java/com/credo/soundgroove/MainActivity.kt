@@ -91,6 +91,16 @@ fun MainScreen(player: ExoPlayer) {
         if (hasPermission) songs = loadSongs(context)
         else permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
     }
+    LaunchedEffect(player) {
+        while (true) {
+            val index = player.currentMediaItemIndex
+            if (index >= 0 && index < songs.size && songs.isNotEmpty()) {
+                currentSong = songs[index]
+                isPlaying = player.isPlaying
+            }
+            kotlinx.coroutines.delay(300)
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -114,8 +124,14 @@ fun MainScreen(player: ExoPlayer) {
                         isPlaying = isPlaying,
                         onSongClick = { song ->
                             currentSong = song
-                            val mediaItem = MediaItem.fromUri(song.uri)
-                            player.setMediaItem(mediaItem)
+
+                            // Charger toute la playlist
+                            val mediaItems = songs.map { s ->
+                                MediaItem.fromUri(s.uri)
+                            }
+                            val index = songs.indexOf(song)
+
+                            player.setMediaItems(mediaItems, index, 0L)
                             player.prepare()
                             player.play()
                             isPlaying = true
