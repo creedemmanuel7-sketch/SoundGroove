@@ -74,6 +74,8 @@ fun MainScreen(player: ExoPlayer) {
     var currentSong by remember { mutableStateOf<Song?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
     var showPlayer by remember { mutableStateOf(false) }
+    var recentlyPlayed by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var showRecentlyPlayed by remember { mutableStateOf(false) }
 
     var hasPermission by remember {
         mutableStateOf(
@@ -86,12 +88,12 @@ fun MainScreen(player: ExoPlayer) {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasPermission = granted }
-    var recentlyPlayed by remember { mutableStateOf<List<Song>>(emptyList()) }
 
     LaunchedEffect(hasPermission) {
         if (hasPermission) songs = loadSongs(context)
         else permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
     }
+
     LaunchedEffect(player) {
         while (true) {
             val index = player.currentMediaItemIndex
@@ -101,6 +103,14 @@ fun MainScreen(player: ExoPlayer) {
             }
             kotlinx.coroutines.delay(300)
         }
+    }
+
+    fun playSong(song: Song, playlist: List<Song>) {
+        val mediaItems = playlist.map { s -> MediaItem.fromUri(s.uri) }
+        val index = playlist.indexOf(song)
+        player.setMediaItems(mediaItems, index, 0L)
+        player.prepare()
+        player.play()
     }
 
     Box(
@@ -124,45 +134,31 @@ fun MainScreen(player: ExoPlayer) {
                         currentSong = currentSong,
                         isPlaying = isPlaying,
                         recentlyPlayed = recentlyPlayed,
+                        onSeeAllRecent = { showRecentlyPlayed = true },
                         onSongClick = { song ->
                             currentSong = song
-
-                            // Charger toute la playlist
-                            val mediaItems = songs.map { s ->
-                                MediaItem.fromUri(s.uri)
-                            }
-                            val index = songs.indexOf(song)
-
-                            player.setMediaItems(mediaItems, index, 0L)
-                            player.prepare()
-                            player.play()
+                            playSong(song, songs)
                             isPlaying = true
                             showPlayer = true
+                            recentlyPlayed = (listOf(song) + recentlyPlayed)
+                                .distinctBy { it.id }
+                                .take(70)
                         }
                     )
-
                     1 -> PlaceholderTab("🎵", "Bibliothèque", "Bientôt disponible")
-
-
                     2 -> SearchTab(
                         songs = songs,
                         onSongClick = { song ->
                             currentSong = song
-                            val mediaItems = songs.map { s -> MediaItem.fromUri(s.uri) }
-                            val index = songs.indexOf(song)
-                            player.setMediaItems(mediaItems, index, 0L)
-                            player.prepare()
-                            player.play()
+                            playSong(song, songs)
                             isPlaying = true
                             showPlayer = true
-
-                            // Ajouter aux récemment écoutés
                             recentlyPlayed = (listOf(song) + recentlyPlayed)
                                 .distinctBy { it.id }
-                                .take(6)
-
+                                .take(70)
                         }
-                    )                    3 -> PlaceholderTab("👤", "Profil", "Bientôt disponible")
+                    )
+                    3 -> PlaceholderTab("👤", "Profil", "Bientôt disponible")
                 }
             }
 
@@ -174,7 +170,7 @@ fun MainScreen(player: ExoPlayer) {
                         if (isPlaying) player.pause() else player.play()
                         isPlaying = !isPlaying
                     },
-                    onOpen = { showPlayer = true }  // 👈 ajoute ça
+                    onOpen = { showPlayer = true }
                 )
             }
 
@@ -184,7 +180,19 @@ fun MainScreen(player: ExoPlayer) {
             )
         }
 
-        // Écran Player par-dessus tout
+        if (showRecentlyPlayed) {
+            RecentlyPlayedScreen(
+                songs = recentlyPlayed,
+                onClose = { showRecentlyPlayed = false },
+                onSongClick = { song ->
+                    currentSong = song
+                    playSong(song, recentlyPlayed)
+                    isPlaying = true
+                    showPlayer = true
+                }
+            )
+        }
+
         if (showPlayer && currentSong != null) {
             PlayerScreen(
                 song = currentSong!!,
@@ -194,7 +202,7 @@ fun MainScreen(player: ExoPlayer) {
                     isPlaying = !isPlaying
                 },
                 onClose = { showPlayer = false },
-                player = player  // 👈 ajoute ça
+                player = player
             )
         }
     }
@@ -251,6 +259,7 @@ fun HomeTab(
     currentSong: Song?,
     isPlaying: Boolean,
     recentlyPlayed: List<Song>,
+    onSeeAllRecent: () -> Unit,
     onSongClick: (Song) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -277,8 +286,6 @@ fun HomeTab(
     ) {
         item {
             Spacer(modifier = Modifier.height(52.dp))
-
-            // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -309,7 +316,6 @@ fun HomeTab(
         }
 
         item {
-            // Barre de recherche
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -344,7 +350,6 @@ fun HomeTab(
             }
         }
 
-        // Carte chanson en cours
         if (currentSong != null && searchQuery.isEmpty()) {
             item {
                 Text(
@@ -364,7 +369,6 @@ fun HomeTab(
                             RoundedCornerShape(20.dp)
                         )
                         .clip(RoundedCornerShape(20.dp))
-                        .clickable { }
                         .padding(16.dp)
                 ) {
                     Row(
@@ -400,9 +404,7 @@ fun HomeTab(
                                 )
                             }
                         }
-
                         Spacer(modifier = Modifier.width(12.dp))
-
                         Box(
                             modifier = Modifier
                                 .size(100.dp)
@@ -429,7 +431,6 @@ fun HomeTab(
             }
         }
 
-        // Recently Played
         if (recentlyPlayed.isNotEmpty() && searchQuery.isEmpty()) {
             item {
                 Row(
@@ -447,13 +448,14 @@ fun HomeTab(
                     Text(
                         text = "Voir tout",
                         color = LightPurple,
-                        fontSize = 12.sp
+                        fontSize = 12.sp,
+                        modifier = Modifier.clickable { onSeeAllRecent() }
                     )
                 }
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Grille 2 colonnes
-                val rows = recentlyPlayed.chunked(2)
+                // Grille 2x2 — seulement 4 chansons
+                val rows = recentlyPlayed.take(4).chunked(2)
                 rows.forEach { rowSongs ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -509,7 +511,6 @@ fun HomeTab(
             }
         }
 
-        // Liste chansons
         item {
             Text(
                 text = if (searchQuery.isEmpty())
@@ -556,7 +557,7 @@ fun MiniPlayer(
     song: Song,
     isPlaying: Boolean,
     onPlayPause: () -> Unit,
-    onOpen: () -> Unit  // 👈 ajoute ça
+    onOpen: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -566,7 +567,7 @@ fun MiniPlayer(
                 Brush.horizontalGradient(listOf(MediumPurple, DarkPurple)),
                 shape = RoundedCornerShape(20.dp)
             )
-            .clickable { onOpen() }  // 👈 ajoute ça
+            .clickable { onOpen() }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -688,42 +689,224 @@ fun SongItem(song: Song, isPlaying: Boolean, onClick: () -> Unit) {
     }
 }
 
-fun loadSongs(context: android.content.Context): List<Song> {
-    val songs = mutableListOf<Song>()
-    val projection = arrayOf(
-        MediaStore.Audio.Media._ID,
-        MediaStore.Audio.Media.TITLE,
-        MediaStore.Audio.Media.ARTIST,
-        MediaStore.Audio.Media.ALBUM_ID
-    )
-    val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
-    val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
-
-    context.contentResolver.query(
-        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-        projection, selection, null, sortOrder
-    )?.use { cursor ->
-        val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-        val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-        val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-        val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
-
-        while (cursor.moveToNext()) {
-            val id = cursor.getLong(idCol)
-            val title = cursor.getString(titleCol)
-            val artist = cursor.getString(artistCol)
-            val albumId = cursor.getLong(albumIdCol)
-            val uri = ContentUris.withAppendedId(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
+@Composable
+fun RecentlyPlayedScreen(
+    songs: List<Song>,
+    onClose: () -> Unit,
+    onSongClick: (Song) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF2D1B4E),
+                        Color(0xFF1A0A2E),
+                        Color(0xFF0D0D1A)
+                    )
+                )
             )
-            val albumArtUri = ContentUris.withAppendedId(
-                Uri.parse("content://media/external/audio/albumart"), albumId
-            )
-            songs.add(Song(id, title, artist, uri, albumArtUri))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+        ) {
+            Spacer(modifier = Modifier.height(52.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(CardSurface, CircleShape)
+                        .clickable { onClose() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "←", color = TextPrimary, fontSize = 20.sp)
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(
+                        text = "Récemment écoutés",
+                        color = TextPrimary,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${songs.size} chansons",
+                        color = TextSecondary,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(LightPurple, RoundedCornerShape(12.dp))
+                    .clickable {
+                        if (songs.isNotEmpty()) onSongClick(songs.first())
+                    }
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = "▶", color = Color.White, fontSize = 16.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Tout jouer",
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(songs) { song ->
+                    SongItem(
+                        song = song,
+                        isPlaying = false,
+                        onClick = { onSongClick(song) }
+                    )
+                }
+                item { Spacer(modifier = Modifier.height(16.dp)) }
+            }
         }
     }
-    return songs
 }
+
+@Composable
+fun SearchTab(
+    songs: List<Song>,
+    onSongClick: (Song) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableStateOf(0) }
+    val filters = listOf("Chansons", "Artistes", "Albums")
+
+    val filteredSongs = remember(searchQuery, selectedFilter, songs) {
+        if (searchQuery.isEmpty()) emptyList()
+        else when (selectedFilter) {
+            0 -> songs.filter { it.title.contains(searchQuery, ignoreCase = true) }
+            1 -> songs.filter { it.artist.contains(searchQuery, ignoreCase = true) }
+            2 -> songs.filter { it.artist.contains(searchQuery, ignoreCase = true) }.distinctBy { it.artist }
+            else -> emptyList()
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp)
+    ) {
+        Spacer(modifier = Modifier.height(52.dp))
+
+        Text(
+            text = "Recherche",
+            color = TextPrimary,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(CardSurface, shape = RoundedCornerShape(16.dp))
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "🔍", fontSize = 16.sp)
+            Spacer(modifier = Modifier.width(10.dp))
+            androidx.compose.material3.TextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = {
+                    Text(text = "Artiste, chanson...", color = TextSecondary, fontSize = 14.sp)
+                },
+                colors = androidx.compose.material3.TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    cursorColor = LightPurple
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            filters.forEachIndexed { index, filter ->
+                Box(
+                    modifier = Modifier
+                        .background(
+                            if (selectedFilter == index) LightPurple else CardSurface,
+                            RoundedCornerShape(20.dp)
+                        )
+                        .clickable { selectedFilter = index }
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = filter,
+                        color = if (selectedFilter == index) Color.White else TextSecondary,
+                        fontSize = 13.sp,
+                        fontWeight = if (selectedFilter == index) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (searchQuery.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "🔍", fontSize = 48.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(text = "Tape pour rechercher", color = TextSecondary, fontSize = 16.sp)
+                }
+            }
+        } else if (filteredSongs.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "😕", fontSize = 48.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Aucun résultat pour \"$searchQuery\"",
+                        color = TextSecondary,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        } else {
+            Text(text = "${filteredSongs.size} résultat(s)", color = TextSecondary, fontSize = 13.sp)
+            Spacer(modifier = Modifier.height(12.dp))
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(filteredSongs) { song ->
+                    SongItem(song = song, isPlaying = false, onClick = { onSongClick(song) })
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun PlayerScreen(
     song: Song,
@@ -734,7 +917,7 @@ fun PlayerScreen(
 ) {
     var progress by remember { mutableStateOf(0f) }
     var isShuffled by remember { mutableStateOf(false) }
-    var repeatMode by remember { mutableStateOf(0) } // 0=off, 1=all, 2=one
+    var repeatMode by remember { mutableStateOf(0) }
     var duration by remember { mutableStateOf(0L) }
     var currentPosition by remember { mutableStateOf(0L) }
 
@@ -774,7 +957,6 @@ fun PlayerScreen(
         ) {
             Spacer(modifier = Modifier.height(52.dp))
 
-            // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -789,17 +971,13 @@ fun PlayerScreen(
                 ) {
                     Text(text = "↓", color = TextPrimary, fontSize = 20.sp)
                 }
-
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "EN LECTURE",
-                        color = TextSecondary,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
-                    )
-                }
-
+                Text(
+                    text = "EN LECTURE",
+                    color = TextSecondary,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
                 Box(
                     modifier = Modifier
                         .size(40.dp)
@@ -812,7 +990,6 @@ fun PlayerScreen(
 
             Spacer(modifier = Modifier.height(36.dp))
 
-            // Pochette
             Box(
                 modifier = Modifier
                     .size(300.dp)
@@ -837,7 +1014,6 @@ fun PlayerScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Titre et artiste
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -866,7 +1042,6 @@ fun PlayerScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Slider de progression interactif
             var isSeeking by remember { mutableStateOf(false) }
             var seekPosition by remember { mutableStateOf(0f) }
 
@@ -890,7 +1065,6 @@ fun PlayerScreen(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-// Temps
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -900,29 +1074,20 @@ fun PlayerScreen(
                     color = TextSecondary,
                     fontSize = 12.sp
                 )
-                Text(
-                    text = formatTime(duration),
-                    color = TextSecondary,
-                    fontSize = 12.sp
-                )
+                Text(text = formatTime(duration), color = TextSecondary, fontSize = 12.sp)
             }
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Contrôles
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Shuffle
                 Box(
                     modifier = Modifier
                         .size(44.dp)
-                        .background(
-                            if (isShuffled) LightPurple else CardSurface,
-                            CircleShape
-                        )
+                        .background(if (isShuffled) LightPurple else CardSurface, CircleShape)
                         .clickable {
                             isShuffled = !isShuffled
                             player.shuffleModeEnabled = isShuffled
@@ -932,7 +1097,6 @@ fun PlayerScreen(
                     Text(text = "⇄", color = if (isShuffled) Color.White else TextSecondary, fontSize = 18.sp)
                 }
 
-                // Précédent
                 Box(
                     modifier = Modifier
                         .size(52.dp)
@@ -943,7 +1107,6 @@ fun PlayerScreen(
                     Text(text = "◀◀", color = TextPrimary, fontSize = 16.sp)
                 }
 
-                // Play/Pause
                 Box(
                     modifier = Modifier
                         .size(68.dp)
@@ -954,14 +1117,9 @@ fun PlayerScreen(
                         .clickable { onPlayPause() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = if (isPlaying) "⏸" else "▶",
-                        fontSize = 26.sp,
-                        color = Color.White
-                    )
+                    Text(text = if (isPlaying) "⏸" else "▶", fontSize = 26.sp, color = Color.White)
                 }
 
-                // Suivant
                 Box(
                     modifier = Modifier
                         .size(52.dp)
@@ -972,14 +1130,10 @@ fun PlayerScreen(
                     Text(text = "▶▶", color = TextPrimary, fontSize = 16.sp)
                 }
 
-                // Repeat
                 Box(
                     modifier = Modifier
                         .size(44.dp)
-                        .background(
-                            if (repeatMode > 0) LightPurple else CardSurface,
-                            CircleShape
-                        )
+                        .background(if (repeatMode > 0) LightPurple else CardSurface, CircleShape)
                         .clickable {
                             repeatMode = (repeatMode + 1) % 3
                             player.repeatMode = when (repeatMode) {
@@ -991,10 +1145,7 @@ fun PlayerScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = when (repeatMode) {
-                            2 -> "↺¹"
-                            else -> "↺"
-                        },
+                        text = when (repeatMode) { 2 -> "↺¹"; else -> "↺" },
                         color = if (repeatMode > 0) Color.White else TextSecondary,
                         fontSize = 18.sp
                     )
@@ -1004,158 +1155,39 @@ fun PlayerScreen(
     }
 }
 
-@Composable
-fun SearchTab(
-    songs: List<Song>,
-    onSongClick: (Song) -> Unit
-) {
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf(0) } // 0=Chansons, 1=Artistes, 2=Albums
-    val filters = listOf("Chansons", "Artistes", "Albums")
+fun loadSongs(context: android.content.Context): List<Song> {
+    val songs = mutableListOf<Song>()
+    val projection = arrayOf(
+        MediaStore.Audio.Media._ID,
+        MediaStore.Audio.Media.TITLE,
+        MediaStore.Audio.Media.ARTIST,
+        MediaStore.Audio.Media.ALBUM_ID
+    )
+    val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+    val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
 
-    val filteredSongs = remember(searchQuery, selectedFilter, songs) {
-        if (searchQuery.isEmpty()) emptyList()
-        else when (selectedFilter) {
-            0 -> songs.filter {
-                it.title.contains(searchQuery, ignoreCase = true)
-            }
-            1 -> songs.filter {
-                it.artist.contains(searchQuery, ignoreCase = true)
-            }
-            2 -> songs.filter {
-                it.artist.contains(searchQuery, ignoreCase = true)
-            }.distinctBy { it.artist }
-            else -> emptyList()
+    context.contentResolver.query(
+        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+        projection, selection, null, sortOrder
+    )?.use { cursor ->
+        val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+        val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+        val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+        val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+
+        while (cursor.moveToNext()) {
+            val id = cursor.getLong(idCol)
+            val title = cursor.getString(titleCol)
+            val artist = cursor.getString(artistCol)
+            val albumId = cursor.getLong(albumIdCol)
+            val uri = ContentUris.withAppendedId(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
+            )
+            val albumArtUri = ContentUris.withAppendedId(
+                Uri.parse("content://media/external/audio/albumart"), albumId
+            )
+            songs.add(Song(id, title, artist, uri, albumArtUri))
         }
     }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp)
-    ) {
-        Spacer(modifier = Modifier.height(52.dp))
-
-        Text(
-            text = "Recherche",
-            color = TextPrimary,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Barre de recherche
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(CardSurface, shape = RoundedCornerShape(16.dp))
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = "🔍", fontSize = 16.sp)
-            Spacer(modifier = Modifier.width(10.dp))
-            androidx.compose.material3.TextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = {
-                    Text(
-                        text = "Artiste, chanson...",
-                        color = TextSecondary,
-                        fontSize = 14.sp
-                    )
-                },
-                colors = androidx.compose.material3.TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    cursorColor = LightPurple
-                ),
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Filtres
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            filters.forEachIndexed { index, filter ->
-                Box(
-                    modifier = Modifier
-                        .background(
-                            if (selectedFilter == index) LightPurple
-                            else CardSurface,
-                            RoundedCornerShape(20.dp)
-                        )
-                        .clickable { selectedFilter = index }
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Text(
-                        text = filter,
-                        color = if (selectedFilter == index) Color.White else TextSecondary,
-                        fontSize = 13.sp,
-                        fontWeight = if (selectedFilter == index) FontWeight.Bold else FontWeight.Normal
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Résultats
-        if (searchQuery.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "🔍", fontSize = 48.sp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Tape pour rechercher",
-                        color = TextSecondary,
-                        fontSize = 16.sp
-                    )
-                }
-            }
-        } else if (filteredSongs.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "😕", fontSize = 48.sp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Aucun résultat pour \"$searchQuery\"",
-                        color = TextSecondary,
-                        fontSize = 14.sp
-                    )
-                }
-            }
-        } else {
-            Text(
-                text = "${filteredSongs.size} résultat(s)",
-                color = TextSecondary,
-                fontSize = 13.sp
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(filteredSongs) { song ->
-                    SongItem(
-                        song = song,
-                        isPlaying = false,
-                        onClick = { onSongClick(song) }
-                    )
-                }
-            }
-        }
-    }
+    return songs
 }
