@@ -76,6 +76,7 @@ fun MainScreen(player: ExoPlayer) {
     var showPlayer by remember { mutableStateOf(false) }
     var recentlyPlayed by remember { mutableStateOf<List<Song>>(emptyList()) }
     var showRecentlyPlayed by remember { mutableStateOf(false) }
+    var currentPlaylist by remember { mutableStateOf<List<Song>>(emptyList()) }
 
     var hasPermission by remember {
         mutableStateOf(
@@ -98,8 +99,8 @@ fun MainScreen(player: ExoPlayer) {
     LaunchedEffect(player) {
         while (true) {
             val index = player.currentMediaItemIndex
-            if (index >= 0 && index < songs.size && songs.isNotEmpty()) {
-                currentSong = songs[index]
+            if (index >= 0 && index < currentPlaylist.size && currentPlaylist.isNotEmpty()) {
+                currentSong = currentPlaylist[index]
                 isPlaying = player.isPlaying
             }
             kotlinx.coroutines.delay(300)
@@ -107,6 +108,7 @@ fun MainScreen(player: ExoPlayer) {
     }
 
     fun playSong(song: Song, playlist: List<Song>) {
+        currentPlaylist = playlist
         val mediaItems = playlist.map { s -> MediaItem.fromUri(s.uri) }
         val index = playlist.indexOf(song)
         player.setMediaItems(mediaItems, index, 0L)
@@ -148,6 +150,8 @@ fun MainScreen(player: ExoPlayer) {
                     )
                     1 -> LibraryTab(
                         songs = songs,
+                        currentSong = currentSong,
+                        isPlaying = isPlaying,
                         favoriteSongs = favoriteSongs,
                         onSongClick = { song ->
                             currentSong = song
@@ -226,11 +230,18 @@ fun MainScreen(player: ExoPlayer) {
             PlayerScreen(
                 song = currentSong!!,
                 isPlaying = isPlaying,
+                isFavorite = favoriteSongs.any { it.id == currentSong!!.id },
                 onPlayPause = {
                     if (isPlaying) player.pause() else player.play()
                     isPlaying = !isPlaying
                 },
                 onClose = { showPlayer = false },
+                onToggleFavorite = {
+                    val song = currentSong!!
+                    favoriteSongs = if (favoriteSongs.any { it.id == song.id })
+                        favoriteSongs.filter { it.id != song.id }
+                    else favoriteSongs + song
+                },
                 player = player
             )
         }
@@ -940,8 +951,10 @@ fun SearchTab(
 fun PlayerScreen(
     song: Song,
     isPlaying: Boolean,
+    isFavorite: Boolean,
     onPlayPause: () -> Unit,
     onClose: () -> Unit,
+    onToggleFavorite: () -> Unit,
     player: ExoPlayer
 ) {
     var progress by remember { mutableStateOf(0f) }
@@ -1066,8 +1079,14 @@ fun PlayerScreen(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Text(text = "♡", color = TextSecondary, fontSize = 24.sp)
-            }
+                Text(
+                    text = if (isFavorite) "♥" else "♡",
+                    color = if (isFavorite) Color(0xFFFF6B9D) else TextSecondary,
+                    fontSize = 24.sp,
+                    modifier = Modifier
+                        .clickable { onToggleFavorite() }
+                        .padding(8.dp)
+                )            }
 
             Spacer(modifier = Modifier.height(28.dp))
 
@@ -1480,6 +1499,8 @@ fun ProfileTab(
 @Composable
 fun LibraryTab(
     songs: List<Song>,
+    currentSong: Song?,
+    isPlaying: Boolean,
     favoriteSongs: List<Song>,
     onSongClick: (Song) -> Unit,
     onPlayPlaylist: (Song, List<Song>) -> Unit,
@@ -1691,18 +1712,29 @@ fun LibraryTab(
                             Box(
                                 modifier = Modifier
                                     .size(46.dp)
-                                    .background(
-                                        Brush.radialGradient(listOf(MediumPurple, DarkPurple)),
-                                        CircleShape
-                                    ),
+                                    .clip(CircleShape)
+                                    .background(DarkPurple),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = artist.firstOrNull()?.uppercase() ?: "?",
-                                    color = Color.White,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                val coverSong = artistSongs.firstOrNull { it.albumArtUri != null }
+                                if (coverSong?.albumArtUri != null) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(coverSong.albumArtUri)
+                                            .crossfade(true)
+                                            .build(),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Text(
+                                        text = artist.firstOrNull()?.uppercase() ?: "?",
+                                        color = Color.White,
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
@@ -1809,6 +1841,8 @@ fun LibraryTab(
             PlaylistScreen(
                 title = albumName,
                 songs = albumSongs,
+                currentSong = currentSong,
+                isPlaying = isPlaying,
                 onClose = { selectedAlbum = null },
                 onPlayAll = { onPlayPlaylist(albumSongs.first(), albumSongs) },
                 onSongClick = { song -> onPlayPlaylist(song, albumSongs) }
@@ -1820,6 +1854,8 @@ fun LibraryTab(
             PlaylistScreen(
                 title = artistName,
                 songs = artistSongs,
+                currentSong = currentSong,
+                isPlaying = isPlaying,
                 onClose = { selectedArtist = null },
                 onPlayAll = { onPlayPlaylist(artistSongs.first(), artistSongs) },
                 onSongClick = { song -> onPlayPlaylist(song, artistSongs) }
@@ -1832,6 +1868,8 @@ fun LibraryTab(
 fun PlaylistScreen(
     title: String,
     songs: List<Song>,
+    currentSong: Song?,
+    isPlaying: Boolean,
     onClose: () -> Unit,
     onPlayAll: () -> Unit,
     onSongClick: (Song) -> Unit
@@ -1910,7 +1948,7 @@ fun PlaylistScreen(
                 items(songs) { song ->
                     SongItem(
                         song = song,
-                        isPlaying = false,
+                        isPlaying = currentSong?.id == song.id && isPlaying,
                         onClick = { onSongClick(song) }
                     )
                 }
