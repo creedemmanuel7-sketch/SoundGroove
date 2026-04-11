@@ -1364,14 +1364,21 @@ fun ProfileTab(
     ) {
         item {
             Spacer(modifier = Modifier.height(52.dp))
-            Box(
+            GlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(CardSurface, RoundedCornerShape(20.dp))
-                    .clickable { showEditDialog = true }
-                    .padding(20.dp)
+                    .clickable { showEditDialog = true },
+                cornerRadius = 20.dp
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.linearGradient(listOf(MediumPurple.copy(0.3f), Color.Transparent))
+                        )
+                        .padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Box(
                         modifier = Modifier
                             .size(70.dp)
@@ -1390,17 +1397,8 @@ fun ProfileTab(
                     }
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
-                        Text(
-                            text = userName,
-                            color = TextPrimary,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Appuie pour modifier",
-                            color = TextSecondary,
-                            fontSize = 13.sp
-                        )
+                        Text(text = userName, color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text(text = "Appuie pour modifier", color = TextSecondary, fontSize = 13.sp)
                     }
                 }
             }
@@ -1411,42 +1409,19 @@ fun ProfileTab(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Titres
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(CardSurface, RoundedCornerShape(16.dp))
-                        .padding(16.dp)
-                ) {
-                    Column {
+                GlassCard(modifier = Modifier.weight(1f), cornerRadius = 16.dp) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Text(text = "🎵", fontSize = 24.sp)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "${songs.size}",
-                            color = LightPurple,
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text(text = "${songs.size}", color = LightPurple, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                         Text(text = "Titres", color = TextSecondary, fontSize = 12.sp)
                     }
                 }
-
-                // Favoris
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(CardSurface, RoundedCornerShape(16.dp))
-                        .padding(16.dp)
-                ) {
-                    Column {
+                GlassCard(modifier = Modifier.weight(1f), cornerRadius = 16.dp) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Text(text = "♡", fontSize = 24.sp)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "${favoriteSongs.size}",
-                            color = Color(0xFFFF6B9D),
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text(text = "${favoriteSongs.size}", color = Color(0xFFFF6B9D), fontSize = 28.sp, fontWeight = FontWeight.Bold)
                         Text(text = "Favoris", color = TextSecondary, fontSize = 12.sp)
                     }
                 }
@@ -1679,14 +1654,22 @@ fun LibraryTab(
                 0 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(songs) { song ->
                         val isFav = favoriteSongs.any { it.id == song.id }
-                        Row(
+                        GlassCard(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(CardSurface.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-                                .clickable { onPlayPlaylist(song, songs) }
-                                .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .clickable { onPlayPlaylist(song, songs) },
+                            cornerRadius = 14.dp
                         ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        if (isFav) Brush.linearGradient(listOf(Color(0xFFFF6B9D).copy(0.1f), Color.Transparent))
+                                        else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+                                    )
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                             Box(
                                 modifier = Modifier
                                     .size(46.dp)
@@ -1734,6 +1717,8 @@ fun LibraryTab(
                                     .padding(8.dp)
                             )
                         }
+                    }
+
                     }
                     item { Spacer(modifier = Modifier.height(16.dp)) }
                 }
@@ -1802,56 +1787,62 @@ fun LibraryTab(
                 2 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(artists) { artist ->
                         val artistSongs = songs.filter { it.artist == artist }
-                        Row(
+                        GlassCard(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(CardSurface.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-                                .clickable { selectedArtist = Pair(artist, artistSongs) }
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .clickable { selectedArtist = Pair(artist, artistSongs) },
+                            cornerRadius = 14.dp
                         ) {
-                            Box(
+                            Row(
                                 modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(CircleShape)
-                                    .background(DarkPurple),
-                                contentAlignment = Alignment.Center
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val coverSong = artistSongs.firstOrNull { it.albumArtUri != null }
-                                if (coverSong?.albumArtUri != null) {
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(LocalContext.current)
-                                            .data(coverSong.albumArtUri)
-                                            .crossfade(true)
-                                            .build(),
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .clip(CircleShape)
+                                        .background(DarkPurple),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    val coverSong =
+                                        artistSongs.firstOrNull { it.albumArtUri != null }
+                                    if (coverSong?.albumArtUri != null) {
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(LocalContext.current)
+                                                .data(coverSong.albumArtUri)
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Text(
+                                            text = artist.firstOrNull()?.uppercase() ?: "?",
+                                            color = Color.White,
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = artist.firstOrNull()?.uppercase() ?: "?",
-                                        color = Color.White,
-                                        fontSize = 18.sp,
-                                        fontWeight = FontWeight.Bold
+                                        text = artist,
+                                        color = TextPrimary,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "${artistSongs.size} chanson(s)",
+                                        color = TextSecondary,
+                                        fontSize = 12.sp
                                     )
                                 }
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = artist,
-                                    color = TextPrimary,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "${artistSongs.size} chanson(s)",
-                                    color = TextSecondary,
-                                    fontSize = 12.sp
-                                )
                             }
                         }
                     }
@@ -1867,28 +1858,47 @@ fun LibraryTab(
                     Box(modifier = Modifier.fillMaxSize()) {
                         Column(modifier = Modifier.fillMaxSize()) {
                             // Bouton créer
-                            Row(
+                            GlassCard(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                    .clickable {
+                                        val playlist = null
+                                        selectedPlaylist = playlist
+                                    },
+                                cornerRadius = 14.dp
                             ) {
-                                Text(
-                                    text = "${playlists.size} playlist(s)",
-                                    color = TextSecondary,
-                                    fontSize = 13.sp
-                                )
-                                Box(
+                                Row(
                                     modifier = Modifier
-                                        .background(LightPurple, RoundedCornerShape(20.dp))
-                                        .clickable { showCreateDialog = true }
-                                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(text = "+", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(text = "Nouvelle playlist", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = "${playlists.size} playlist(s)",
+                                        color = TextSecondary,
+                                        fontSize = 13.sp
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .background(LightPurple, RoundedCornerShape(20.dp))
+                                            .clickable { showCreateDialog = true }
+                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "+",
+                                                color = Color.White,
+                                                fontSize = 18.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Nouvelle playlist",
+                                                color = Color.White,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -2081,14 +2091,21 @@ fun LibraryTab(
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             items(favoriteSongs) { song ->
-                                Row(
+                                GlassCard(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(CardSurface.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-                                        .clickable { onPlayPlaylist(song, favoriteSongs) }
-                                        .padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .clickable { onPlayPlaylist(song, favoriteSongs) },
+                                    cornerRadius = 14.dp
                                 ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                Brush.linearGradient(listOf(Color(0xFFFF6B9D).copy(0.1f), Color.Transparent))
+                                            )
+                                            .padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                     Box(
                                         modifier = Modifier
                                             .size(46.dp)
@@ -2136,6 +2153,7 @@ fun LibraryTab(
                                             .padding(8.dp)
                                     )
                                 }
+                                    }
                             }
                             item { Spacer(modifier = Modifier.height(16.dp)) }
                         }
