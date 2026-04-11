@@ -37,6 +37,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.ui.theme.*
+import androidx.compose.foundation.border
 
 data class Song(
     val id: Long,
@@ -274,42 +275,52 @@ fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
         Pair("👤", "Profil")
     )
 
-    Row(
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF1A0A2E))
-            .padding(vertical = 8.dp, horizontal = 16.dp),
-        horizontalArrangement = Arrangement.SpaceAround,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        cornerRadius = 24.dp
     ) {
-        tabs.forEachIndexed { index, (icon, label) ->
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .clickable { onTabSelected(index) }
-                    .padding(8.dp)
-            ) {
-                Text(text = icon, fontSize = 22.sp)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = label,
-                    color = if (selectedTab == index) LightPurple else TextSecondary,
-                    fontSize = 10.sp,
-                    fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
-                )
-                if (selectedTab == index) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(4.dp)
-                            .background(LightPurple, CircleShape)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        listOf(Color(0x33000000), Color(0x1A000000))
                     )
+                )
+                .padding(vertical = 8.dp, horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            tabs.forEachIndexed { index, (icon, label) ->
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .clickable { onTabSelected(index) }
+                        .padding(8.dp)
+                ) {
+                    Text(text = icon, fontSize = 22.sp)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = label,
+                        color = if (selectedTab == index) LightPurple else TextSecondary,
+                        fontSize = 10.sp,
+                        fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
+                    )
+                    if (selectedTab == index) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(4.dp)
+                                .background(LightPurple, CircleShape)
+                        )
+                    }
                 }
             }
         }
     }
 }
-
 @Composable
 fun HomeTab(
     songs: List<Song>,
@@ -616,132 +627,145 @@ fun MiniPlayer(
     onPlayPause: () -> Unit,
     onOpen: () -> Unit
 ) {
-    Row(
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 10.dp)
-            .background(
-                Brush.horizontalGradient(listOf(MediumPurple, DarkPurple)),
-                shape = RoundedCornerShape(20.dp)
-            )
-            .clickable { onOpen() }
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable { onOpen() },
+        cornerRadius = 20.dp
     ) {
-        Box(
+        Row(
             modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(CardSurface),
-            contentAlignment = Alignment.Center
-        ) {
-            if (song.albumArtUri != null) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(song.albumArtUri)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        listOf(MediumPurple.copy(0.4f), DarkPurple.copy(0.6f))
+                    )
                 )
-            } else {
-                Text(text = "🎵", fontSize = 20.sp)
-            }
-        }
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = song.title,
-                color = TextPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = song.artist,
-                color = PurpleAccent,
-                fontSize = 11.sp,
-                maxLines = 1
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .background(LightPurple, CircleShape)
-                .clickable { onPlayPause() },
-            contentAlignment = Alignment.Center
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = if (isPlaying) "⏸" else "▶", fontSize = 16.sp)
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(CardSurface),
+                contentAlignment = Alignment.Center
+            ) {
+                if (song.albumArtUri != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(song.albumArtUri)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Text(text = "🎵", fontSize = 20.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = song.title,
+                    color = TextPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = song.artist,
+                    color = PurpleAccent,
+                    fontSize = 11.sp,
+                    maxLines = 1
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(
+                        Brush.radialGradient(listOf(LightPurple, MediumPurple)),
+                        CircleShape
+                    )
+                    .clickable { onPlayPause() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = if (isPlaying) "⏸" else "▶", fontSize = 16.sp, color = Color.White)
+            }
         }
     }
 }
-
 @Composable
 fun SongItem(song: Song, isPlaying: Boolean, onClick: () -> Unit) {
-    Row(
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                if (isPlaying) CardSurface.copy(alpha = 0.9f)
-                else CardSurface.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(14.dp)
-            )
-            .clickable { onClick() }
-            .padding(10.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable { onClick() },
+        cornerRadius = 14.dp
     ) {
-        Box(
+        Row(
             modifier = Modifier
-                .size(46.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(DarkPurple),
-            contentAlignment = Alignment.Center
-        ) {
-            if (song.albumArtUri != null) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(song.albumArtUri)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                .fillMaxWidth()
+                .background(
+                    if (isPlaying)
+                        Brush.linearGradient(listOf(LightPurple.copy(0.15f), MediumPurple.copy(0.1f)))
+                    else
+                        Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
                 )
-            } else {
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(DarkPurple),
+                contentAlignment = Alignment.Center
+            ) {
+                if (song.albumArtUri != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(song.albumArtUri)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Text(text = if (isPlaying) "▶" else "🎵", fontSize = 18.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (isPlaying) "▶" else "🎵",
-                    fontSize = 18.sp
+                    text = song.title,
+                    color = if (isPlaying) LightPurple else TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = song.artist,
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-        }
 
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = song.title,
-                color = if (isPlaying) LightPurple else TextPrimary,
-                fontSize = 14.sp,
-                fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = song.artist,
-                color = TextSecondary,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        if (isPlaying) {
-            Text(text = "♫", color = CyanAccent, fontSize = 18.sp)
+            if (isPlaying) {
+                Text(text = "♫", color = CyanAccent, fontSize = 18.sp)
+            }
         }
     }
 }
@@ -1073,37 +1097,47 @@ fun PlayerScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            GlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                cornerRadius = 20.dp
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = song.title,
+                            color = TextPrimary,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = song.artist,
+                            color = LightPurple,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     Text(
-                        text = song.title,
-                        color = TextPrimary,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = song.artist,
-                        color = LightPurple,
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        text = if (isFavorite) "♥" else "♡",
+                        color = if (isFavorite) Color(0xFFFF6B9D) else TextSecondary,
+                        fontSize = 24.sp,
+                        modifier = Modifier
+                            .clickable { onToggleFavorite() }
+                            .padding(8.dp)
                     )
                 }
-                Text(
-                    text = if (isFavorite) "♥" else "♡",
-                    color = if (isFavorite) Color(0xFFFF6B9D) else TextSecondary,
-                    fontSize = 24.sp,
-                    modifier = Modifier
-                        .clickable { onToggleFavorite() }
-                        .padding(8.dp)
-                )            }
+            }
 
             Spacer(modifier = Modifier.height(28.dp))
 
@@ -1144,76 +1178,100 @@ fun PlayerScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
+            GlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                cornerRadius = 24.dp
             ) {
-                Box(
+                Row(
                     modifier = Modifier
-                        .size(44.dp)
-                        .background(if (isShuffled) LightPurple else CardSurface, CircleShape)
-                        .clickable {
-                            isShuffled = !isShuffled
-                            player.shuffleModeEnabled = isShuffled
-                        },
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "⇄", color = if (isShuffled) Color.White else TextSecondary, fontSize = 18.sp)
-                }
+                    // Shuffle
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(
+                                if (isShuffled) LightPurple else GlassSurface,
+                                CircleShape
+                            )
+                            .border(1.dp, GlassBorder, CircleShape)
+                            .clickable {
+                                isShuffled = !isShuffled
+                                player.shuffleModeEnabled = isShuffled
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = "⇄", color = if (isShuffled) Color.White else TextSecondary, fontSize = 18.sp)
+                    }
 
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .background(CardSurface, CircleShape)
-                        .clickable { player.seekToPreviousMediaItem() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = "◀◀", color = TextPrimary, fontSize = 16.sp)
-                }
+                    // Précédent
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .background(GlassSurface, CircleShape)
+                            .border(1.dp, GlassBorder, CircleShape)
+                            .clickable { player.seekToPreviousMediaItem() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = "◀◀", color = TextPrimary, fontSize = 16.sp)
+                    }
 
-                Box(
-                    modifier = Modifier
-                        .size(68.dp)
-                        .background(
-                            Brush.radialGradient(listOf(LightPurple, MediumPurple)),
-                            CircleShape
+                    // Play/Pause
+                    Box(
+                        modifier = Modifier
+                            .size(68.dp)
+                            .background(
+                                Brush.radialGradient(listOf(LightPurple, MediumPurple)),
+                                CircleShape
+                            )
+                            .clickable { onPlayPause() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = if (isPlaying) "⏸" else "▶", fontSize = 26.sp, color = Color.White)
+                    }
+
+                    // Suivant
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .background(GlassSurface, CircleShape)
+                            .border(1.dp, GlassBorder, CircleShape)
+                            .clickable { player.seekToNextMediaItem() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = "▶▶", color = TextPrimary, fontSize = 16.sp)
+                    }
+
+                    // Repeat
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(
+                                if (repeatMode > 0) LightPurple else GlassSurface,
+                                CircleShape
+                            )
+                            .border(1.dp, GlassBorder, CircleShape)
+                            .clickable {
+                                repeatMode = (repeatMode + 1) % 3
+                                player.repeatMode = when (repeatMode) {
+                                    1 -> ExoPlayer.REPEAT_MODE_ALL
+                                    2 -> ExoPlayer.REPEAT_MODE_ONE
+                                    else -> ExoPlayer.REPEAT_MODE_OFF
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = when (repeatMode) { 2 -> "↺¹"; else -> "↺" },
+                            color = if (repeatMode > 0) Color.White else TextSecondary,
+                            fontSize = 18.sp
                         )
-                        .clickable { onPlayPause() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = if (isPlaying) "⏸" else "▶", fontSize = 26.sp, color = Color.White)
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .background(CardSurface, CircleShape)
-                        .clickable { player.seekToNextMediaItem() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = "▶▶", color = TextPrimary, fontSize = 16.sp)
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(if (repeatMode > 0) LightPurple else CardSurface, CircleShape)
-                        .clickable {
-                            repeatMode = (repeatMode + 1) % 3
-                            player.repeatMode = when (repeatMode) {
-                                1 -> ExoPlayer.REPEAT_MODE_ALL
-                                2 -> ExoPlayer.REPEAT_MODE_ONE
-                                else -> ExoPlayer.REPEAT_MODE_OFF
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = when (repeatMode) { 2 -> "↺¹"; else -> "↺" },
-                        color = if (repeatMode > 0) Color.White else TextSecondary,
-                        fontSize = 18.sp
-                    )
+                    }
                 }
             }
         }
