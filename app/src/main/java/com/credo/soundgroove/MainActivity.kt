@@ -384,37 +384,41 @@ fun HomeTab(
         }
 
         item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(CardSurface, shape = RoundedCornerShape(16.dp))
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+            GlassCard(
+                modifier = Modifier.fillMaxWidth(),
+                cornerRadius = 16.dp
             ) {
-                Text(text = "🔍", fontSize = 16.sp)
-                Spacer(modifier = Modifier.width(10.dp))
-                androidx.compose.material3.TextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = {
-                        Text(
-                            text = "Rechercher une chanson...",
-                            color = TextSecondary,
-                            fontSize = 14.sp
-                        )
-                    },
-                    colors = androidx.compose.material3.TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        cursorColor = LightPurple
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "🔍", fontSize = 16.sp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    androidx.compose.material3.TextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = {
+                            Text(
+                                text = "Rechercher une chanson...",
+                                color = TextSecondary,
+                                fontSize = 14.sp
+                            )
+                        },
+                        colors = androidx.compose.material3.TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            cursorColor = LightPurple
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
             }
         }
 
@@ -439,59 +443,76 @@ fun HomeTab(
                         .clip(RoundedCornerShape(20.dp))
                         .padding(16.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalAlignment = Alignment.CenterVertically
+                    GlassCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(140.dp)
+                            .clickable { },
+                        cornerRadius = 20.dp
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = currentSong.artist,
-                                color = PurpleAccent,
-                                fontSize = 13.sp
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = currentSong.title,
-                                color = TextPrimary,
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(MediumPurple.copy(0.4f), DarkPurple.copy(0.2f))
+                                    )
+                                )
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = currentSong.artist,
+                                    color = PurpleAccent,
+                                    fontSize = 13.sp
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = currentSong.title,
+                                    color = TextPrimary,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .background(LightPurple.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
+                                        .border(1.dp, LightPurple.copy(0.4f), RoundedCornerShape(20.dp))
+                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = if (isPlaying) "▶ En lecture" else "⏸ En pause",
+                                        color = LightPurple,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
                             Box(
                                 modifier = Modifier
-                                    .background(LightPurple.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
-                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                                    .size(100.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
+                                    .background(CardSurface),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = if (isPlaying) "▶ En lecture" else "⏸ En pause",
-                                    color = LightPurple,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(100.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(CardSurface),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (currentSong.albumArtUri != null) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(LocalContext.current)
-                                        .data(currentSong.albumArtUri)
-                                        .crossfade(true)
-                                        .build(),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Text(text = "🎵", fontSize = 40.sp)
+                                if (currentSong.albumArtUri != null) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(currentSong.albumArtUri)
+                                            .crossfade(true)
+                                            .build(),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Text(text = "🎵", fontSize = 40.sp)
+                                }
                             }
                         }
                     }
@@ -530,44 +551,47 @@ fun HomeTab(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         rowSongs.forEach { song ->
-                            Box(
+                            GlassCard(
                                 modifier = Modifier
                                     .weight(1f)
                                     .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(CardSurface)
                                     .clickable { onSongClick(song) },
-                                contentAlignment = Alignment.BottomStart
+                                cornerRadius = 16.dp
                             ) {
-                                if (song.albumArtUri != null) {
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(LocalContext.current)
-                                            .data(song.albumArtUri)
-                                            .crossfade(true)
-                                            .build(),
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.BottomStart
+                                ) {
+                                    if (song.albumArtUri != null) {
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(LocalContext.current)
+                                                .data(song.albumArtUri)
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    listOf(Color.Transparent, Color.Black.copy(0.7f))
+                                                )
+                                            )
+                                    )
+                                    Text(
+                                        text = song.title,
+                                        color = TextPrimary,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(8.dp)
                                     )
                                 }
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(
-                                            Brush.verticalGradient(
-                                                listOf(Color.Transparent, Color.Black.copy(0.7f))
-                                            )
-                                        )
-                                )
-                                Text(
-                                    text = song.title,
-                                    color = TextPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.padding(8.dp)
-                                )
                             }
                         }
                         if (rowSongs.size == 1) {
