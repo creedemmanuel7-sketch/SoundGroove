@@ -45,6 +45,11 @@ data class Song(
     val uri: Uri,
     val albumArtUri: Uri?
 )
+data class Playlist(
+    val id: Long = System.currentTimeMillis(),
+    val name: String,
+    val songs: List<Song> = emptyList()
+)
 
 class MainActivity : ComponentActivity() {
     private lateinit var player: ExoPlayer
@@ -77,6 +82,7 @@ fun MainScreen(player: ExoPlayer) {
     var recentlyPlayed by remember { mutableStateOf<List<Song>>(emptyList()) }
     var showRecentlyPlayed by remember { mutableStateOf(false) }
     var currentPlaylist by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var playlists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
 
     var hasPermission by remember {
         mutableStateOf(
@@ -153,6 +159,17 @@ fun MainScreen(player: ExoPlayer) {
                         currentSong = currentSong,
                         isPlaying = isPlaying,
                         favoriteSongs = favoriteSongs,
+                        playlists = playlists,
+                        onPlaylistCreate = { name ->
+                            playlists = playlists + Playlist(name = name)
+                        },
+                        onPlaylistAddSong = { playlist, song ->
+                            playlists = playlists.map {
+                                if (it.id == playlist.id)
+                                    it.copy(songs = it.songs + song)
+                                else it
+                            }
+                        },
                         onSongClick = { song ->
                             currentSong = song
                             playSong(song, songs)
@@ -1502,15 +1519,17 @@ fun LibraryTab(
     currentSong: Song?,
     isPlaying: Boolean,
     favoriteSongs: List<Song>,
+    playlists: List<Playlist>,
+    onPlaylistCreate: (String) -> Unit,
+    onPlaylistAddSong: (Playlist, Song) -> Unit,
     onSongClick: (Song) -> Unit,
     onPlayPlaylist: (Song, List<Song>) -> Unit,
     onToggleFavorite: (Song) -> Unit
-) {
+){
     var selectedTab by remember { mutableStateOf(0) }
     var selectedAlbum by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     var selectedArtist by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
-    val tabs = listOf("Chansons", "Albums", "Artistes", "Favoris")
-
+    val tabs = listOf("Chansons", "Albums", "Artistes", "Playlists", "Favoris")
     val albums = remember(songs) {
         songs.groupBy { it.artist }
             .entries
@@ -1757,7 +1776,214 @@ fun LibraryTab(
                     item { Spacer(modifier = Modifier.height(16.dp)) }
                 }
 
+
                 3 -> {
+                    // Playlists
+                    var showCreateDialog by remember { mutableStateOf(false) }
+                    var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
+
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            // Bouton créer
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${playlists.size} playlist(s)",
+                                    color = TextSecondary,
+                                    fontSize = 13.sp
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .background(LightPurple, RoundedCornerShape(20.dp))
+                                        .clickable { showCreateDialog = true }
+                                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(text = "+", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(text = "Nouvelle playlist", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            if (playlists.isEmpty()) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(text = "🎶", fontSize = 48.sp)
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(text = "Aucune playlist", color = TextSecondary, fontSize = 16.sp)
+                                        Text(text = "Appuie sur + pour créer", color = TextSecondary, fontSize = 13.sp)
+                                    }
+                                }
+                            } else {
+                                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    items(playlists) { playlist ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(CardSurface.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                                .clickable { selectedPlaylist = playlist }
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            // Cover playlist
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(52.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(
+                                                        Brush.radialGradient(listOf(LightPurple, MediumPurple))
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (playlist.songs.isNotEmpty() && playlist.songs.first().albumArtUri != null) {
+                                                    AsyncImage(
+                                                        model = ImageRequest.Builder(LocalContext.current)
+                                                            .data(playlist.songs.first().albumArtUri)
+                                                            .crossfade(true)
+                                                            .build(),
+                                                        contentDescription = null,
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                } else {
+                                                    Text(text = "🎵", fontSize = 22.sp)
+                                                }
+                                            }
+
+                                            Spacer(modifier = Modifier.width(12.dp))
+
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = playlist.name,
+                                                    color = TextPrimary,
+                                                    fontSize = 15.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text(
+                                                    text = "${playlist.songs.size} chanson(s)",
+                                                    color = TextSecondary,
+                                                    fontSize = 12.sp
+                                                )
+                                            }
+
+                                            Text(text = "▶", color = LightPurple, fontSize = 20.sp)
+                                        }
+                                    }
+                                    item { Spacer(modifier = Modifier.height(16.dp)) }
+                                }
+                            }
+                        }
+
+                        // Dialog créer playlist
+                        if (showCreateDialog) {
+                            var playlistName by remember { mutableStateOf("") }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.7f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(32.dp)
+                                        .background(CardSurface, RoundedCornerShape(20.dp))
+                                        .padding(24.dp)
+                                ) {
+                                    Text(
+                                        text = "Nouvelle playlist",
+                                        color = TextPrimary,
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    androidx.compose.material3.TextField(
+                                        value = playlistName,
+                                        onValueChange = { playlistName = it },
+                                        label = { Text("Nom de la playlist", color = TextSecondary) },
+                                        colors = androidx.compose.material3.TextFieldDefaults.colors(
+                                            focusedContainerColor = DarkPurple,
+                                            unfocusedContainerColor = DarkPurple,
+                                            focusedTextColor = TextPrimary,
+                                            unfocusedTextColor = TextPrimary,
+                                            cursorColor = LightPurple,
+                                            focusedIndicatorColor = LightPurple,
+                                            unfocusedIndicatorColor = TextSecondary
+                                        ),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true
+                                    )
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End
+                                    ) {
+                                        Text(
+                                            text = "Annuler",
+                                            color = TextSecondary,
+                                            modifier = Modifier
+                                                .clickable { showCreateDialog = false }
+                                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .background(
+                                                    if (playlistName.isNotBlank()) LightPurple else TextSecondary,
+                                                    RoundedCornerShape(12.dp)
+                                                )
+                                                .clickable {
+                                                    if (playlistName.isNotBlank()) {
+                                                        onPlaylistCreate(playlistName.trim())
+                                                        showCreateDialog = false
+                                                        playlistName = ""
+                                                    }
+                                                }
+                                                .padding(horizontal = 20.dp, vertical = 8.dp)
+                                        ) {
+                                            Text(
+                                                text = "Créer",
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Écran playlist sélectionnée
+                        selectedPlaylist?.let { playlist ->
+                            PlaylistDetailScreen(
+                                playlist = playlist,
+                                allSongs = songs,
+                                currentSong = currentSong,
+                                isPlaying = isPlaying,
+                                onClose = { selectedPlaylist = null },
+                                onPlayAll = {
+                                    if (playlist.songs.isNotEmpty())
+                                        onPlayPlaylist(playlist.songs.first(), playlist.songs)
+                                },
+                                onSongClick = { song -> onPlayPlaylist(song, playlist.songs) },
+                                onAddSong = { song -> onPlaylistAddSong(playlist, song) }
+                            )
+                        }
+                    }
+                }
+
+                4 -> {
+                    // Favoris (ancien cas 3)
                     if (favoriteSongs.isEmpty()) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -1953,6 +2179,263 @@ fun PlaylistScreen(
                     )
                 }
                 item { Spacer(modifier = Modifier.height(16.dp)) }
+            }
+        }
+    }
+}@Composable
+fun PlaylistDetailScreen(
+    playlist: Playlist,
+    allSongs: List<Song>,
+    currentSong: Song?,
+    isPlaying: Boolean,
+    onClose: () -> Unit,
+    onPlayAll: () -> Unit,
+    onSongClick: (Song) -> Unit,
+    onAddSong: (Song) -> Unit
+) {
+    var showAddSongs by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFF2D1B4E), Color(0xFF1A0A2E), Color(0xFF0D0D1A))
+                )
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+        ) {
+            Spacer(modifier = Modifier.height(52.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(CardSurface, CircleShape)
+                        .clickable { onClose() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "←", color = TextPrimary, fontSize = 20.sp)
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = playlist.name,
+                        color = TextPrimary,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${playlist.songs.size} chanson(s)",
+                        color = TextSecondary,
+                        fontSize = 13.sp
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .background(LightPurple.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+                        .clickable { showAddSongs = true }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(text = "+ Ajouter", color = LightPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (playlist.songs.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(LightPurple, RoundedCornerShape(12.dp))
+                        .clickable { onPlayAll() }
+                        .padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "▶", color = Color.White, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "Tout jouer", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            if (playlist.songs.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "🎵", fontSize = 48.sp)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(text = "Playlist vide", color = TextSecondary, fontSize = 16.sp)
+                        Text(text = "Appuie sur + Ajouter", color = TextSecondary, fontSize = 13.sp)
+                    }
+                }
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(playlist.songs) { song ->
+                        SongItem(
+                            song = song,
+                            isPlaying = currentSong?.id == song.id && isPlaying,
+                            onClick = { onSongClick(song) }
+                        )
+                    }
+                    item { Spacer(modifier = Modifier.height(16.dp)) }
+                }
+            }
+        }
+
+        // Écran ajouter chansons
+        if (showAddSongs) {
+            val filteredSongs = remember(searchQuery, allSongs) {
+                if (searchQuery.isEmpty()) allSongs
+                else allSongs.filter {
+                    it.title.contains(searchQuery, ignoreCase = true) ||
+                            it.artist.contains(searchQuery, ignoreCase = true)
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFF2D1B4E), Color(0xFF1A0A2E), Color(0xFF0D0D1A))
+                        )
+                    )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp)
+                ) {
+                    Spacer(modifier = Modifier.height(52.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(CardSurface, CircleShape)
+                                .clickable { showAddSongs = false },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(text = "←", color = TextPrimary, fontSize = 20.sp)
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = "Ajouter des chansons",
+                            color = TextPrimary,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(CardSurface, RoundedCornerShape(16.dp))
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "🔍", fontSize = 16.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        androidx.compose.material3.TextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("Rechercher...", color = TextSecondary, fontSize = 14.sp) },
+                            colors = androidx.compose.material3.TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                cursorColor = LightPurple
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(filteredSongs) { song ->
+                            val alreadyAdded = playlist.songs.any { it.id == song.id }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(CardSurface.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        if (!alreadyAdded) onAddSong(song)
+                                    }
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(DarkPurple),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (song.albumArtUri != null) {
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(LocalContext.current)
+                                                .data(song.albumArtUri)
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Text(text = "🎵", fontSize = 18.sp)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = song.title,
+                                        color = if (alreadyAdded) TextSecondary else TextPrimary,
+                                        fontSize = 14.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = song.artist,
+                                        color = TextSecondary,
+                                        fontSize = 12.sp,
+                                        maxLines = 1
+                                    )
+                                }
+                                Text(
+                                    text = if (alreadyAdded) "✓" else "+",
+                                    color = if (alreadyAdded) CyanAccent else LightPurple,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                    }
+                }
             }
         }
     }
