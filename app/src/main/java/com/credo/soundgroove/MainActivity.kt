@@ -927,57 +927,75 @@ fun SearchTab(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(CardSurface, shape = RoundedCornerShape(16.dp))
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // Barre de recherche glass
+        GlassCard(
+            modifier = Modifier.fillMaxWidth(),
+            cornerRadius = 16.dp
         ) {
-            Text(text = "🔍", fontSize = 16.sp)
-            Spacer(modifier = Modifier.width(10.dp))
-            androidx.compose.material3.TextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = {
-                    Text(text = "Artiste, chanson...", color = TextSecondary, fontSize = 14.sp)
-                },
-                colors = androidx.compose.material3.TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    cursorColor = LightPurple
-                ),
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = null,
+                    tint = TextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                androidx.compose.material3.TextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = {
+                        Text(text = "Artiste, chanson...", color = TextSecondary, fontSize = 14.sp)
+                    },
+                    colors = androidx.compose.material3.TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        cursorColor = LightPurple
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Filtres glass
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             filters.forEachIndexed { index, filter ->
-                Box(
+                GlassCard(
                     modifier = Modifier
-                        .background(
-                            if (selectedFilter == index) LightPurple else CardSurface,
-                            RoundedCornerShape(20.dp)
-                        )
-                        .clickable { selectedFilter = index }
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clickable { selectedFilter = index },
+                    cornerRadius = 20.dp
                 ) {
-                    Text(
-                        text = filter,
-                        color = if (selectedFilter == index) Color.White else TextSecondary,
-                        fontSize = 13.sp,
-                        fontWeight = if (selectedFilter == index) FontWeight.Bold else FontWeight.Normal
-                    )
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                if (selectedFilter == index)
+                                    Brush.linearGradient(listOf(LightPurple, MediumPurple))
+                                else
+                                    Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+                            )
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = filter,
+                            color = if (selectedFilter == index) Color.White else TextSecondary,
+                            fontSize = 13.sp,
+                            fontWeight = if (selectedFilter == index) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
                 }
             }
         }
@@ -987,25 +1005,71 @@ fun SearchTab(
         if (searchQuery.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "🔍", fontSize = 48.sp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(text = "Tape pour rechercher", color = TextSecondary, fontSize = 16.sp)
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .background(GlassSurface, CircleShape)
+                            .border(1.dp, GlassBorder, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Search,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Tape pour rechercher",
+                        color = TextSecondary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Chansons, artistes, albums...",
+                        color = TextSecondary.copy(alpha = 0.6f),
+                        fontSize = 13.sp
+                    )
                 }
             }
         } else if (filteredSongs.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "😕", fontSize = 48.sp)
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .background(GlassSurface, CircleShape)
+                            .border(1.dp, GlassBorder, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.SearchOff,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Aucun résultat pour \"$searchQuery\"",
+                        text = "Aucun résultat",
                         color = TextSecondary,
-                        fontSize = 14.sp
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "pour \"$searchQuery\"",
+                        color = TextSecondary.copy(alpha = 0.6f),
+                        fontSize = 13.sp
                     )
                 }
             }
         } else {
-            Text(text = "${filteredSongs.size} résultat(s)", color = TextSecondary, fontSize = 13.sp)
+            Text(
+                text = "${filteredSongs.size} résultat(s)",
+                color = TextSecondary,
+                fontSize = 13.sp
+            )
             Spacer(modifier = Modifier.height(12.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(filteredSongs) { song ->
@@ -1762,50 +1826,53 @@ fun LibraryTab(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             rowAlbums.forEach { (artist, albumSongs) ->
-                                Box(
+                                GlassCard(
                                     modifier = Modifier
                                         .weight(1f)
                                         .aspectRatio(1f)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(CardSurface)
                                         .clickable { selectedAlbum = Pair(artist, albumSongs) },
-                                    contentAlignment = Alignment.BottomStart
+                                    cornerRadius = 16.dp
                                 ) {
-                                    val coverSong = albumSongs.firstOrNull { it.albumArtUri != null }
-                                    if (coverSong?.albumArtUri != null) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(LocalContext.current)
-                                                .data(coverSong.albumArtUri)
-                                                .crossfade(true)
-                                                .build(),
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    }
                                     Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(
-                                                Brush.verticalGradient(
-                                                    listOf(Color.Transparent, Color.Black.copy(0.8f))
-                                                )
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.BottomStart
+                                    ) {
+                                        val coverSong = albumSongs.firstOrNull { it.albumArtUri != null }
+                                        if (coverSong?.albumArtUri != null) {
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(LocalContext.current)
+                                                    .data(coverSong.albumArtUri)
+                                                    .crossfade(true)
+                                                    .build(),
+                                                contentDescription = null,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
                                             )
-                                    )
-                                    Column(modifier = Modifier.padding(8.dp)) {
-                                        Text(
-                                            text = artist,
-                                            color = TextPrimary,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(
+                                                    Brush.verticalGradient(
+                                                        listOf(Color.Transparent, Color.Black.copy(0.8f))
+                                                    )
+                                                )
                                         )
-                                        Text(
-                                            text = "${albumSongs.size} titres",
-                                            color = TextSecondary,
-                                            fontSize = 10.sp
-                                        )
+                                        Column(modifier = Modifier.padding(8.dp)) {
+                                            Text(
+                                                text = artist,
+                                                color = TextPrimary,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = "${albumSongs.size} titres",
+                                                color = TextSecondary,
+                                                fontSize = 10.sp
+                                            )
+                                        }
                                     }
                                 }
                             }
