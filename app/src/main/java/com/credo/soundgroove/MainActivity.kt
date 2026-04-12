@@ -38,6 +38,10 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.ui.theme.*
 import androidx.compose.foundation.border
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.Icon
 
 data class Song(
     val id: Long,
@@ -268,11 +272,13 @@ fun MainScreen(player: ExoPlayer) {
 
 @Composable
 fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
+    data class NavItem(val label: String, val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector, val unselectedIcon: androidx.compose.ui.graphics.vector.ImageVector)
+
     val tabs = listOf(
-        Pair("🏠", "Accueil"),
-        Pair("🎵", "Bibliothèque"),
-        Pair("🔍", "Recherche"),
-        Pair("👤", "Profil")
+        NavItem("Accueil", Icons.Filled.Home, Icons.Outlined.Home),
+        NavItem("Bibliothèque", Icons.Filled.LibraryMusic, Icons.Outlined.LibraryMusic),
+        NavItem("Recherche", Icons.Filled.Search, Icons.Outlined.Search),
+        NavItem("Profil", Icons.Filled.Person, Icons.Outlined.Person)
     )
 
     GlassCard(
@@ -284,26 +290,27 @@ fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        listOf(Color(0x33000000), Color(0x1A000000))
-                    )
-                )
+                .background(Brush.linearGradient(listOf(Color(0x33000000), Color(0x1A000000))))
                 .padding(vertical = 8.dp, horizontal = 16.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            tabs.forEachIndexed { index, (icon, label) ->
+            tabs.forEachIndexed { index, item ->
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
                         .clickable { onTabSelected(index) }
                         .padding(8.dp)
                 ) {
-                    Text(text = icon, fontSize = 22.sp)
+                    Icon(
+                        imageVector = if (selectedTab == index) item.selectedIcon else item.unselectedIcon,
+                        contentDescription = item.label,
+                        tint = if (selectedTab == index) LightPurple else TextSecondary,
+                        modifier = Modifier.size(24.dp)
+                    )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = label,
+                        text = item.label,
                         color = if (selectedTab == index) LightPurple else TextSecondary,
                         fontSize = 10.sp,
                         fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
@@ -372,14 +379,12 @@ fun HomeTab(
                         fontSize = 14.sp
                     )
                 }
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(CardSurface, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = "⚙️", fontSize = 18.sp)
-                }
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Paramètres",
+                    tint = TextPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
             }
         }
 
@@ -710,18 +715,12 @@ fun MiniPlayer(
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(
-                        Brush.radialGradient(listOf(LightPurple, MediumPurple)),
-                        CircleShape
-                    )
-                    .clickable { onPlayPause() },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(text = if (isPlaying) "⏸" else "▶", fontSize = 16.sp, color = Color.White)
-            }
+            Icon(
+                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(22.dp)
+            )
         }
     }
 }
@@ -788,7 +787,12 @@ fun SongItem(song: Song, isPlaying: Boolean, onClick: () -> Unit) {
             }
 
             if (isPlaying) {
-                Text(text = "♫", color = CyanAccent, fontSize = 18.sp)
+                Icon(
+                    imageVector = Icons.Filled.MusicNote,
+                    contentDescription = null,
+                    tint = CyanAccent,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }
@@ -1064,6 +1068,7 @@ fun PlayerScreen(
         ) {
             Spacer(modifier = Modifier.height(52.dp))
 
+            // Header — retour + titre + menu
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1072,12 +1077,19 @@ fun PlayerScreen(
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(CardSurface, CircleShape)
+                        .background(GlassSurface, CircleShape)
+                        .border(1.dp, GlassBorder, CircleShape)
                         .clickable { onClose() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "↓", color = TextPrimary, fontSize = 20.sp)
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        contentDescription = "Fermer",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(28.dp)
+                    )
                 }
+
                 Text(
                     text = "EN LECTURE",
                     color = TextSecondary,
@@ -1085,18 +1097,26 @@ fun PlayerScreen(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp
                 )
+
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(CardSurface, CircleShape),
+                        .background(GlassSurface, CircleShape)
+                        .border(1.dp, GlassBorder, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "⋮", color = TextPrimary, fontSize = 20.sp)
+                    Icon(
+                        imageVector = Icons.Filled.MoreVert,
+                        contentDescription = "Options",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(36.dp))
 
+            // Pochette
             Box(
                 modifier = Modifier
                     .size(300.dp)
@@ -1121,6 +1141,7 @@ fun PlayerScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
+            // Titre + Favori
             GlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1152,19 +1173,20 @@ fun PlayerScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    Text(
-                        text = if (isFavorite) "♥" else "♡",
-                        color = if (isFavorite) Color(0xFFFF6B9D) else TextSecondary,
-                        fontSize = 24.sp,
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = "Favori",
+                        tint = if (isFavorite) Color(0xFFFF6B9D) else TextSecondary,
                         modifier = Modifier
+                            .size(28.dp)
                             .clickable { onToggleFavorite() }
-                            .padding(8.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
+            // Slider
             var isSeeking by remember { mutableStateOf(false) }
             var seekPosition by remember { mutableStateOf(0f) }
 
@@ -1186,8 +1208,6 @@ fun PlayerScreen(
                 )
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -1200,8 +1220,9 @@ fun PlayerScreen(
                 Text(text = formatTime(duration), color = TextSecondary, fontSize = 12.sp)
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
+            // Contrôles
             GlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1215,14 +1236,10 @@ fun PlayerScreen(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Shuffle
                     Box(
                         modifier = Modifier
                             .size(44.dp)
-                            .background(
-                                if (isShuffled) LightPurple else GlassSurface,
-                                CircleShape
-                            )
+                            .background(if (isShuffled) LightPurple else GlassSurface, CircleShape)
                             .border(1.dp, GlassBorder, CircleShape)
                             .clickable {
                                 isShuffled = !isShuffled
@@ -1230,10 +1247,14 @@ fun PlayerScreen(
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "⇄", color = if (isShuffled) Color.White else TextSecondary, fontSize = 18.sp)
+                        Icon(
+                            imageVector = Icons.Filled.Shuffle,
+                            contentDescription = "Shuffle",
+                            tint = if (isShuffled) Color.White else TextSecondary,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
 
-                    // Précédent
                     Box(
                         modifier = Modifier
                             .size(52.dp)
@@ -1242,10 +1263,14 @@ fun PlayerScreen(
                             .clickable { player.seekToPreviousMediaItem() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "◀◀", color = TextPrimary, fontSize = 16.sp)
+                        Icon(
+                            imageVector = Icons.Filled.SkipPrevious,
+                            contentDescription = "Précédent",
+                            tint = TextPrimary,
+                            modifier = Modifier.size(28.dp)
+                        )
                     }
 
-                    // Play/Pause
                     Box(
                         modifier = Modifier
                             .size(68.dp)
@@ -1256,10 +1281,14 @@ fun PlayerScreen(
                             .clickable { onPlayPause() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = if (isPlaying) "⏸" else "▶", fontSize = 26.sp, color = Color.White)
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Lecture",
+                            tint = Color.White,
+                            modifier = Modifier.size(36.dp)
+                        )
                     }
 
-                    // Suivant
                     Box(
                         modifier = Modifier
                             .size(52.dp)
@@ -1268,17 +1297,18 @@ fun PlayerScreen(
                             .clickable { player.seekToNextMediaItem() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "▶▶", color = TextPrimary, fontSize = 16.sp)
+                        Icon(
+                            imageVector = Icons.Filled.SkipNext,
+                            contentDescription = "Suivant",
+                            tint = TextPrimary,
+                            modifier = Modifier.size(28.dp)
+                        )
                     }
 
-                    // Repeat
                     Box(
                         modifier = Modifier
                             .size(44.dp)
-                            .background(
-                                if (repeatMode > 0) LightPurple else GlassSurface,
-                                CircleShape
-                            )
+                            .background(if (repeatMode > 0) LightPurple else GlassSurface, CircleShape)
                             .border(1.dp, GlassBorder, CircleShape)
                             .clickable {
                                 repeatMode = (repeatMode + 1) % 3
@@ -1290,10 +1320,11 @@ fun PlayerScreen(
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = when (repeatMode) { 2 -> "↺¹"; else -> "↺" },
-                            color = if (repeatMode > 0) Color.White else TextSecondary,
-                            fontSize = 18.sp
+                        Icon(
+                            imageVector = if (repeatMode == 2) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                            contentDescription = "Répéter",
+                            tint = if (repeatMode > 0) Color.White else TextSecondary,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
@@ -1708,14 +1739,14 @@ fun LibraryTab(
                                     maxLines = 1
                                 )
                             }
-                            Text(
-                                text = if (isFav) "♥" else "♡",
-                                color = if (isFav) Color(0xFFFF6B9D) else TextSecondary,
-                                fontSize = 20.sp,
-                                modifier = Modifier
-                                    .clickable { onToggleFavorite(song) }
-                                    .padding(8.dp)
-                            )
+                                Icon(
+                                    imageVector = if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                    contentDescription = "Favori",
+                                    tint = if (isFav) Color(0xFFFF6B9D) else TextSecondary,
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .clickable { onToggleFavorite(song) }
+                                )
                         }
                     }
 
@@ -2144,14 +2175,14 @@ fun LibraryTab(
                                             maxLines = 1
                                         )
                                     }
-                                    Text(
-                                        text = "♥",
-                                        color = Color(0xFFFF6B9D),
-                                        fontSize = 20.sp,
-                                        modifier = Modifier
-                                            .clickable { onToggleFavorite(song) }
-                                            .padding(8.dp)
-                                    )
+                                        Icon(
+                                            imageVector = Icons.Filled.Favorite,
+                                            contentDescription = "Retirer des favoris",
+                                            tint = Color(0xFFFF6B9D),
+                                            modifier = Modifier
+                                                .size(22.dp)
+                                                .clickable { onToggleFavorite(song) }
+                                        )
                                 }
                                     }
                             }
