@@ -42,6 +42,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.Icon
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 
 data class Song(
     val id: Long,
@@ -80,14 +83,57 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(player: ExoPlayer) {
     var selectedTab by remember { mutableStateOf(0) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var songs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var currentSong by remember { mutableStateOf<Song?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
     var showPlayer by remember { mutableStateOf(false) }
-    var recentlyPlayed by remember { mutableStateOf<List<Song>>(emptyList()) }
     var showRecentlyPlayed by remember { mutableStateOf(false) }
     var currentPlaylist by remember { mutableStateOf<List<Song>>(emptyList()) }
+
+    // Base de données
+    val db = remember { SoundGrooveDatabase.getInstance(context) }
+
+    // Données persistantes
+    var favoriteSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var recentlyPlayed by remember { mutableStateOf<List<Song>>(emptyList()) }
     var playlists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
+
+    // Charger depuis la DB au démarrage
+    LaunchedEffect(Unit) {
+        db.favoriteDao().getAll().collect { entities ->
+            favoriteSongs = entities.map { it.toSong() }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        db.recentlyPlayedDao().getAll().collect { entities ->
+            recentlyPlayed = entities.map { it.toSong() }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        db.playlistDao().getAllPlaylists().collect { playlistEntities ->
+            val loadedPlaylists = playlistEntities.map { playlistEntity ->
+                val songEntities = db.playlistDao()
+                    .getSongsForPlaylist(playlistEntity.id).first()
+                Playlist(
+                    id = playlistEntity.id,
+                    name = playlistEntity.name,
+                    songs = songEntities.map { s ->
+                        Song(
+                            id = s.songId,
+                            title = s.title,
+                            artist = s.artist,
+                            uri = android.net.Uri.parse(s.uri),
+                            albumArtUri = s.albumArtUri?.let { android.net.Uri.parse(it) }
+                        )
+                    }
+                )
+            }
+            playlists = loadedPlaylists
+        }
+    }
 
     var hasPermission by remember {
         mutableStateOf(
@@ -100,7 +146,6 @@ fun MainScreen(player: ExoPlayer) {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasPermission = granted }
-    var favoriteSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
 
     LaunchedEffect(hasPermission) {
         if (hasPermission) songs = loadSongs(context)
@@ -154,9 +199,10 @@ fun MainScreen(player: ExoPlayer) {
                             playSong(song, songs)
                             isPlaying = true
                             showPlayer = true
-                            recentlyPlayed = (listOf(song) + recentlyPlayed)
-                                .distinctBy { it.id }
-                                .take(70)
+                            scope.launch {
+                                db.recentlyPlayedDao().insert(song.toRecentlyPlayedEntity())
+                                db.recentlyPlayedDao().trimToLimit()
+                            }
                         }
                     )
                     1 -> LibraryTab(
@@ -166,13 +212,28 @@ fun MainScreen(player: ExoPlayer) {
                         favoriteSongs = favoriteSongs,
                         playlists = playlists,
                         onPlaylistCreate = { name ->
-                            playlists = playlists + Playlist(name = name)
+                            scope.launch {
+                                val newPlaylist = PlaylistEntity(
+                                    id = System.currentTimeMillis(),
+                                    name = name
+                                )
+                                db.playlistDao().insertPlaylist(newPlaylist)
+                            }
                         },
                         onPlaylistAddSong = { playlist, song ->
-                            playlists = playlists.map {
-                                if (it.id == playlist.id)
-                                    it.copy(songs = it.songs + song)
-                                else it
+                            scope.launch {
+                                val position = playlist.songs.size
+                                db.playlistDao().insertSong(
+                                    PlaylistSongEntity(
+                                        playlistId = playlist.id,
+                                        songId = song.id,
+                                        title = song.title,
+                                        artist = song.artist,
+                                        uri = song.uri.toString(),
+                                        albumArtUri = song.albumArtUri?.toString(),
+                                        position = position
+                                    )
+                                )
                             }
                         },
                         onSongClick = { song ->
@@ -180,21 +241,29 @@ fun MainScreen(player: ExoPlayer) {
                             playSong(song, songs)
                             isPlaying = true
                             showPlayer = true
-                            recentlyPlayed = (listOf(song) + recentlyPlayed)
-                                .distinctBy { it.id }.take(70)
+                            scope.launch {
+                                db.recentlyPlayedDao().insert(song.toRecentlyPlayedEntity())
+                                db.recentlyPlayedDao().trimToLimit()
+                            }
                         },
                         onPlayPlaylist = { song, playlist ->
                             currentSong = song
                             playSong(song, playlist)
                             isPlaying = true
                             showPlayer = true
-                            recentlyPlayed = (listOf(song) + recentlyPlayed)
-                                .distinctBy { it.id }.take(70)
+                            scope.launch {
+                                db.recentlyPlayedDao().insert(song.toRecentlyPlayedEntity())
+                                db.recentlyPlayedDao().trimToLimit()
+                            }
                         },
                         onToggleFavorite = { song ->
-                            favoriteSongs = if (favoriteSongs.any { it.id == song.id })
-                                favoriteSongs.filter { it.id != song.id }
-                            else favoriteSongs + song
+                            scope.launch {
+                                if (favoriteSongs.any { it.id == song.id }) {
+                                    db.favoriteDao().delete(song.id)
+                                } else {
+                                    db.favoriteDao().insert(song.toFavoriteEntity())
+                                }
+                            }
                         }
                     )
                     2 -> SearchTab(
@@ -204,9 +273,10 @@ fun MainScreen(player: ExoPlayer) {
                             playSong(song, songs)
                             isPlaying = true
                             showPlayer = true
-                            recentlyPlayed = (listOf(song) + recentlyPlayed)
-                                .distinctBy { it.id }
-                                .take(70)
+                            scope.launch {
+                                db.recentlyPlayedDao().insert(song.toRecentlyPlayedEntity())
+                                db.recentlyPlayedDao().trimToLimit()
+                            }
                         }
                     )
                     3 -> ProfileTab(
@@ -241,9 +311,13 @@ fun MainScreen(player: ExoPlayer) {
                 onClose = { showRecentlyPlayed = false },
                 onSongClick = { song ->
                     currentSong = song
-                    playSong(song, recentlyPlayed)
+                    playSong(song, recentlyPlayed)  // ← correction
                     isPlaying = true
                     showPlayer = true
+                    scope.launch {
+                        db.recentlyPlayedDao().insert(song.toRecentlyPlayedEntity())
+                        db.recentlyPlayedDao().trimToLimit()
+                    }
                 }
             )
         }
@@ -260,9 +334,13 @@ fun MainScreen(player: ExoPlayer) {
                 onClose = { showPlayer = false },
                 onToggleFavorite = {
                     val song = currentSong!!
-                    favoriteSongs = if (favoriteSongs.any { it.id == song.id })
-                        favoriteSongs.filter { it.id != song.id }
-                    else favoriteSongs + song
+                    scope.launch {
+                        if (favoriteSongs.any { it.id == song.id }) {
+                            db.favoriteDao().delete(song.id)
+                        } else {
+                            db.favoriteDao().insert(song.toFavoriteEntity())
+                        }
+                    }
                 },
                 player = player
             )
