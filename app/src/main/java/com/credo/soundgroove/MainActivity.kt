@@ -51,6 +51,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.Sort
 
 data class Song(
     val id: Long,
@@ -1858,76 +1859,141 @@ fun LibraryTab(
             Spacer(modifier = Modifier.height(12.dp))
 
             when (selectedTab) {
-                0 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(songs) { song ->
-                        val isFav = favoriteSongs.any { it.id == song.id }
-                        GlassCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onPlayPlaylist(song, songs) },
-                            cornerRadius = 14.dp
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        if (isFav) Brush.linearGradient(listOf(Color(0xFFFF6B9D).copy(0.1f), Color.Transparent))
-                                        else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
-                                    )
-                                    .padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(DarkPurple),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (song.albumArtUri != null) {
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(LocalContext.current)
-                                            .data(song.albumArtUri)
-                                            .crossfade(true)
-                                            .build(),
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                } else {
-                                    Text(text = "🎵", fontSize = 18.sp)
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = song.title,
-                                    color = TextPrimary,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = song.artist,
-                                    color = TextSecondary,
-                                    fontSize = 12.sp,
-                                    maxLines = 1
-                                )
-                            }
-                                Icon(
-                                    imageVector = if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                    contentDescription = "Favori",
-                                    tint = if (isFav) Color(0xFFFF6B9D) else TextSecondary,
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .clickable { onToggleFavorite(song) }
-                                )
+                0 -> {
+                    // État du tri
+                    var sortMode by remember { mutableStateOf(0) }
+                    val sortLabels = listOf("A-Z", "Z-A", "Artiste", "Récent")
+
+                    // Chansons triées selon le mode choisi
+                    val sortedSongs = remember(sortMode, songs) {
+                        when (sortMode) {
+                            0 -> songs.sortedBy { it.title.lowercase() }
+                            1 -> songs.sortedByDescending { it.title.lowercase() }
+                            2 -> songs.sortedBy { it.artist.lowercase() }
+                            3 -> songs.reversed() // MediaStore renvoie déjà par date d'ajout
+                            else -> songs
                         }
                     }
 
+                    // Barre de tri
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Sort,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        sortLabels.forEachIndexed { index, label ->
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        if (sortMode == index) LightPurple else GlassSurface,
+                                        RoundedCornerShape(20.dp)
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (sortMode == index) LightPurple else GlassBorder,
+                                        RoundedCornerShape(20.dp)
+                                    )
+                                    .clickable { sortMode = index }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = if (sortMode == index) Color.White else TextSecondary,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (sortMode == index) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
                     }
-                    item { Spacer(modifier = Modifier.height(16.dp)) }
+
+                    // Liste triée
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(sortedSongs, key = { it.id }) { song ->
+                            val isFav = favoriteSongs.any { it.id == song.id }
+                            GlassCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onPlayPlaylist(song, sortedSongs) },
+                                cornerRadius = 14.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            if (isFav) Brush.linearGradient(
+                                                listOf(Color(0xFFFF6B9D).copy(0.1f), Color.Transparent)
+                                            )
+                                            else Brush.linearGradient(
+                                                listOf(Color.Transparent, Color.Transparent)
+                                            )
+                                        )
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(46.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(DarkPurple),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (song.albumArtUri != null) {
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(LocalContext.current)
+                                                    .data(song.albumArtUri)
+                                                    .crossfade(true)
+                                                    .build(),
+                                                contentDescription = null,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Filled.MusicNote,
+                                                contentDescription = null,
+                                                tint = TextSecondary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = song.title,
+                                            color = TextPrimary,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = song.artist,
+                                            color = TextSecondary,
+                                            fontSize = 12.sp,
+                                            maxLines = 1
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                        contentDescription = "Favori",
+                                        tint = if (isFav) Color(0xFFFF6B9D) else TextSecondary,
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .clickable { onToggleFavorite(song) }
+                                    )
+                                }
+                            }
+                        }
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                    }
                 }
 
                 1 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
