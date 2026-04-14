@@ -45,6 +45,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import android.content.ComponentName
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
 
 data class Song(
     val id: Long,
@@ -60,27 +65,41 @@ data class Playlist(
 )
 
 class MainActivity : ComponentActivity() {
-    private lateinit var player: ExoPlayer
+    private lateinit var controllerFuture: ListenableFuture<MediaController>
+    private var mediaController: MediaController? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        player = ExoPlayer.Builder(this).build()
-        enableEdgeToEdge()
-        setContent {
-            SoundGrooveTheme {
-                MainScreen(player)
+
+        // On se connecte au service au lieu de créer un player local
+        val sessionToken = SessionToken(
+            this,
+            ComponentName(this, PlaybackService::class.java)
+        )
+        controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
+
+        controllerFuture.addListener({
+            mediaController = controllerFuture.get()
+            // Le controller est prêt — on lance l'UI
+            enableEdgeToEdge()
+            setContent {
+                SoundGrooveTheme {
+                    mediaController?.let { controller ->
+                        MainScreen(controller)
+                    }
+                }
             }
-        }
+        }, MoreExecutors.directExecutor())
     }
 
     override fun onDestroy() {
+        MediaController.releaseFuture(controllerFuture)
         super.onDestroy()
-        player.release()
     }
 }
 
 @Composable
-fun MainScreen(player: ExoPlayer) {
+fun MainScreen(player: MediaController) {
     var selectedTab by remember { mutableStateOf(0) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1166,7 +1185,7 @@ fun PlayerScreen(
     onPlayPause: () -> Unit,
     onClose: () -> Unit,
     onToggleFavorite: () -> Unit,
-    player: ExoPlayer
+    player: androidx.media3.common.Player
 ) {
     var progress by remember { mutableStateOf(0f) }
     var isShuffled by remember { mutableStateOf(false) }
@@ -1455,9 +1474,9 @@ fun PlayerScreen(
                             .clickable {
                                 repeatMode = (repeatMode + 1) % 3
                                 player.repeatMode = when (repeatMode) {
-                                    1 -> ExoPlayer.REPEAT_MODE_ALL
-                                    2 -> ExoPlayer.REPEAT_MODE_ONE
-                                    else -> ExoPlayer.REPEAT_MODE_OFF
+                                    1 -> androidx.media3.common.Player.REPEAT_MODE_ALL
+                                    2 -> androidx.media3.common.Player.REPEAT_MODE_ONE
+                                    else -> androidx.media3.common.Player.REPEAT_MODE_OFF
                                 }
                             },
                         contentAlignment = Alignment.Center
