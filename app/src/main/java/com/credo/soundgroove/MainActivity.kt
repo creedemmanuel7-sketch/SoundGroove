@@ -1,6 +1,7 @@
 package com.credo.soundgroove
 
 import android.Manifest
+import android.content.ComponentName
 import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -12,12 +13,19 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,25 +41,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.ui.theme.*
-import androidx.compose.foundation.border
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.material3.Icon
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.first
-import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
-import android.content.ComponentName
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material.icons.filled.Sort
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 data class Song(
     val id: Long,
@@ -60,6 +58,7 @@ data class Song(
     val uri: Uri,
     val albumArtUri: Uri?
 )
+
 data class Playlist(
     val id: Long = System.currentTimeMillis(),
     val name: String,
@@ -146,8 +145,8 @@ fun MainScreen(player: MediaController) {
                             id = s.songId,
                             title = s.title,
                             artist = s.artist,
-                            uri = android.net.Uri.parse(s.uri),
-                            albumArtUri = s.albumArtUri?.let { android.net.Uri.parse(it) }
+                            uri = Uri.parse(s.uri),
+                            albumArtUri = s.albumArtUri?.let { Uri.parse(it) }
                         )
                     }
                 )
@@ -226,6 +225,7 @@ fun MainScreen(player: MediaController) {
                             }
                         }
                     )
+
                     1 -> LibraryTab(
                         songs = songs,
                         currentSong = currentSong,
@@ -299,6 +299,7 @@ fun MainScreen(player: MediaController) {
                         }
 
                     )
+
                     2 -> SearchTab(
                         songs = songs,
                         onSongClick = { song ->
@@ -312,6 +313,7 @@ fun MainScreen(player: MediaController) {
                             }
                         }
                     )
+
                     3 -> ProfileTab(
                         songs = songs,
                         recentlyPlayed = recentlyPlayed,
@@ -383,7 +385,11 @@ fun MainScreen(player: MediaController) {
 
 @Composable
 fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
-    data class NavItem(val label: String, val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector, val unselectedIcon: androidx.compose.ui.graphics.vector.ImageVector)
+    data class NavItem(
+        val label: String,
+        val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
+        val unselectedIcon: androidx.compose.ui.graphics.vector.ImageVector
+    )
 
     val tabs = listOf(
         NavItem("Accueil", Icons.Filled.Home, Icons.Outlined.Home),
@@ -439,6 +445,7 @@ fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
         }
     }
 }
+
 @Composable
 fun HomeTab(
     songs: List<Song>,
@@ -548,200 +555,193 @@ fun HomeTab(
                     letterSpacing = 2.sp
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Box(
+                GlassCard(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(140.dp)
-                        .background(
-                            Brush.horizontalGradient(listOf(DarkPurple, MediumPurple)),
-                            RoundedCornerShape(20.dp)
-                        )
-                        .clip(RoundedCornerShape(20.dp))
-                        .padding(16.dp)
+                        .clickable { },
+                    cornerRadius = 20.dp
                 ) {
-                    GlassCard(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(140.dp)
-                            .clickable { },
-                        cornerRadius = 20.dp
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(MediumPurple.copy(0.4f), DarkPurple.copy(0.2f))
+                                )
+                            )
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(MediumPurple.copy(0.4f), DarkPurple.copy(0.2f))
-                                    )
-                                )
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = currentSong.artist,
-                                    color = PurpleAccent,
-                                    fontSize = 13.sp
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = currentSong.title,
-                                    color = TextPrimary,
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .background(LightPurple.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
-                                        .border(1.dp, LightPurple.copy(0.4f), RoundedCornerShape(20.dp))
-                                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = if (isPlaying) "▶ En lecture" else "⏸ En pause",
-                                        color = LightPurple,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = currentSong.artist,
+                                color = PurpleAccent,
+                                fontSize = 13.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = currentSong.title,
+                                color = TextPrimary,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
                             Box(
                                 modifier = Modifier
-                                    .size(100.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
-                                    .background(CardSurface),
-                                contentAlignment = Alignment.Center
+                                    .background(LightPurple.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
+                                    .border(1.dp, LightPurple.copy(0.4f), RoundedCornerShape(20.dp))
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
                             ) {
-                                if (currentSong.albumArtUri != null) {
+                                Text(
+                                    text = if (isPlaying) "▶ En lecture" else "⏸ En pause",
+                                    color = LightPurple,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(100.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
+                                .background(CardSurface),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (currentSong.albumArtUri != null) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(currentSong.albumArtUri)
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.MusicNote,
+                                    contentDescription = null,
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+
+    if (recentlyPlayed.isNotEmpty() && searchQuery.isEmpty()) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "RÉCEMMENT ÉCOUTÉS",
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
+                Text(
+                    text = "Voir tout",
+                    color = LightPurple,
+                    fontSize = 12.sp,
+                    modifier = Modifier.clickable { onSeeAllRecent() }
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Grille 2x2 — seulement 4 chansons
+            val rows = recentlyPlayed.take(4).chunked(2)
+            rows.forEach { rowSongs ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    rowSongs.forEach { song ->
+                        GlassCard(
+                            modifier = Modifier
+                                .weight(1f)
+                                .aspectRatio(1f)
+                                .clickable { onSongClick(song) },
+                            cornerRadius = 16.dp
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.BottomStart
+                            ) {
+                                if (song.albumArtUri != null) {
                                     AsyncImage(
                                         model = ImageRequest.Builder(LocalContext.current)
-                                            .data(currentSong.albumArtUri)
+                                            .data(song.albumArtUri)
                                             .crossfade(true)
                                             .build(),
                                         contentDescription = null,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.fillMaxSize()
                                     )
-                                } else {
-                                    Text(text = "🎵", fontSize = 40.sp)
                                 }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (recentlyPlayed.isNotEmpty() && searchQuery.isEmpty()) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "RÉCEMMENT ÉCOUTÉS",
-                        color = TextSecondary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
-                    )
-                    Text(
-                        text = "Voir tout",
-                        color = LightPurple,
-                        fontSize = 12.sp,
-                        modifier = Modifier.clickable { onSeeAllRecent() }
-                    )
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Grille 2x2 — seulement 4 chansons
-                val rows = recentlyPlayed.take(4).chunked(2)
-                rows.forEach { rowSongs ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        rowSongs.forEach { song ->
-                            GlassCard(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .aspectRatio(1f)
-                                    .clickable { onSongClick(song) },
-                                cornerRadius = 16.dp
-                            ) {
                                 Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.BottomStart
-                                ) {
-                                    if (song.albumArtUri != null) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(LocalContext.current)
-                                                .data(song.albumArtUri)
-                                                .crossfade(true)
-                                                .build(),
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(
-                                                Brush.verticalGradient(
-                                                    listOf(Color.Transparent, Color.Black.copy(0.7f))
-                                                )
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                listOf(Color.Transparent, Color.Black.copy(0.7f))
                                             )
-                                    )
-                                    Text(
-                                        text = song.title,
-                                        color = TextPrimary,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(8.dp)
-                                    )
-                                }
+                                        )
+                                )
+                                Text(
+                                    text = song.title,
+                                    color = TextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(8.dp)
+                                )
                             }
                         }
-                        if (rowSongs.size == 1) {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
+                    if (rowSongs.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
                 }
+                Spacer(modifier = Modifier.height(10.dp))
             }
         }
-
-        item {
-            Text(
-                text = if (searchQuery.isEmpty())
-                    "TOUTES LES CHANSONS  •  ${songs.size}"
-                else
-                    "${filteredSongs.size} RÉSULTAT(S) POUR \"${searchQuery.uppercase()}\"",
-                color = TextSecondary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp
-            )
-        }
-
-        items(filteredSongs) { song ->
-            SongItem(
-                song = song,
-                isPlaying = currentSong?.id == song.id && isPlaying,
-                onClick = { onSongClick(song) }
-            )
-        }
-
-        item { Spacer(modifier = Modifier.height(16.dp)) }
     }
+
+    item {
+        Text(
+            text = if (searchQuery.isEmpty())
+                "TOUTES LES CHANSONS  •  ${songs.size}"
+            else
+                "${filteredSongs.size} RÉSULTAT(S) POUR \"${searchQuery.uppercase()}\"",
+            color = TextSecondary,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 2.sp
+        )
+    }
+
+    items(filteredSongs) { song ->
+        SongItem(
+            song = song,
+            isPlaying = currentSong?.id == song.id && isPlaying,
+            onClick = { onSongClick(song) }
+        )
+    }
+
+    item { Spacer(modifier = Modifier.height(16.dp)) }
+}
 }
 
 @Composable
@@ -835,6 +835,7 @@ fun MiniPlayer(
         }
     }
 }
+
 @Composable
 fun SongItem(song: Song, isPlaying: Boolean, onClick: () -> Unit) {
     GlassCard(
@@ -848,7 +849,12 @@ fun SongItem(song: Song, isPlaying: Boolean, onClick: () -> Unit) {
                 .fillMaxWidth()
                 .background(
                     if (isPlaying)
-                        Brush.linearGradient(listOf(LightPurple.copy(0.15f), MediumPurple.copy(0.1f)))
+                        Brush.linearGradient(
+                            listOf(
+                                LightPurple.copy(0.15f),
+                                MediumPurple.copy(0.1f)
+                            )
+                        )
                     else
                         Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
                 )
@@ -942,11 +948,17 @@ fun RecentlyPlayedScreen(
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(CardSurface, CircleShape)
-                        .clickable { onClose() },
+                        .background(GlassSurface, CircleShape)
+                        .border(1.dp, GlassBorder, CircleShape)
+                        .clickable { onClose() },  // ← garde le même lambda qu'avant
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "←", color = TextPrimary, fontSize = 20.sp)
+                    Icon(
+                        imageVector = Icons.Filled.ArrowBack,
+                        contentDescription = "Retour",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
@@ -1017,7 +1029,9 @@ fun SearchTab(
         else when (selectedFilter) {
             0 -> songs.filter { it.title.contains(searchQuery, ignoreCase = true) }
             1 -> songs.filter { it.artist.contains(searchQuery, ignoreCase = true) }
-            2 -> songs.filter { it.artist.contains(searchQuery, ignoreCase = true) }.distinctBy { it.artist }
+            2 -> songs.filter { it.artist.contains(searchQuery, ignoreCase = true) }
+                .distinctBy { it.artist }
+
             else -> emptyList()
         }
     }
@@ -1096,7 +1110,12 @@ fun SearchTab(
                                 if (selectedFilter == index)
                                     Brush.linearGradient(listOf(LightPurple, MediumPurple))
                                 else
-                                    Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+                                    Brush.linearGradient(
+                                        listOf(
+                                            Color.Transparent,
+                                            Color.Transparent
+                                        )
+                                    )
                             )
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {
@@ -1483,7 +1502,10 @@ fun PlayerScreen(
                     Box(
                         modifier = Modifier
                             .size(44.dp)
-                            .background(if (repeatMode > 0) LightPurple else GlassSurface, CircleShape)
+                            .background(
+                                if (repeatMode > 0) LightPurple else GlassSurface,
+                                CircleShape
+                            )
                             .border(1.dp, GlassBorder, CircleShape)
                             .clickable {
                                 repeatMode = (repeatMode + 1) % 3
@@ -1544,6 +1566,7 @@ fun loadSongs(context: android.content.Context): List<Song> {
     }
     return songs
 }
+
 @Composable
 fun ProfileTab(
     songs: List<Song>,
@@ -1603,7 +1626,12 @@ fun ProfileTab(
                     }
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
-                        Text(text = userName, color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = userName,
+                            color = TextPrimary,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                         Text(text = "Appuie pour modifier", color = TextSecondary, fontSize = 13.sp)
                     }
                 }
@@ -1617,23 +1645,56 @@ fun ProfileTab(
             ) {
                 GlassCard(modifier = Modifier.weight(1f), cornerRadius = 16.dp) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(text = "🎵", fontSize = 24.sp)
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(LightPurple.copy(alpha = 0.2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.LibraryMusic,
+                                contentDescription = null,
+                                tint = LightPurple,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = "${songs.size}", color = LightPurple, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "${songs.size}",
+                            color = LightPurple,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                         Text(text = "Titres", color = TextSecondary, fontSize = 12.sp)
                     }
                 }
                 GlassCard(modifier = Modifier.weight(1f), cornerRadius = 16.dp) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(text = "♡", fontSize = 24.sp)
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(Color(0xFFFF6B9D).copy(alpha = 0.2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Favorite,
+                                contentDescription = null,
+                                tint = Color(0xFFFF6B9D),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = "${favoriteSongs.size}", color = Color(0xFFFF6B9D), fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "${favoriteSongs.size}",
+                            color = Color(0xFFFF6B9D),
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                         Text(text = "Favoris", color = TextSecondary, fontSize = 12.sp)
                     }
                 }
             }
         }
-
         if (topArtists.isNotEmpty()) {
             item {
                 Text(
@@ -1790,7 +1851,7 @@ fun LibraryTab(
     onToggleFavorite: (Song) -> Unit,
     onPlaylistDelete: (Playlist) -> Unit,      // ← nouveau
     onPlaylistRename: (Playlist, String) -> Unit  // ← nouveau
-){
+) {
     var selectedTab by remember { mutableStateOf(0) }
     var selectedAlbum by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     var selectedArtist by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
@@ -1929,7 +1990,10 @@ fun LibraryTab(
                                         .fillMaxWidth()
                                         .background(
                                             if (isFav) Brush.linearGradient(
-                                                listOf(Color(0xFFFF6B9D).copy(0.1f), Color.Transparent)
+                                                listOf(
+                                                    Color(0xFFFF6B9D).copy(0.1f),
+                                                    Color.Transparent
+                                                )
                                             )
                                             else Brush.linearGradient(
                                                 listOf(Color.Transparent, Color.Transparent)
@@ -2015,7 +2079,8 @@ fun LibraryTab(
                                         modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.BottomStart
                                     ) {
-                                        val coverSong = albumSongs.firstOrNull { it.albumArtUri != null }
+                                        val coverSong =
+                                            albumSongs.firstOrNull { it.albumArtUri != null }
                                         if (coverSong?.albumArtUri != null) {
                                             AsyncImage(
                                                 model = ImageRequest.Builder(LocalContext.current)
@@ -2032,7 +2097,10 @@ fun LibraryTab(
                                                 .fillMaxSize()
                                                 .background(
                                                     Brush.verticalGradient(
-                                                        listOf(Color.Transparent, Color.Black.copy(0.8f))
+                                                        listOf(
+                                                            Color.Transparent,
+                                                            Color.Black.copy(0.8f)
+                                                        )
                                                     )
                                                 )
                                         )
@@ -2187,8 +2255,16 @@ fun LibraryTab(
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(text = "🎶", fontSize = 48.sp)
                                         Spacer(modifier = Modifier.height(12.dp))
-                                        Text(text = "Aucune playlist", color = TextSecondary, fontSize = 16.sp)
-                                        Text(text = "Appuie sur + pour créer", color = TextSecondary, fontSize = 13.sp)
+                                        Text(
+                                            text = "Aucune playlist",
+                                            color = TextSecondary,
+                                            fontSize = 16.sp
+                                        )
+                                        Text(
+                                            text = "Appuie sur + pour créer",
+                                            color = TextSecondary,
+                                            fontSize = 13.sp
+                                        )
                                     }
                                 }
                             } else {
@@ -2200,7 +2276,10 @@ fun LibraryTab(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .background(CardSurface.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                                .background(
+                                                    CardSurface.copy(alpha = 0.5f),
+                                                    RoundedCornerShape(14.dp)
+                                                )
                                                 .clickable { selectedPlaylist = playlist }
                                                 .padding(12.dp),
                                             verticalAlignment = Alignment.CenterVertically
@@ -2210,7 +2289,14 @@ fun LibraryTab(
                                                 modifier = Modifier
                                                     .size(52.dp)
                                                     .clip(RoundedCornerShape(10.dp))
-                                                    .background(Brush.radialGradient(listOf(LightPurple, MediumPurple))),
+                                                    .background(
+                                                        Brush.radialGradient(
+                                                            listOf(
+                                                                LightPurple,
+                                                                MediumPurple
+                                                            )
+                                                        )
+                                                    ),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 if (playlist.songs.isNotEmpty() && playlist.songs.first().albumArtUri != null) {
@@ -2276,7 +2362,10 @@ fun LibraryTab(
                                                                     modifier = Modifier.size(18.dp)
                                                                 )
                                                                 Spacer(modifier = Modifier.width(8.dp))
-                                                                Text("Renommer", color = TextPrimary)
+                                                                Text(
+                                                                    "Renommer",
+                                                                    color = TextPrimary
+                                                                )
                                                             }
                                                         },
                                                         onClick = {
@@ -2294,7 +2383,10 @@ fun LibraryTab(
                                                                     modifier = Modifier.size(18.dp)
                                                                 )
                                                                 Spacer(modifier = Modifier.width(8.dp))
-                                                                Text("Supprimer", color = Color(0xFFFF6B6B))
+                                                                Text(
+                                                                    "Supprimer",
+                                                                    color = Color(0xFFFF6B6B)
+                                                                )
                                                             }
                                                         },
                                                         onClick = {
@@ -2319,7 +2411,10 @@ fun LibraryTab(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .padding(32.dp)
-                                                        .background(CardSurface, RoundedCornerShape(20.dp))
+                                                        .background(
+                                                            CardSurface,
+                                                            RoundedCornerShape(20.dp)
+                                                        )
                                                         .padding(24.dp)
                                                 ) {
                                                     Text(
@@ -2332,7 +2427,12 @@ fun LibraryTab(
                                                     androidx.compose.material3.TextField(
                                                         value = newName,
                                                         onValueChange = { newName = it },
-                                                        label = { Text("Nouveau nom", color = TextSecondary) },
+                                                        label = {
+                                                            Text(
+                                                                "Nouveau nom",
+                                                                color = TextSecondary
+                                                            )
+                                                        },
                                                         colors = androidx.compose.material3.TextFieldDefaults.colors(
                                                             focusedContainerColor = DarkPurple,
                                                             unfocusedContainerColor = DarkPurple,
@@ -2354,8 +2454,13 @@ fun LibraryTab(
                                                             text = "Annuler",
                                                             color = TextSecondary,
                                                             modifier = Modifier
-                                                                .clickable { showRenameDialog = false }
-                                                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                                                .clickable {
+                                                                    showRenameDialog = false
+                                                                }
+                                                                .padding(
+                                                                    horizontal = 16.dp,
+                                                                    vertical = 8.dp
+                                                                )
                                                         )
                                                         Spacer(modifier = Modifier.width(8.dp))
                                                         Box(
@@ -2366,11 +2471,17 @@ fun LibraryTab(
                                                                 )
                                                                 .clickable {
                                                                     if (newName.isNotBlank()) {
-                                                                        onPlaylistRename(playlist, newName.trim())
+                                                                        onPlaylistRename(
+                                                                            playlist,
+                                                                            newName.trim()
+                                                                        )
                                                                         showRenameDialog = false
                                                                     }
                                                                 }
-                                                                .padding(horizontal = 20.dp, vertical = 8.dp)
+                                                                .padding(
+                                                                    horizontal = 20.dp,
+                                                                    vertical = 8.dp
+                                                                )
                                                         ) {
                                                             Text(
                                                                 text = "Enregistrer",
@@ -2414,7 +2525,12 @@ fun LibraryTab(
                                     androidx.compose.material3.TextField(
                                         value = playlistName,
                                         onValueChange = { playlistName = it },
-                                        label = { Text("Nom de la playlist", color = TextSecondary) },
+                                        label = {
+                                            Text(
+                                                "Nom de la playlist",
+                                                color = TextSecondary
+                                            )
+                                        },
                                         colors = androidx.compose.material3.TextFieldDefaults.colors(
                                             focusedContainerColor = DarkPurple,
                                             unfocusedContainerColor = DarkPurple,
@@ -2495,8 +2611,16 @@ fun LibraryTab(
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "♡", fontSize = 48.sp, color = TextSecondary)
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Text(text = "Aucun favori encore", color = TextSecondary, fontSize = 16.sp)
-                                Text(text = "Appuie sur ♡ pour ajouter", color = TextSecondary, fontSize = 13.sp)
+                                Text(
+                                    text = "Aucun favori encore",
+                                    color = TextSecondary,
+                                    fontSize = 16.sp
+                                )
+                                Text(
+                                    text = "Appuie sur ♡ pour ajouter",
+                                    color = TextSecondary,
+                                    fontSize = 13.sp
+                                )
                             }
                         }
                     } else {
@@ -2512,49 +2636,55 @@ fun LibraryTab(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .background(
-                                                Brush.linearGradient(listOf(Color(0xFFFF6B9D).copy(0.1f), Color.Transparent))
+                                                Brush.linearGradient(
+                                                    listOf(
+                                                        Color(0xFFFF6B9D).copy(
+                                                            0.1f
+                                                        ), Color.Transparent
+                                                    )
+                                                )
                                             )
                                             .padding(10.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(46.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(DarkPurple),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (song.albumArtUri != null) {
-                                            AsyncImage(
-                                                model = ImageRequest.Builder(LocalContext.current)
-                                                    .data(song.albumArtUri)
-                                                    .crossfade(true)
-                                                    .build(),
-                                                contentDescription = null,
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier.fillMaxSize()
-                                            )
-                                        } else {
-                                            Text(text = "🎵", fontSize = 18.sp)
+                                        Box(
+                                            modifier = Modifier
+                                                .size(46.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(DarkPurple),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (song.albumArtUri != null) {
+                                                AsyncImage(
+                                                    model = ImageRequest.Builder(LocalContext.current)
+                                                        .data(song.albumArtUri)
+                                                        .crossfade(true)
+                                                        .build(),
+                                                    contentDescription = null,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            } else {
+                                                Text(text = "🎵", fontSize = 18.sp)
+                                            }
                                         }
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = song.title,
-                                            color = TextPrimary,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = song.artist,
-                                            color = TextSecondary,
-                                            fontSize = 12.sp,
-                                            maxLines = 1
-                                        )
-                                    }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = song.title,
+                                                color = TextPrimary,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = song.artist,
+                                                color = TextSecondary,
+                                                fontSize = 12.sp,
+                                                maxLines = 1
+                                            )
+                                        }
                                         Icon(
                                             imageVector = Icons.Filled.Favorite,
                                             contentDescription = "Retirer des favoris",
@@ -2563,8 +2693,8 @@ fun LibraryTab(
                                                 .size(22.dp)
                                                 .clickable { onToggleFavorite(song) }
                                         )
-                                }
                                     }
+                                }
                             }
                             item { Spacer(modifier = Modifier.height(16.dp)) }
                         }
@@ -2634,11 +2764,17 @@ fun PlaylistScreen(
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(CardSurface, CircleShape)
-                        .clickable { onClose() },
+                        .background(GlassSurface, CircleShape)
+                        .border(1.dp, GlassBorder, CircleShape)
+                        .clickable { onClose() },  // ← garde le même lambda qu'avant
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "←", color = TextPrimary, fontSize = 20.sp)
+                    Icon(
+                        imageVector = Icons.Filled.ArrowBack,
+                        contentDescription = "Retour",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
@@ -2693,7 +2829,9 @@ fun PlaylistScreen(
             }
         }
     }
-}@Composable
+}
+
+@Composable
 fun PlaylistDetailScreen(
     playlist: Playlist,
     allSongs: List<Song>,
@@ -2730,11 +2868,17 @@ fun PlaylistDetailScreen(
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(CardSurface, CircleShape)
-                        .clickable { onClose() },
+                        .background(GlassSurface, CircleShape)
+                        .border(1.dp, GlassBorder, CircleShape)
+                        .clickable { onClose() },  // ← garde le même lambda qu'avant
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "←", color = TextPrimary, fontSize = 20.sp)
+                    Icon(
+                        imageVector = Icons.Filled.ArrowBack,
+                        contentDescription = "Retour",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -2758,7 +2902,12 @@ fun PlaylistDetailScreen(
                         .clickable { showAddSongs = true }
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    Text(text = "+ Ajouter", color = LightPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "+ Ajouter",
+                        color = LightPurple,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
@@ -2776,7 +2925,12 @@ fun PlaylistDetailScreen(
                 ) {
                     Text(text = "▶", color = Color.White, fontSize = 16.sp)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Tout jouer", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "Tout jouer",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
                 Spacer(modifier = Modifier.height(12.dp))
             }
@@ -2840,11 +2994,17 @@ fun PlaylistDetailScreen(
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
-                                .background(CardSurface, CircleShape)
-                                .clickable { showAddSongs = false },
+                                .background(GlassSurface, CircleShape)
+                                .border(1.dp, GlassBorder, CircleShape)
+                                .clickable { onClose() },  // ← garde le même lambda qu'avant
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(text = "←", color = TextPrimary, fontSize = 20.sp)
+                            Icon(
+                                imageVector = Icons.Filled.ArrowBack,
+                                contentDescription = "Retour",
+                                tint = TextPrimary,
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(
@@ -2869,7 +3029,13 @@ fun PlaylistDetailScreen(
                         androidx.compose.material3.TextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
-                            placeholder = { Text("Rechercher...", color = TextSecondary, fontSize = 14.sp) },
+                            placeholder = {
+                                Text(
+                                    "Rechercher...",
+                                    color = TextSecondary,
+                                    fontSize = 14.sp
+                                )
+                            },
                             colors = androidx.compose.material3.TextFieldDefaults.colors(
                                 focusedContainerColor = Color.Transparent,
                                 unfocusedContainerColor = Color.Transparent,
@@ -2892,7 +3058,10 @@ fun PlaylistDetailScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(CardSurface.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                    .background(
+                                        CardSurface.copy(alpha = 0.5f),
+                                        RoundedCornerShape(14.dp)
+                                    )
                                     .clickable {
                                         if (!alreadyAdded) onAddSong(song)
                                     }
