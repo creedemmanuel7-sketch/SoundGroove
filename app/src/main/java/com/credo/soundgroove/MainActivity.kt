@@ -52,6 +52,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 
 data class Song(
     val id: Long,
@@ -1264,6 +1266,11 @@ fun PlayerScreen(
     var repeatMode by remember { mutableStateOf(0) }
     var duration by remember { mutableStateOf(0L) }
     var currentPosition by remember { mutableStateOf(0L) }
+    var dragOffsetX by remember { mutableStateOf(0f) }
+    var showOptionsMenu by remember { mutableStateOf(false) }
+    val swipeThreshold = 100.dp
+    val density = androidx.compose.ui.platform.LocalDensity.current
+
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -1335,7 +1342,8 @@ fun PlayerScreen(
                     modifier = Modifier
                         .size(40.dp)
                         .background(GlassSurface, CircleShape)
-                        .border(1.dp, GlassBorder, CircleShape),
+                        .border(1.dp, GlassBorder, CircleShape)
+                        .clickable { showOptionsMenu = true },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -1344,6 +1352,42 @@ fun PlayerScreen(
                         tint = TextPrimary,
                         modifier = Modifier.size(24.dp)
                     )
+                    DropdownMenu(
+                        expanded = showOptionsMenu,
+                        onDismissRequest = { showOptionsMenu = false },
+                        modifier = Modifier.background(CardSurface)
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Queue, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("File d'attente", color = TextPrimary)
+                                }
+                            },
+                            onClick = { showOptionsMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Info, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Infos de la chanson", color = TextPrimary)
+                                }
+                            },
+                            onClick = { showOptionsMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Share, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Partager", color = TextPrimary)
+                                }
+                            },
+                            onClick = { showOptionsMenu = false }
+                        )
+                    }
                 }
             }
 
@@ -1354,7 +1398,23 @@ fun PlayerScreen(
                 modifier = Modifier
                     .size(300.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(DarkPurple),
+                    .background(DarkPurple)
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                val thresholdPx = with(density) { swipeThreshold.toPx() }
+                                when {
+                                    dragOffsetX < -thresholdPx -> player.seekToNextMediaItem()
+                                    dragOffsetX > thresholdPx -> player.seekToPreviousMediaItem()
+                                }
+                                dragOffsetX = 0f
+                            },
+                            onDragCancel = { dragOffsetX = 0f },
+                            onHorizontalDrag = { _, dragAmount ->
+                                dragOffsetX += dragAmount
+                            }
+                        )
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 if (song.albumArtUri != null) {
@@ -1368,7 +1428,12 @@ fun PlayerScreen(
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    Text(text = "🎵", fontSize = 80.sp)
+                    Icon(
+                        imageVector = Icons.Filled.MusicNote,
+                        contentDescription = null,
+                        tint = TextSecondary,
+                        modifier = Modifier.size(80.dp)
+                    )
                 }
             }
 
@@ -1433,7 +1498,9 @@ fun PlayerScreen(
                     player.seekTo((seekPosition * duration).toLong())
                     isSeeking = false
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(24.dp),   // ← ajoute cette ligne
                 colors = androidx.compose.material3.SliderDefaults.colors(
                     thumbColor = LightPurple,
                     activeTrackColor = LightPurple,
