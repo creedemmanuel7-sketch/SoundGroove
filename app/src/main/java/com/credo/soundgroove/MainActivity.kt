@@ -54,6 +54,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectTapGestures
 
 data class Song(
     val id: Long,
@@ -334,23 +337,27 @@ fun MainScreen(player: MediaController) {
                     )
                 }
             }
+            if (!showPlayer && !showRecentlyPlayed) {
 
-            currentSong?.let { song ->
-                MiniPlayer(
-                    song = song,
-                    isPlaying = isPlaying,
-                    onPlayPause = {
-                        if (isPlaying) player.pause() else player.play()
-                        isPlaying = !isPlaying
-                    },
-                    onOpen = { showPlayer = true }
+                currentSong?.let { song ->
+                    MiniPlayer(
+                        song = song,
+                        isPlaying = isPlaying,
+                        onPlayPause = {
+                            if (isPlaying) player.pause() else player.play()
+                            isPlaying = !isPlaying
+                        },
+                        onOpen = { showPlayer = true },
+                        player = player  // ← nouveau paramètre
+                    )
+                }
+                }
+
+                BottomNavBar(
+                    selectedTab = selectedTab,
+                    onTabSelected = { selectedTab = it }
                 )
             }
-
-            BottomNavBar(
-                selectedTab = selectedTab,
-                onTabSelected = { selectedTab = it }
-            )
         }
 
         if (showRecentlyPlayed) {
@@ -394,7 +401,7 @@ fun MainScreen(player: MediaController) {
             )
         }
     }
-}
+
 
 @Composable
 fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
@@ -784,105 +791,193 @@ fun MiniPlayer(
     song: Song,
     isPlaying: Boolean,
     onPlayPause: () -> Unit,
-    onOpen: () -> Unit
+    onOpen: () -> Unit,
+    player: androidx.media3.common.Player
 ) {
+    var progress by remember { mutableStateOf(0f) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            val duration = player.duration.coerceAtLeast(1L)
+            progress = player.currentPosition.toFloat() / duration.toFloat()
+            kotlinx.coroutines.delay(500)
+        }
+    }
+
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         cornerRadius = 20.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
                     Brush.linearGradient(
-                        listOf(MediumPurple.copy(0.4f), DarkPurple.copy(0.6f))
+                        listOf(MediumPurple.copy(0.5f), DarkPurple.copy(0.8f))
                     )
                 )
-                .clickable { onOpen() }
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
         ) {
+            // Barre de progression fine tout en haut
             Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(CardSurface),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .background(CardSurface)
             ) {
-                if (song.albumArtUri != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(song.albumArtUri)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progress.coerceIn(0f, 1f))
+                        .fillMaxHeight()
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(LightPurple, CyanAccent)
+                            )
+                        )
+                )
+            }
+
+            // Contenu principal
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpen() }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Pochette
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(DarkPurple),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (song.albumArtUri != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(song.albumArtUri)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.MusicNote,
+                            contentDescription = null,
+                            tint = LightPurple,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // Titre + artiste
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = song.title,
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.MusicNote,
-                        contentDescription = null,
-                        tint = TextSecondary,
-                        modifier = Modifier.size(20.dp)
+                    Text(
+                        text = song.artist,
+                        color = LightPurple,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = song.title,
-                    color = TextPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = song.artist,
-                    color = PurpleAccent,
-                    fontSize = 11.sp,
-                    maxLines = 1
-                )
-            }
+                // Boutons de contrôle
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // Précédent
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) { player.seekToPreviousMediaItem() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.SkipPrevious,
+                            contentDescription = "Précédent",
+                            tint = TextPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
 
-            Spacer(modifier = Modifier.width(8.dp))
+                    // Play/Pause
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(LightPurple, CircleShape)
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) { onPlayPause() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Filled.Pause
+                            else Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
 
-            // Bouton play/pause — stopPropagation avec clickable séparé
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(LightPurple.copy(alpha = 0.2f), CircleShape)
-                    .clickable(
-                        onClick = onPlayPause,
-                        indication = null,
-                        interactionSource = remember {
-                            androidx.compose.foundation.interaction.MutableInteractionSource()
-                        }
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Lecture",
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
+                    // Suivant
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) { player.seekToNextMediaItem() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.SkipNext,
+                            contentDescription = "Suivant",
+                            tint = TextPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun SongItem(song: Song, isPlaying: Boolean, onClick: () -> Unit) {
+fun SongItem(
+    song: Song,
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null
+) {
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = { onLongClick?.invoke() }
+            ),
         cornerRadius = 14.dp
     ) {
         Row(
@@ -974,6 +1069,7 @@ fun RecentlyPlayedScreen(
                     )
                 )
             )
+            .pointerInput(Unit) { detectTapGestures { } } // ← absorbe TOUS les taps
     ) {
         Column(
             modifier = Modifier
@@ -1299,6 +1395,8 @@ fun PlayerScreen(
                     )
                 )
             )
+            .pointerInput(Unit) { detectTapGestures { } } // ← absorbe TOUS les taps
+
     ) {
         Column(
             modifier = Modifier
@@ -2855,6 +2953,7 @@ fun PlaylistScreen(
                     listOf(Color(0xFF2D1B4E), Color(0xFF1A0A2E), Color(0xFF0D0D1A))
                 )
             )
+            .pointerInput(Unit) { detectTapGestures { } } // ← absorbe TOUS les taps
     ) {
         Column(
             modifier = Modifier
@@ -2951,6 +3050,24 @@ fun PlaylistDetailScreen(
     var showAddSongs by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
+// State local pour feedback instantané sans attendre Room
+    var localAddedIds by remember {
+        mutableStateOf(playlist.songs.map { it.id }.toSet())
+    }
+
+// Fusion : chansons de Room + ajouts locaux pas encore sauvés
+    val displaySongs = remember(playlist.songs, localAddedIds) {
+        val roomIds = playlist.songs.map { it.id }.toSet()
+        val allIds = roomIds + localAddedIds
+        allSongs.filter { it.id in allIds }
+            .sortedBy { if (it.id in roomIds) 0 else 1 }
+    }
+    // En haut de PlaylistDetailScreen, avant le Box racine
+    BackHandler(enabled = showAddSongs) {
+        showAddSongs = false
+    }
+
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -2959,6 +3076,8 @@ fun PlaylistDetailScreen(
                     listOf(Color(0xFF2D1B4E), Color(0xFF1A0A2E), Color(0xFF0D0D1A))
                 )
             )
+            .pointerInput(Unit) { detectTapGestures { } } // ← absorbe TOUS les taps
+
     ) {
         Column(
             modifier = Modifier
@@ -3055,7 +3174,7 @@ fun PlaylistDetailScreen(
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(playlist.songs) { song ->
+                    items(displaySongs) { song ->
                         SongItem(
                             song = song,
                             isPlaying = currentSong?.id == song.id && isPlaying,
@@ -3069,6 +3188,8 @@ fun PlaylistDetailScreen(
 
         // Écran ajouter chansons
         if (showAddSongs) {
+
+
             val filteredSongs = remember(searchQuery, allSongs) {
                 if (searchQuery.isEmpty()) allSongs
                 else allSongs.filter {
@@ -3093,6 +3214,7 @@ fun PlaylistDetailScreen(
                 ) {
                     Spacer(modifier = Modifier.height(52.dp))
 
+                    // Header
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -3102,7 +3224,7 @@ fun PlaylistDetailScreen(
                                 .size(40.dp)
                                 .background(GlassSurface, CircleShape)
                                 .border(1.dp, GlassBorder, CircleShape)
-                                .clickable { onClose() },  // ← garde le même lambda qu'avant
+                                .clickable { showAddSongs = false },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -3113,110 +3235,163 @@ fun PlaylistDetailScreen(
                             )
                         }
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text(
-                            text = "Ajouter des chansons",
-                            color = TextPrimary,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Column {
+                            Text(
+                                text = "Ajouter des chansons",
+                                color = TextPrimary,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${localAddedIds.size - playlist.songs.size} ajoutée(s) cette session",
+                                color = LightPurple,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Barre de recherche
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        cornerRadius = 16.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Search,
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            androidx.compose.material3.TextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = {
+                                    Text("Rechercher...", color = TextSecondary, fontSize = 14.sp)
+                                },
+                                colors = androidx.compose.material3.TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    cursorColor = LightPurple
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(CardSurface, RoundedCornerShape(16.dp))
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = "🔍", fontSize = 16.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        androidx.compose.material3.TextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            placeholder = {
-                                Text(
-                                    "Rechercher...",
-                                    color = TextSecondary,
-                                    fontSize = 14.sp
-                                )
-                            },
-                            colors = androidx.compose.material3.TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedTextColor = TextPrimary,
-                                unfocusedTextColor = TextPrimary,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                cursorColor = LightPurple
-                            ),
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(filteredSongs) { song ->
-                            val alreadyAdded = playlist.songs.any { it.id == song.id }
-                            Row(
+                            val alreadyAdded = song.id in localAddedIds  // ← doit utiliser localAddedIds
+                            GlassCard(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(
-                                        CardSurface.copy(alpha = 0.5f),
-                                        RoundedCornerShape(14.dp)
-                                    )
                                     .clickable {
-                                        if (!alreadyAdded) onAddSong(song)
-                                    }
-                                    .padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                        if (!alreadyAdded) {
+                                            localAddedIds = localAddedIds + song.id  // ← met à jour l'état local
+                                            onAddSong(song)                           // ← sauvegarde Room
+                                        }
+                                    },
+                                cornerRadius = 14.dp
                             ) {
-                                Box(
+                                Row(
                                     modifier = Modifier
-                                        .size(46.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(DarkPurple),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (song.albumArtUri != null) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(LocalContext.current)
-                                                .data(song.albumArtUri)
-                                                .crossfade(true)
-                                                .build(),
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
+                                        .fillMaxWidth()
+                                        .background(
+                                            if (alreadyAdded)
+                                                Brush.linearGradient(
+                                                    listOf(LightPurple.copy(0.15f), Color.Transparent)
+                                                )
+                                            else
+                                                Brush.linearGradient(
+                                                    listOf(Color.Transparent, Color.Transparent)
+                                                )
                                         )
-                                    } else {
-                                        Text(text = "🎵", fontSize = 18.sp)
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Pochette
+                                    Box(
+                                        modifier = Modifier
+                                            .size(50.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(DarkPurple),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (song.albumArtUri != null) {
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(LocalContext.current)
+                                                    .data(song.albumArtUri)
+                                                    .crossfade(true)
+                                                    .build(),
+                                                contentDescription = null,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Filled.MusicNote,
+                                                contentDescription = null,
+                                                tint = TextSecondary,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(14.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = song.title,
+                                            color = if (alreadyAdded) LightPurple else TextPrimary,
+                                            fontSize = 14.sp,
+                                            fontWeight = if (alreadyAdded) FontWeight.Bold else FontWeight.Normal,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = song.artist,
+                                            color = TextSecondary,
+                                            fontSize = 12.sp,
+                                            maxLines = 1
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(12.dp))
+
+                                    // Indicateur ajout — feedback instantané
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .background(
+                                                if (alreadyAdded) LightPurple else GlassSurface,
+                                                CircleShape
+                                            )
+                                            .border(1.dp, GlassBorder, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = if (alreadyAdded) Icons.Filled.Check else Icons.Filled.Add,
+                                            contentDescription = null,
+                                            tint = if (alreadyAdded) Color.White else TextSecondary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                     }
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = song.title,
-                                        color = if (alreadyAdded) TextSecondary else TextPrimary,
-                                        fontSize = 14.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = song.artist,
-                                        color = TextSecondary,
-                                        fontSize = 12.sp,
-                                        maxLines = 1
-                                    )
-                                }
-                                Text(
-                                    text = if (alreadyAdded) "✓" else "+",
-                                    color = if (alreadyAdded) CyanAccent else LightPurple,
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
                             }
                         }
                         item { Spacer(modifier = Modifier.height(16.dp)) }
