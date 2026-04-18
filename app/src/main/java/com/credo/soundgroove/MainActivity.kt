@@ -50,6 +50,8 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.interaction.MutableInteractionSource
 
 data class Song(
     val id: Long,
@@ -190,6 +192,15 @@ fun MainScreen(player: MediaController) {
         player.setMediaItems(mediaItems, index, 0L)
         player.prepare()
         player.play()
+    }
+    // Retour Android depuis le PlayerScreen
+    BackHandler(enabled = showPlayer) {
+        showPlayer = false
+    }
+
+// Retour Android depuis le RecentlyPlayedScreen
+    BackHandler(enabled = showRecentlyPlayed) {
+        showRecentlyPlayed = false
     }
 
     Box(
@@ -558,7 +569,13 @@ fun HomeTab(
                 GlassCard(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { },
+                        .clickable(
+                            onClick = { },  // ← absorbe le tap sans rien faire
+                            indication = null,
+                            interactionSource = remember {
+                                androidx.compose.foundation.interaction.MutableInteractionSource()
+                            }
+                        ),
                     cornerRadius = 20.dp
                 ) {
                     Row(
@@ -770,8 +787,7 @@ fun MiniPlayer(
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .clickable { onOpen() },
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         cornerRadius = 20.dp
     ) {
         Row(
@@ -782,6 +798,7 @@ fun MiniPlayer(
                         listOf(MediumPurple.copy(0.4f), DarkPurple.copy(0.6f))
                     )
                 )
+                .clickable { onOpen() }
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -803,7 +820,12 @@ fun MiniPlayer(
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    Text(text = "🎵", fontSize = 20.sp)
+                    Icon(
+                        imageVector = Icons.Filled.MusicNote,
+                        contentDescription = null,
+                        tint = TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
 
@@ -826,12 +848,29 @@ fun MiniPlayer(
                 )
             }
 
-            Icon(
-                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(22.dp)
-            )
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Bouton play/pause — stopPropagation avec clickable séparé
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(LightPurple.copy(alpha = 0.2f), CircleShape)
+                    .clickable(
+                        onClick = onPlayPause,
+                        indication = null,
+                        interactionSource = remember {
+                            androidx.compose.foundation.interaction.MutableInteractionSource()
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = if (isPlaying) "Pause" else "Lecture",
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
         }
     }
 }
