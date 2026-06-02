@@ -18,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -57,6 +58,16 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.RemoveCircleOutline
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.unit.IntOffset
 
 data class Song(
     val id: Long,
@@ -125,6 +136,10 @@ fun MainScreen(player: MediaController) {
     var favoriteSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var recentlyPlayed by remember { mutableStateOf<List<Song>>(emptyList()) }
     var playlists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
+    // État des overlays globaux
+    var overlayedSong by remember { mutableStateOf<Song?>(null) }
+    var showSongInfo by remember { mutableStateOf(false) }
+    var showPlaylistPicker by remember { mutableStateOf(false) }
 
     // Charger depuis la DB au démarrage
     LaunchedEffect(Unit) {
@@ -198,15 +213,13 @@ fun MainScreen(player: MediaController) {
         player.prepare()
         player.play()
     }
-    // Retour Android depuis le PlayerScreen
-    BackHandler(enabled = showPlayer) {
-        showPlayer = false
-    }
-
-// Retour Android depuis le RecentlyPlayedScreen
-    BackHandler(enabled = showRecentlyPlayed) {
-        showRecentlyPlayed = false
-    }
+    BackHandler(enabled = selectedTab != 0) { selectedTab = 0 }
+    BackHandler(enabled = showSongInfo) { showSongInfo = false }
+    BackHandler(enabled = showPlaylistPicker) { showPlaylistPicker = false }
+    BackHandler(enabled = showRecentlyPlayed) { showRecentlyPlayed = false }
+    BackHandler(enabled = showPlayer) { showPlayer = false }
+    var showQueue by remember { mutableStateOf(false) }
+    BackHandler(enabled = showQueue) { showQueue = false }
 
     Box(
         modifier = Modifier
@@ -221,7 +234,43 @@ fun MainScreen(player: MediaController) {
                 )
             )
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        if (!hasPermission) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Filled.AudioFile,
+                        contentDescription = null,
+                        tint = LightPurple,
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "SoundGroove a besoin d'accéder à votre musique pour la lire.",
+                        color = TextPrimary,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(LightPurple, RoundedCornerShape(12.dp))
+                            .clickable {
+                                permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
+                            }
+                            .padding(horizontal = 24.dp, vertical = 12.dp)
+                    ) {
+                        Text("Accorder la permission", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        } else {
+            Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f)) {
                 when (selectedTab) {
                     0 -> HomeTab(
@@ -229,6 +278,8 @@ fun MainScreen(player: MediaController) {
                         currentSong = currentSong,
                         isPlaying = isPlaying,
                         recentlyPlayed = recentlyPlayed,
+                        favoriteSongs = favoriteSongs,
+                        playlists = playlists,
                         onSeeAllRecent = { showRecentlyPlayed = true },
                         onSongClick = { song ->
                             currentSong = song
@@ -239,7 +290,24 @@ fun MainScreen(player: MediaController) {
                                 db.recentlyPlayedDao().insert(song.toRecentlyPlayedEntity())
                                 db.recentlyPlayedDao().trimToLimit()
                             }
-                        }
+                        },
+                        onToggleFavorite = { song ->
+                            scope.launch {
+                                if (favoriteSongs.any { it.id == song.id })
+                                    db.favoriteDao().delete(song.id)
+                                else
+                                    db.favoriteDao().insert(song.toFavoriteEntity())
+                            }
+                        },
+                        onShowSongInfo = { song ->
+                            overlayedSong = song
+                            showSongInfo = true
+                        },
+                        onShowPlaylistPicker = { song ->
+                            overlayedSong = song
+                            showPlaylistPicker = true
+                        },
+                        onOpenPlayer = { showPlayer = true }
                     )
 
                     1 -> LibraryTab(
@@ -312,8 +380,12 @@ fun MainScreen(player: MediaController) {
                             scope.launch {
                                 db.playlistDao().renamePlaylist(playlist.id, newName)
                             }
+                        },
+                        onRemoveSongFromPlaylist = { playlist, songId ->
+                            scope.launch {
+                                db.playlistDao().removeSong(playlist.id, songId)
+                            }
                         }
-
                     )
 
                     2 -> SearchTab(
@@ -333,12 +405,25 @@ fun MainScreen(player: MediaController) {
                     3 -> ProfileTab(
                         songs = songs,
                         recentlyPlayed = recentlyPlayed,
-                        favoriteSongs = favoriteSongs
+                        favoriteSongs = favoriteSongs,
+                        onSongClick = { song ->
+                            currentSong = song
+                            playSong(song, recentlyPlayed)
+                            isPlaying = true
+                            showPlayer = true
+                            scope.launch {
+                                db.recentlyPlayedDao().insert(song.toRecentlyPlayedEntity())
+                                db.recentlyPlayedDao().trimToLimit()
+                            }
+                        }
                     )
                 }
             }
-            if (!showPlayer && !showRecentlyPlayed) {
-
+            AnimatedVisibility(
+                visible = !showPlayer && !showRecentlyPlayed && currentSong != null,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+            ) {
                 currentSong?.let { song ->
                     MiniPlayer(
                         song = song,
@@ -348,10 +433,11 @@ fun MainScreen(player: MediaController) {
                             isPlaying = !isPlaying
                         },
                         onOpen = { showPlayer = true },
-                        player = player  // ← nouveau paramètre
+                        player = player
                     )
                 }
-                }
+            }
+
 
                 BottomNavBar(
                     selectedTab = selectedTab,
@@ -359,48 +445,321 @@ fun MainScreen(player: MediaController) {
                 )
             }
         }
+    }
 
-        if (showRecentlyPlayed) {
-            RecentlyPlayedScreen(
-                songs = recentlyPlayed,
-                onClose = { showRecentlyPlayed = false },
-                onSongClick = { song ->
-                    currentSong = song
-                    playSong(song, recentlyPlayed)  // ← correction
-                    isPlaying = true
-                    showPlayer = true
-                    scope.launch {
-                        db.recentlyPlayedDao().insert(song.toRecentlyPlayedEntity())
-                        db.recentlyPlayedDao().trimToLimit()
-                    }
-                }
-            )
-        }
+    AnimatedVisibility(
+        visible = showRecentlyPlayed,
+        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+    ) {
+        RecentlyPlayedScreen(
+            songs = recentlyPlayed,
+            onClose = { showRecentlyPlayed = false },
+            onSongClick = { song ->
+                currentSong = song
+                playSong(song, recentlyPlayed)
+                isPlaying = true
+                showPlayer = true
+            }
+        )
+    }
 
-        if (showPlayer && currentSong != null) {
-            PlayerScreen(
-                song = currentSong!!,
-                isPlaying = isPlaying,
-                isFavorite = favoriteSongs.any { it.id == currentSong!!.id },
-                onPlayPause = {
-                    if (isPlaying) player.pause() else player.play()
-                    isPlaying = !isPlaying
-                },
-                onClose = { showPlayer = false },
-                onToggleFavorite = {
-                    val song = currentSong!!
+    AnimatedVisibility(
+        visible = showPlayer,
+        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+    ) {
+        PlayerScreen(
+            song = currentSong!!,
+            isPlaying = isPlaying,
+            onPlayPause = {
+                if (isPlaying) player.pause() else player.play()
+                isPlaying = !isPlaying
+            },
+
+            onClose = { showPlayer = false },
+            player = player,
+            isFavorite = currentSong?.let { s -> favoriteSongs.any { it.id == s.id } } ?: false,
+            onToggleFavorite = {
+                currentSong?.let { s ->
                     scope.launch {
-                        if (favoriteSongs.any { it.id == song.id }) {
-                            db.favoriteDao().delete(song.id)
+                        if (favoriteSongs.any { it.id == s.id }) {
+                            db.favoriteDao().delete(s.id)
                         } else {
-                            db.favoriteDao().insert(song.toFavoriteEntity())
+                            db.favoriteDao().insert(s.toFavoriteEntity())
                         }
                     }
-                },
-                player = player
-            )
+                }
+            },
+            onOpenQueue = { showQueue = true }
+        )
+    }
+    // Overlay infos chanson
+    AnimatedVisibility(
+        visible = showSongInfo && overlayedSong != null,
+        enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+        exit = fadeOut() + slideOutVertically(targetOffsetY = { it })
+    ) {
+        val song = overlayedSong!!
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.6f))
+                .pointerInput(Unit) { detectTapGestures { showSongInfo = false } },
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            GlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(Unit) { detectTapGestures { } },
+                cornerRadius = 28.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0xFF2D1B4E).copy(0.97f), Color(0xFF1A0A2E).copy(0.97f))
+                            )
+                        )
+                        .padding(24.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(40.dp)
+                            .height(4.dp)
+                            .background(GlassBorder, RoundedCornerShape(2.dp))
+                            .align(Alignment.CenterHorizontally)
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(DarkPurple),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (song.albumArtUri != null) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(song.albumArtUri).crossfade(true).build(),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Icon(Icons.Filled.MusicNote, null, tint = LightPurple, modifier = Modifier.size(32.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(song.title, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(song.artist, color = LightPurple, fontSize = 14.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(GlassBorder))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    InfoRow(Icons.Filled.Person, "Artiste", song.artist)
+                    InfoRow(Icons.Filled.MusicNote, "Titre", song.title)
+                    InfoRow(Icons.Filled.AudioFile, "Fichier", song.uri.lastPathSegment ?: "—")
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(
+                                    if (favoriteSongs.any { it.id == song.id })
+                                        Color(0xFFFF6B9D).copy(0.2f)
+                                    else GlassSurface,
+                                    RoundedCornerShape(14.dp)
+                                )
+                                .border(1.dp,
+                                    if (favoriteSongs.any { it.id == song.id })
+                                        Color(0xFFFF6B9D).copy(0.4f)
+                                    else GlassBorder,
+                                    RoundedCornerShape(14.dp)
+                                )
+                                .clickable {
+                                    scope.launch {
+                                        if (favoriteSongs.any { it.id == song.id })
+                                            db.favoriteDao().delete(song.id)
+                                        else
+                                            db.favoriteDao().insert(song.toFavoriteEntity())
+                                    }
+                                }
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    if (favoriteSongs.any { it.id == song.id }) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                    null, tint = Color(0xFFFF6B9D), modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    if (favoriteSongs.any { it.id == song.id }) "Favori" else "Ajouter",
+                                    color = Color(0xFFFF6B9D), fontSize = 13.sp, fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(LightPurple, RoundedCornerShape(14.dp))
+                                .clickable { showSongInfo = false }
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Fermer", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
         }
     }
+
+    AnimatedVisibility(
+        visible = showPlaylistPicker && overlayedSong != null,
+        enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+        exit = fadeOut() + slideOutVertically(targetOffsetY = { it })
+    ) {
+        val song = overlayedSong!!
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.6f))
+                .pointerInput(Unit) { detectTapGestures { showPlaylistPicker = false } },
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            GlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(Unit) { detectTapGestures { } },
+                cornerRadius = 28.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0xFF2D1B4E).copy(0.97f), Color(0xFF1A0A2E).copy(0.97f))
+                            )
+                        )
+                        .padding(24.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(40.dp)
+                            .height(4.dp)
+                            .background(GlassBorder, RoundedCornerShape(2.dp))
+                            .align(Alignment.CenterHorizontally)
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text("Ajouter à une playlist", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    if (playlists.isEmpty()) {
+                        Text("Aucune playlist — crée-en une d'abord dans Bibliothèque", color = TextSecondary, fontSize = 14.sp)
+                    } else {
+                        playlists.forEach { playlist ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        scope.launch {
+                                            db.playlistDao().insertSong(
+                                                PlaylistSongEntity(
+                                                    playlistId = playlist.id,
+                                                    songId = song.id,
+                                                    title = song.title,
+                                                    artist = song.artist,
+                                                    uri = song.uri.toString(),
+                                                    albumArtUri = song.albumArtUri?.toString(),
+                                                    position = playlist.songs.size
+                                                )
+                                            )
+                                        }
+                                        showPlaylistPicker = false
+                                    }
+                                    .padding(vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .background(
+                                            Brush.radialGradient(listOf(LightPurple, MediumPurple)),
+                                            RoundedCornerShape(10.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Filled.MusicNote, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(playlist.name, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                    Text("${playlist.songs.size} chanson(s)", color = TextSecondary, fontSize = 12.sp)
+                                }
+                                Icon(Icons.Filled.Add, null, tint = LightPurple, modifier = Modifier.size(20.dp))
+                            }
+                            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(GlassBorder))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(GlassSurface, RoundedCornerShape(14.dp))
+                            .border(1.dp, GlassBorder, RoundedCornerShape(14.dp))
+                            .clickable { showPlaylistPicker = false }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Annuler", color = TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+
+    AnimatedVisibility(
+        visible = showQueue,
+        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+    ) {
+        QueueScreen(
+            playlist = currentPlaylist,
+            currentIndex = player.currentMediaItemIndex,
+            onClose = { showQueue = false },
+            onPlaySong = { index ->
+                player.seekToDefaultPosition(index)
+                player.play()
+                isPlaying = true
+            },
+            onRemoveSong = { index ->
+                player.removeMediaItem(index)
+                val newList = currentPlaylist.toMutableList()
+                newList.removeAt(index)
+                currentPlaylist = newList
+            },
+            onMoveSong = { from, to ->
+                player.moveMediaItem(from, to)
+                val newList = currentPlaylist.toMutableList()
+                val item = newList.removeAt(from)
+                newList.add(to, item)
+                currentPlaylist = newList
+            }
+        )
+    }
+
+}
 
 
 @Composable
@@ -472,9 +831,15 @@ fun HomeTab(
     currentSong: Song?,
     isPlaying: Boolean,
     recentlyPlayed: List<Song>,
+    favoriteSongs: List<Song>,        // ← nouveau
+    playlists: List<Playlist>,         // ← nouveau
     onSeeAllRecent: () -> Unit,
-    onSongClick: (Song) -> Unit
-) {
+    onSongClick: (Song) -> Unit,
+    onToggleFavorite: (Song) -> Unit,  // ← nouveau
+    onShowSongInfo: (Song) -> Unit,
+    onShowPlaylistPicker: (Song) -> Unit,
+    onOpenPlayer: () -> Unit
+){
     var searchQuery by remember { mutableStateOf("") }
     val filteredSongs = remember(searchQuery, songs) {
         if (searchQuery.isEmpty()) songs
@@ -537,7 +902,7 @@ fun HomeTab(
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "🔍", fontSize = 16.sp)
+                    Icon(imageVector = Icons.Filled.Search, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(10.dp))
                     androidx.compose.material3.TextField(
                         value = searchQuery,
@@ -579,7 +944,7 @@ fun HomeTab(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(
-                            onClick = { },  // ← absorbe le tap sans rien faire
+                            onClick = { onOpenPlayer() },
                             indication = null,
                             interactionSource = remember {
                                 androidx.compose.foundation.interaction.MutableInteractionSource()
@@ -758,13 +1123,19 @@ fun HomeTab(
         )
     }
 
-    items(filteredSongs) { song ->
-        SongItem(
-            song = song,
-            isPlaying = currentSong?.id == song.id && isPlaying,
-            onClick = { onSongClick(song) }
-        )
-    }
+        items(filteredSongs) { song ->
+            SongItem(
+                song = song,
+                isPlaying = currentSong?.id == song.id && isPlaying,
+                onClick = { onSongClick(song) },
+                showMenu = true,
+                isFavorite = favoriteSongs.any { it.id == song.id },
+                onToggleFavorite = { onToggleFavorite(song) },
+                onShowInfo = { onShowSongInfo(song) },
+                onShowPlaylistPicker = { onShowPlaylistPicker(song) },
+                onPlayNow = { onSongClick(song) }
+            )
+        }
 
     item { Spacer(modifier = Modifier.height(16.dp)) }
 }
@@ -842,57 +1213,64 @@ fun MiniPlayer(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onOpen() }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Pochette
-                Box(
+                // Zone cliquable (pochette + infos)
+                Row(
                     modifier = Modifier
-                        .size(42.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(DarkPurple),
-                    contentAlignment = Alignment.Center
+                        .weight(1f)
+                        .clickable { onOpen() },
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (song.albumArtUri != null) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(song.albumArtUri)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
+                    // Pochette
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(DarkPurple),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (song.albumArtUri != null) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(song.albumArtUri)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.MusicNote,
+                                contentDescription = null,
+                                tint = LightPurple,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    // Titre + artiste
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = song.title,
+                            color = TextPrimary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Filled.MusicNote,
-                            contentDescription = null,
-                            tint = LightPurple,
-                            modifier = Modifier.size(20.dp)
+                        Text(
+                            text = song.artist,
+                            color = LightPurple,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-                }
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                // Titre + artiste
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = song.title,
-                        color = TextPrimary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = song.artist,
-                        color = LightPurple,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))
@@ -969,14 +1347,26 @@ fun SongItem(
     song: Song,
     isPlaying: Boolean,
     onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null
+    modifier: Modifier = Modifier,  // ← nouveau
+    onLongClick: (() -> Unit)? = null,
+    showMenu: Boolean = false,
+    isFavorite: Boolean = false,
+    onToggleFavorite: (() -> Unit)? = null,
+    onShowInfo: (() -> Unit)? = null,
+    onShowPlaylistPicker: (() -> Unit)? = null,
+    onPlayNow: (() -> Unit)? = null
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
     GlassCard(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onClick,
-                onLongClick = { onLongClick?.invoke() }
+                onLongClick = {
+                    if (showMenu) menuExpanded = true
+                    onLongClick?.invoke()
+                }
             ),
         cornerRadius = 14.dp
     ) {
@@ -985,12 +1375,7 @@ fun SongItem(
                 .fillMaxWidth()
                 .background(
                     if (isPlaying)
-                        Brush.linearGradient(
-                            listOf(
-                                LightPurple.copy(0.15f),
-                                MediumPurple.copy(0.1f)
-                            )
-                        )
+                        Brush.linearGradient(listOf(LightPurple.copy(0.15f), MediumPurple.copy(0.1f)))
                     else
                         Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
                 )
@@ -1015,7 +1400,12 @@ fun SongItem(
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    Text(text = if (isPlaying) "▶" else "🎵", fontSize = 18.sp)
+                    Icon(
+                        imageVector = Icons.Filled.MusicNote,
+                        contentDescription = null,
+                        tint = TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
 
@@ -1044,10 +1434,123 @@ fun SongItem(
                     imageVector = Icons.Filled.MusicNote,
                     contentDescription = null,
                     tint = CyanAccent,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+
+            if (showMenu) {
+                Box {
+                    Icon(
+                        imageVector = Icons.Filled.MoreVert,
+                        contentDescription = "Options",
+                        tint = TextSecondary,
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) { menuExpanded = true }
+                    )
+
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                        modifier = Modifier.background(
+                            Brush.verticalGradient(
+                                listOf(Color(0xFF2D1B4E), Color(0xFF1A0A2E))
+                            )
+                        )
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.PlayArrow, null, tint = LightPurple, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text("Lire maintenant", color = TextPrimary, fontSize = 14.sp)
+                                }
+                            },
+                            onClick = { menuExpanded = false; onPlayNow?.invoke() }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                        null,
+                                        tint = Color(0xFFFF6B9D),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        if (isFavorite) "Retirer des favoris" else "Ajouter aux favoris",
+                                        color = TextPrimary,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            },
+                            onClick = { menuExpanded = false; onToggleFavorite?.invoke() }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.PlaylistAdd, null, tint = CyanAccent, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text("Ajouter à une playlist", color = TextPrimary, fontSize = 14.sp)
+                                }
+                            },
+                            onClick = { menuExpanded = false; onShowPlaylistPicker?.invoke() }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Info, null, tint = TextSecondary, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text("Infos de la chanson", color = TextPrimary, fontSize = 14.sp)
+                                }
+                            },
+                            onClick = { menuExpanded = false; onShowInfo?.invoke() }
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+fun InfoRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = LightPurple,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = label,
+            color = TextSecondary,
+            fontSize = 13.sp,
+            modifier = Modifier.width(90.dp)
+        )
+        Text(
+            text = value,
+            color = TextPrimary,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
@@ -1355,6 +1858,7 @@ fun PlayerScreen(
     onPlayPause: () -> Unit,
     onClose: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onOpenQueue: () -> Unit,
     player: androidx.media3.common.Player
 ) {
     var progress by remember { mutableStateOf(0f) }
@@ -1386,18 +1890,37 @@ fun PlayerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF3D2060),
-                        Color(0xFF1A0A2E),
-                        Color(0xFF0D0D1A)
+            .pointerInput(Unit) { detectTapGestures { } } // ← absorbe TOUS les taps
+    ) {
+        // Fond flouté
+        if (song.albumArtUri != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(song.albumArtUri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(100.dp)
+            )
+        }
+        
+        // Couche d'assombrissement
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF3D2060).copy(alpha = 0.6f),
+                            Color(0xFF1A0A2E).copy(alpha = 0.8f),
+                            Color(0xFF0D0D1A).copy(alpha = 0.95f)
+                        )
                     )
                 )
-            )
-            .pointerInput(Unit) { detectTapGestures { } } // ← absorbe TOUS les taps
-
-    ) {
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1463,7 +1986,10 @@ fun PlayerScreen(
                                     Text("File d'attente", color = TextPrimary)
                                 }
                             },
-                            onClick = { showOptionsMenu = false }
+                            onClick = { 
+                                showOptionsMenu = false
+                                onOpenQueue()
+                            }
                         )
                         DropdownMenuItem(
                             text = {
@@ -1494,6 +2020,7 @@ fun PlayerScreen(
             // Pochette
             Box(
                 modifier = Modifier
+                    .offset { androidx.compose.ui.unit.IntOffset(dragOffsetX.toInt(), 0) }
                     .size(300.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .background(DarkPurple)
@@ -1598,7 +2125,7 @@ fun PlayerScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(24.dp),   // ← ajoute cette ligne
+                    .height(12.dp),   // ← réduit la taille du slider
                 colors = androidx.compose.material3.SliderDefaults.colors(
                     thumbColor = LightPurple,
                     activeTrackColor = LightPurple,
@@ -1775,7 +2302,8 @@ fun loadSongs(context: android.content.Context): List<Song> {
 fun ProfileTab(
     songs: List<Song>,
     recentlyPlayed: List<Song>,
-    favoriteSongs: List<Song>
+    favoriteSongs: List<Song>,
+    onSongClick: (Song) -> Unit
 ) {
     var userName by remember { mutableStateOf("Credson") }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -1908,45 +2436,131 @@ fun ProfileTab(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                topArtists.forEachIndexed { index, artist ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "#${index + 1}",
-                            color = LightPurple,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.width(36.dp)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    topArtists.take(3).forEachIndexed { index, artist ->
+                        val rankColors = listOf(
+                            Color(0xFFFFD700), // #1 — or
+                            Color(0xFFC0C0C0), // #2 — argent
+                            Color(0xFFCD7F32)  // #3 — bronze
                         )
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .background(
-                                    Brush.radialGradient(listOf(MediumPurple, DarkPurple)),
-                                    CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
                         ) {
+                            Box(contentAlignment = Alignment.TopEnd) {
+                                // Avatar
+                                Box(
+                                    modifier = Modifier
+                                        .size(72.dp)
+                                        .background(
+                                            Brush.radialGradient(listOf(MediumPurple, DarkPurple)),
+                                            CircleShape
+                                        )
+                                        .border(2.dp, rankColors[index], CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    // Cherche une pochette pour cet artiste dans recentlyPlayed
+                                    val artistSong = recentlyPlayed.firstOrNull { it.artist == artist }
+                                    if (artistSong?.albumArtUri != null) {
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(LocalContext.current)
+                                                .data(artistSong.albumArtUri)
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(CircleShape)
+                                        )
+                                    } else {
+                                        Text(
+                                            text = artist.firstOrNull()?.uppercase() ?: "?",
+                                            color = Color.White,
+                                            fontSize = 24.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                // Badge rang
+                                Box(
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .background(rankColors[index], CircleShape)
+                                        .border(1.5.dp, Color(0xFF1A0A2E), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "${index + 1}",
+                                        color = Color(0xFF1A0A2E),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = artist.firstOrNull()?.uppercase() ?: "?",
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
+                                text = artist,
+                                color = TextPrimary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = artist,
-                            color = TextPrimary,
-                            fontSize = 15.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    }
+                }
+
+                // Artistes #4 et #5 en liste compacte dessous
+                if (topArtists.size > 3) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    topArtists.drop(3).forEachIndexed { index, artist ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "#${index + 4}",
+                                color = TextSecondary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.width(36.dp)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(
+                                        Brush.radialGradient(listOf(MediumPurple, DarkPurple)),
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = artist.firstOrNull()?.uppercase() ?: "?",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = artist,
+                                color = TextPrimary,
+                                fontSize = 14.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
@@ -1964,7 +2578,7 @@ fun ProfileTab(
         }
 
         items(recentlyPlayed.take(5)) { song ->
-            SongItem(song = song, isPlaying = false, onClick = {})
+            SongItem(song = song, isPlaying = false, onClick = { onSongClick(song) })
         }
 
         item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -2053,12 +2667,16 @@ fun LibraryTab(
     onSongClick: (Song) -> Unit,
     onPlayPlaylist: (Song, List<Song>) -> Unit,
     onToggleFavorite: (Song) -> Unit,
-    onPlaylistDelete: (Playlist) -> Unit,      // ← nouveau
-    onPlaylistRename: (Playlist, String) -> Unit  // ← nouveau
+    onPlaylistDelete: (Playlist) -> Unit,
+    onPlaylistRename: (Playlist, String) -> Unit,
+    onRemoveSongFromPlaylist: (Playlist, Long) -> Unit = { _, _ -> }
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     var selectedAlbum by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     var selectedArtist by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
+    
+    BackHandler(enabled = selectedAlbum != null) { selectedAlbum = null }
+    BackHandler(enabled = selectedArtist != null) { selectedArtist = null }
     val tabs = listOf("Chansons", "Albums", "Artistes", "Playlists", "Favoris")
     val albums = remember(songs) {
         songs.groupBy { it.artist }
@@ -2402,6 +3020,8 @@ fun LibraryTab(
                     // Playlists
                     var showCreateDialog by remember { mutableStateOf(false) }
                     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
+                    
+                    BackHandler(enabled = selectedPlaylist != null) { selectedPlaylist = null }
 
                     Box(modifier = Modifier.fillMaxSize()) {
                         Column(modifier = Modifier.fillMaxSize()) {
@@ -2457,7 +3077,7 @@ fun LibraryTab(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(text = "🎶", fontSize = 48.sp)
+                                        Icon(imageVector = Icons.Filled.QueueMusic, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(48.dp))
                                         Spacer(modifier = Modifier.height(12.dp))
                                         Text(
                                             text = "Aucune playlist",
@@ -2799,7 +3419,16 @@ fun LibraryTab(
                                         onPlayPlaylist(playlist.songs.first(), playlist.songs)
                                 },
                                 onSongClick = { song -> onPlayPlaylist(song, playlist.songs) },
-                                onAddSong = { song -> onPlaylistAddSong(playlist, song) }
+                                onAddSong = { song -> onPlaylistAddSong(playlist, song) },
+                                onDeletePlaylist = {
+                                    onPlaylistDelete(playlist)
+                                    selectedPlaylist = null
+                                },
+                                onRemoveSongs = { idsToRemove ->
+                                    idsToRemove.forEach { songId ->
+                                        onRemoveSongFromPlaylist(playlist, songId)
+                                    }
+                                }
                             )
                         }
                     }
@@ -2813,7 +3442,7 @@ fun LibraryTab(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "♡", fontSize = 48.sp, color = TextSecondary)
+                                Icon(imageVector = Icons.Outlined.FavoriteBorder, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(48.dp))
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
                                     text = "Aucun favori encore",
@@ -2821,9 +3450,10 @@ fun LibraryTab(
                                     fontSize = 16.sp
                                 )
                                 Text(
-                                    text = "Appuie sur ♡ pour ajouter",
+                                    text = "Appuie sur l'icône cœur pour ajouter\ndes chansons à tes favoris",
                                     color = TextSecondary,
-                                    fontSize = 13.sp
+                                    fontSize = 13.sp,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                 )
                             }
                         }
@@ -2869,7 +3499,7 @@ fun LibraryTab(
                                                     modifier = Modifier.fillMaxSize()
                                                 )
                                             } else {
-                                                Text(text = "🎵", fontSize = 18.sp)
+                                                Icon(imageVector = Icons.Filled.MusicNote, contentDescription = null, tint = LightPurple, modifier = Modifier.size(18.dp))
                                             }
                                         }
                                         Spacer(modifier = Modifier.width(12.dp))
@@ -3045,28 +3675,28 @@ fun PlaylistDetailScreen(
     onClose: () -> Unit,
     onPlayAll: () -> Unit,
     onSongClick: (Song) -> Unit,
-    onAddSong: (Song) -> Unit
+    onAddSong: (Song) -> Unit,
+    onDeletePlaylist: () -> Unit,        // ← nouveau
+    onRemoveSongs: (Set<Long>) -> Unit   // ← nouveau
 ) {
     var showAddSongs by remember { mutableStateOf(false) }
+    var showOptionsMenu by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
-// State local pour feedback instantané sans attendre Room
     var localAddedIds by remember {
         mutableStateOf(playlist.songs.map { it.id }.toSet())
     }
 
-// Fusion : chansons de Room + ajouts locaux pas encore sauvés
     val displaySongs = remember(playlist.songs, localAddedIds) {
         val roomIds = playlist.songs.map { it.id }.toSet()
         val allIds = roomIds + localAddedIds
         allSongs.filter { it.id in allIds }
             .sortedBy { if (it.id in roomIds) 0 else 1 }
     }
-    // En haut de PlaylistDetailScreen, avant le Box racine
+
     BackHandler(enabled = showAddSongs) {
         showAddSongs = false
     }
-
 
     Box(
         modifier = Modifier
@@ -3076,120 +3706,606 @@ fun PlaylistDetailScreen(
                     listOf(Color(0xFF2D1B4E), Color(0xFF1A0A2E), Color(0xFF0D0D1A))
                 )
             )
-            .pointerInput(Unit) { detectTapGestures { } } // ← absorbe TOUS les taps
-
+            .pointerInput(Unit) { detectTapGestures { } }
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize()
         ) {
-            Spacer(modifier = Modifier.height(52.dp))
+            // ── Hero section ──
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(320.dp)
+                ) {
+                    // Image de fond
+                    val coverSong = displaySongs.firstOrNull { it.albumArtUri != null }
+                    if (coverSong?.albumArtUri != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(coverSong.albumArtUri)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.radialGradient(
+                                        listOf(MediumPurple, DarkPurple, Color(0xFF0D0D1A))
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.MusicNote,
+                                contentDescription = null,
+                                tint = LightPurple.copy(alpha = 0.5f),
+                                modifier = Modifier.size(80.dp)
+                            )
+                        }
+                    }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(GlassSurface, CircleShape)
-                        .border(1.dp, GlassBorder, CircleShape)
-                        .clickable { onClose() },  // ← garde le même lambda qu'avant
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.ArrowBack,
-                        contentDescription = "Retour",
-                        tint = TextPrimary,
-                        modifier = Modifier.size(22.dp)
+                    // Dégradé sombre du bas
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colorStops = arrayOf(
+                                        0.0f to Color.Transparent,
+                                        0.5f to Color.Black.copy(alpha = 0.3f),
+                                        1.0f to Color(0xFF1A0A2E)
+                                    )
+                                )
+                            )
                     )
-                }
-                Spacer(modifier = Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = playlist.name,
-                        color = TextPrimary,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "${playlist.songs.size} chanson(s)",
-                        color = TextSecondary,
-                        fontSize = 13.sp
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .background(LightPurple.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
-                        .clickable { showAddSongs = true }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "+ Ajouter",
-                        color = LightPurple,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+
+                    // Bouton retour en haut à gauche
+                    Box(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .size(40.dp)
+                            .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                            .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+                            .clickable { onClose() }
+                            .align(Alignment.TopStart),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ArrowBack,
+                            contentDescription = "Retour",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    // Bouton ⋮ en haut à droite (remplace le bouton + Ajouter du hero)
+                    // showOptionsMenu is declared at function level
+
+                    Box(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .size(40.dp)
+                            .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                            .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+                            .clickable { showOptionsMenu = true }
+                            .align(Alignment.TopEnd),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MoreVert,
+                            contentDescription = "Options",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    // Titre et nb chansons en bas de l'image
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(horizontal = 20.dp, vertical = 20.dp)
+                    ) {
+                        Text(
+                            text = playlist.name,
+                            color = Color.White,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "${displaySongs.size} chanson(s)",
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 14.sp
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (playlist.songs.isNotEmpty()) {
+            // ── Boutons Lire + Aléatoire ──
+            item {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(LightPurple, RoundedCornerShape(12.dp))
-                        .clickable { onPlayAll() }
-                        .padding(vertical = 12.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(text = "▶", color = Color.White, fontSize = 16.sp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Tout jouer",
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    // Bouton Lire
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(LightPurple, RoundedCornerShape(14.dp))
+                            .clickable {
+                                if (displaySongs.isNotEmpty()) onPlayAll()
+                            }
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Lire",
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    // Bouton Aléatoire
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(MediumPurple.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+                            .border(1.dp, LightPurple.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                            .clickable {
+                                if (displaySongs.isNotEmpty()) {
+                                    onSongClick(displaySongs.random())
+                                }
+                            }
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Shuffle,
+                                contentDescription = null,
+                                tint = LightPurple,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Aléatoire",
+                                color = LightPurple,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
             }
 
-            if (playlist.songs.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = "🎵", fontSize = 48.sp)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(text = "Playlist vide", color = TextSecondary, fontSize = 16.sp)
-                        Text(text = "Appuie sur + Ajouter", color = TextSecondary, fontSize = 13.sp)
+            // ── Liste vide ──
+            if (displaySongs.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Filled.MusicNote,
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Playlist vide",
+                                color = TextSecondary,
+                                fontSize = 16.sp
+                            )
+                            Text(
+                                text = "Appuie sur + Ajouter",
+                                color = TextSecondary.copy(alpha = 0.7f),
+                                fontSize = 13.sp
+                            )
+                        }
                     }
                 }
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(displaySongs) { song ->
-                        SongItem(
-                            song = song,
-                            isPlaying = currentSong?.id == song.id && isPlaying,
-                            onClick = { onSongClick(song) }
+            }
+
+            // ── Liste des chansons ──
+            items(displaySongs) { song ->
+                SongItem(
+                    song = song,
+                    isPlaying = currentSong?.id == song.id && isPlaying,
+                    onClick = { onSongClick(song) },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 3.dp)
+                )
+            }
+
+            item { Spacer(modifier = Modifier.height(100.dp)) }
+        }
+
+        // Menu options playlist
+        var showManage by remember { mutableStateOf(false) }
+        if (showOptionsMenu) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .pointerInput(Unit) { detectTapGestures { showOptionsMenu = false } },
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                GlassCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(Unit) { detectTapGestures { } },
+                    cornerRadius = 28.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color(0xFF2D1B4E).copy(0.97f), Color(0xFF1A0A2E).copy(0.97f))
+                                )
+                            )
+                            .padding(24.dp)
+                    ) {
+                        // Poignée
+                        Box(
+                            modifier = Modifier
+                                .width(40.dp)
+                                .height(4.dp)
+                                .background(GlassBorder, RoundedCornerShape(2.dp))
+                                .align(Alignment.CenterHorizontally)
                         )
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // Option : Ajouter des chansons
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showOptionsMenu = false
+                                    showAddSongs = true
+                                }
+                                .padding(vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(LightPurple.copy(alpha = 0.15f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Filled.PlaylistAdd, null, tint = LightPurple, modifier = Modifier.size(22.dp))
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text("Ajouter des chansons", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        }
+
+                        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(GlassBorder))
+
+                        // Option : Gérer
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showOptionsMenu = false
+                                    showManage = true
+                                }
+                                .padding(vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(CyanAccent.copy(alpha = 0.15f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Filled.Tune, null, tint = CyanAccent, modifier = Modifier.size(22.dp))
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text("Gérer", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        }
+
+                        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(GlassBorder))
+
+                        // Option : Supprimer la playlist
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showOptionsMenu = false
+                                    onDeletePlaylist()
+                                }
+                                .padding(vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(Color(0xFFFF6B6B).copy(alpha = 0.15f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Filled.Delete, null, tint = Color(0xFFFF6B6B), modifier = Modifier.size(22.dp))
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text("Supprimer la playlist", color = Color(0xFFFF6B6B), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
-                    item { Spacer(modifier = Modifier.height(16.dp)) }
                 }
             }
         }
 
-        // Écran ajouter chansons
+        // Écran Gérer
+        if (showManage) {
+            var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+            var searchQuery by remember { mutableStateOf("") }
+
+            val filteredManageSongs = remember(searchQuery, displaySongs) {
+                if (searchQuery.isEmpty()) displaySongs
+                else displaySongs.filter {
+                    it.title.contains(searchQuery, ignoreCase = true) ||
+                            it.artist.contains(searchQuery, ignoreCase = true)
+                }
+            }
+
+            BackHandler { showManage = false }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFF2D1B4E), Color(0xFF1A0A2E), Color(0xFF0D0D1A))
+                        )
+                    )
+                    .pointerInput(Unit) { detectTapGestures { } }
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+
+                    // Header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
+                            .padding(top = 52.dp, bottom = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(GlassSurface, CircleShape)
+                                .border(1.dp, GlassBorder, CircleShape)
+                                .clickable { showManage = false },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.ArrowBack, null, tint = TextPrimary, modifier = Modifier.size(22.dp))
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = "${selectedIds.size} sélectionné(s)",
+                            color = TextPrimary,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    // Barre de recherche
+                    GlassCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        cornerRadius = 16.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Filled.Search, null, tint = TextSecondary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            androidx.compose.material3.TextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text("Rechercher la musique", color = TextSecondary, fontSize = 14.sp) },
+                                colors = androidx.compose.material3.TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    cursorColor = LightPurple
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Sélectionner tout
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                selectedIds = if (selectedIds.size == filteredManageSongs.size)
+                                    emptySet()
+                                else
+                                    filteredManageSongs.map { it.id }.toSet()
+                            }
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .border(
+                                    2.dp,
+                                    if (selectedIds.size == filteredManageSongs.size && filteredManageSongs.isNotEmpty())
+                                        LightPurple else TextSecondary,
+                                    CircleShape
+                                )
+                                .background(
+                                    if (selectedIds.size == filteredManageSongs.size && filteredManageSongs.isNotEmpty())
+                                        LightPurple else Color.Transparent,
+                                    CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (selectedIds.size == filteredManageSongs.size && filteredManageSongs.isNotEmpty()) {
+                                Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("Sélectionner tout", color = LightPurple, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    }
+
+                    // Liste
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp)
+                    ) {
+                        items(filteredManageSongs) { song ->
+                            val isSelected = song.id in selectedIds
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        if (isSelected) LightPurple.copy(alpha = 0.1f) else Color.Transparent,
+                                        RoundedCornerShape(12.dp)
+                                    )
+                                    .clickable {
+                                        selectedIds = if (isSelected)
+                                            selectedIds - song.id
+                                        else
+                                            selectedIds + song.id
+                                    }
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Cercle de sélection
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .border(2.dp, if (isSelected) LightPurple else TextSecondary, CircleShape)
+                                        .background(if (isSelected) LightPurple else Color.Transparent, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isSelected) {
+                                        Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                // Pochette
+                                Box(
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(DarkPurple),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (song.albumArtUri != null) {
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(LocalContext.current)
+                                                .data(song.albumArtUri).crossfade(true).build(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Icon(Icons.Filled.MusicNote, null, tint = TextSecondary, modifier = Modifier.size(22.dp))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = song.title,
+                                        color = if (isSelected) LightPurple else TextPrimary,
+                                        fontSize = 14.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(text = song.artist, color = TextSecondary, fontSize = 12.sp, maxLines = 1)
+                                }
+                            }
+                        }
+                        item { Spacer(modifier = Modifier.height(80.dp)) }
+                    }
+                }
+
+                // Barre d'actions en bas
+                if (selectedIds.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.BottomCenter)
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color(0xFF2D1B4E).copy(0.95f), Color(0xFF1A0A2E))
+                                )
+                            )
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Enlever
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.clickable {
+                                    onRemoveSongs(selectedIds)
+                                    selectedIds = emptySet()
+                                    showManage = false
+                                }
+                            ) {
+                                Icon(Icons.Filled.RemoveCircleOutline, null, tint = Color(0xFFFF6B6B), modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Enlever", color = Color(0xFFFF6B6B), fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+
+        // ── Écran ajouter chansons ──
         if (showAddSongs) {
-
-
             val filteredSongs = remember(searchQuery, allSongs) {
                 if (searchQuery.isEmpty()) allSongs
                 else allSongs.filter {
@@ -3206,6 +4322,7 @@ fun PlaylistDetailScreen(
                             listOf(Color(0xFF2D1B4E), Color(0xFF1A0A2E), Color(0xFF0D0D1A))
                         )
                     )
+                    .pointerInput(Unit) { detectTapGestures { } }
             ) {
                 Column(
                     modifier = Modifier
@@ -3214,7 +4331,6 @@ fun PlaylistDetailScreen(
                 ) {
                     Spacer(modifier = Modifier.height(52.dp))
 
-                    // Header
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -3243,7 +4359,7 @@ fun PlaylistDetailScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "${localAddedIds.size - playlist.songs.size} ajoutée(s) cette session",
+                                text = "${(localAddedIds.size - playlist.songs.size).coerceAtLeast(0)} ajoutée(s) cette session",
                                 color = LightPurple,
                                 fontSize = 12.sp
                             )
@@ -3252,7 +4368,6 @@ fun PlaylistDetailScreen(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // Barre de recherche
                     GlassCard(
                         modifier = Modifier.fillMaxWidth(),
                         cornerRadius = 16.dp
@@ -3295,14 +4410,14 @@ fun PlaylistDetailScreen(
 
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(filteredSongs) { song ->
-                            val alreadyAdded = song.id in localAddedIds  // ← doit utiliser localAddedIds
+                            val alreadyAdded = song.id in localAddedIds
                             GlassCard(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
                                         if (!alreadyAdded) {
-                                            localAddedIds = localAddedIds + song.id  // ← met à jour l'état local
-                                            onAddSong(song)                           // ← sauvegarde Room
+                                            localAddedIds = localAddedIds + song.id
+                                            onAddSong(song)
                                         }
                                     },
                                 cornerRadius = 14.dp
@@ -3312,18 +4427,13 @@ fun PlaylistDetailScreen(
                                         .fillMaxWidth()
                                         .background(
                                             if (alreadyAdded)
-                                                Brush.linearGradient(
-                                                    listOf(LightPurple.copy(0.15f), Color.Transparent)
-                                                )
+                                                Brush.linearGradient(listOf(LightPurple.copy(0.15f), Color.Transparent))
                                             else
-                                                Brush.linearGradient(
-                                                    listOf(Color.Transparent, Color.Transparent)
-                                                )
+                                                Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
                                         )
                                         .padding(14.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // Pochette
                                     Box(
                                         modifier = Modifier
                                             .size(50.dp)
@@ -3350,9 +4460,7 @@ fun PlaylistDetailScreen(
                                             )
                                         }
                                     }
-
                                     Spacer(modifier = Modifier.width(14.dp))
-
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = song.title,
@@ -3370,10 +4478,7 @@ fun PlaylistDetailScreen(
                                             maxLines = 1
                                         )
                                     }
-
                                     Spacer(modifier = Modifier.width(12.dp))
-
-                                    // Indicateur ajout — feedback instantané
                                     Box(
                                         modifier = Modifier
                                             .size(32.dp)
@@ -3395,6 +4500,209 @@ fun PlaylistDetailScreen(
                             }
                         }
                         item { Spacer(modifier = Modifier.height(16.dp)) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// QueueScreen — file d'attente interactive
+// ─────────────────────────────────────────────────────────────
+@Composable
+fun QueueScreen(
+    playlist: List<Song>,
+    currentIndex: Int,
+    onClose: () -> Unit,
+    onPlaySong: (Int) -> Unit,
+    onRemoveSong: (Int) -> Unit,
+    onMoveSong: (Int, Int) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF2D1B4E),
+                        Color(0xFF1A0A2E),
+                        Color(0xFF0D0D1A)
+                    )
+                )
+            )
+            .pointerInput(Unit) { detectTapGestures { } }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+        ) {
+            Spacer(modifier = Modifier.height(52.dp))
+
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(GlassSurface, CircleShape)
+                        .border(1.dp, GlassBorder, CircleShape)
+                        .clickable { onClose() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        contentDescription = "Fermer",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "FILE D'ATTENTE",
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
+                    Text(
+                        text = "${playlist.size} chanson(s)",
+                        color = LightPurple,
+                        fontSize = 12.sp
+                    )
+                }
+                Spacer(modifier = Modifier.size(40.dp))
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(bottom = 80.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                itemsIndexed(playlist) { index, song ->
+                    val isCurrent = index == currentIndex
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        cornerRadius = 16.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (isCurrent)
+                                        Brush.linearGradient(listOf(LightPurple.copy(0.18f), Color.Transparent))
+                                    else
+                                        Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+                                )
+                                .clickable { onPlaySong(index) }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Numéro / pochette
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(DarkPurple),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (song.albumArtUri != null) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(song.albumArtUri).crossfade(true).build(),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Filled.MusicNote, null,
+                                        tint = LightPurple,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                // Indicateur "en lecture"
+                                if (isCurrent) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(Color.Black.copy(0.5f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.VolumeUp, null,
+                                            tint = PurpleAccent,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            // Titre + artiste
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = song.title,
+                                    color = if (isCurrent) PurpleAccent else TextPrimary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = song.artist,
+                                    color = LightPurple,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            // Boutons déplacer / supprimer
+                            if (!isCurrent) {
+                                Icon(
+                                    imageVector = Icons.Filled.RemoveCircleOutline,
+                                    contentDescription = "Supprimer de la file",
+                                    tint = TextSecondary,
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .clickable { onRemoveSong(index) }
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Filled.KeyboardArrowUp,
+                                    contentDescription = "Monter",
+                                    tint = if (index > 0) LightPurple else GlassBorder,
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .clickable(enabled = index > 0) {
+                                            onMoveSong(index, index - 1)
+                                        }
+                                )
+                                Icon(
+                                    imageVector = Icons.Filled.KeyboardArrowDown,
+                                    contentDescription = "Descendre",
+                                    tint = if (index < playlist.size - 1) LightPurple else GlassBorder,
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .clickable(enabled = index < playlist.size - 1) {
+                                            onMoveSong(index, index + 1)
+                                        }
+                                )
+                            }
+                        }
                     }
                 }
             }
