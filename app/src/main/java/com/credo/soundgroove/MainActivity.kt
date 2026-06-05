@@ -74,7 +74,11 @@ data class Song(
     val title: String,
     val artist: String,
     val uri: Uri,
-    val albumArtUri: Uri?
+    val albumArtUri: Uri?,
+    val albumName: String = "Inconnu",
+    val folderPath: String = "",
+    val duration: Long = 0L,
+    val dateAdded: Long = 0L
 )
 
 data class Playlist(
@@ -117,8 +121,15 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(player: MediaController) {
+fun MainScreen(
+    player: MediaController, 
+    onNavigateToPlaylist: (Long) -> Unit = {}, 
+    onNavigateToSearch: () -> Unit = {},
+    onNavigateToAlbum: (String) -> Unit = {},
+    onNavigateToArtist: (String) -> Unit = {}
+) {
     var selectedTab by remember { mutableStateOf(0) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -307,7 +318,9 @@ fun MainScreen(player: MediaController) {
                             overlayedSong = song
                             showPlaylistPicker = true
                         },
-                        onOpenPlayer = { showPlayer = true }
+                        onOpenPlayer = { showPlayer = true },
+                        onNavigateToSearch = onNavigateToSearch,
+                        accentColor = LightPurple
                     )
 
                     1 -> LibraryTab(
@@ -385,7 +398,10 @@ fun MainScreen(player: MediaController) {
                             scope.launch {
                                 db.playlistDao().removeSong(playlist.id, songId)
                             }
-                        }
+                        },
+                        onNavigateToAlbum = onNavigateToAlbum,
+                        onNavigateToArtist = onNavigateToArtist,
+                        accentColor = LightPurple
                     )
 
                     2 -> SearchTab(
@@ -838,7 +854,9 @@ fun HomeTab(
     onToggleFavorite: (Song) -> Unit,  // ← nouveau
     onShowSongInfo: (Song) -> Unit,
     onShowPlaylistPicker: (Song) -> Unit,
-    onOpenPlayer: () -> Unit
+    onOpenPlayer: () -> Unit,
+    onNavigateToSearch: () -> Unit = {},
+    accentColor: Color
 ){
     var searchQuery by remember { mutableStateOf("") }
     val filteredSongs = remember(searchQuery, songs) {
@@ -2669,7 +2687,10 @@ fun LibraryTab(
     onToggleFavorite: (Song) -> Unit,
     onPlaylistDelete: (Playlist) -> Unit,
     onPlaylistRename: (Playlist, String) -> Unit,
-    onRemoveSongFromPlaylist: (Playlist, Long) -> Unit = { _, _ -> }
+    onRemoveSongFromPlaylist: (Playlist, Long) -> Unit = { _, _ -> },
+    onNavigateToAlbum: (String) -> Unit = {},
+    onNavigateToArtist: (String) -> Unit = {},
+    accentColor: Color
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     var selectedAlbum by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
@@ -2739,13 +2760,28 @@ fun LibraryTab(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { tabs.size })
 
-            when (selectedTab) {
-                0 -> {
-                    // État du tri
-                    var sortMode by remember { mutableStateOf(0) }
-                    val sortLabels = listOf("A-Z", "Z-A", "Artiste", "Récent")
+            LaunchedEffect(selectedTab) {
+                if (pagerState.currentPage != selectedTab) {
+                    pagerState.animateScrollToPage(selectedTab)
+                }
+            }
+            LaunchedEffect(pagerState.currentPage, pagerState.isScrollInProgress) {
+                if (!pagerState.isScrollInProgress && selectedTab != pagerState.currentPage) {
+                    selectedTab = pagerState.currentPage
+                }
+            }
+
+            androidx.compose.foundation.pager.HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.weight(1f)
+            ) { page ->
+                when (page) {
+                    0 -> {
+                        // État du tri
+                        var sortMode by remember { mutableStateOf(0) }
+                        val sortLabels = listOf("A-Z", "Z-A", "Artiste", "Récent")
 
                     // Chansons triées selon le mode choisi
                     val sortedSongs = remember(sortMode, songs) {
@@ -2894,7 +2930,7 @@ fun LibraryTab(
                                     modifier = Modifier
                                         .weight(1f)
                                         .aspectRatio(1f)
-                                        .clickable { selectedAlbum = Pair(artist, albumSongs) },
+                                        .clickable { onNavigateToAlbum(artist) },
                                     cornerRadius = 16.dp
                                 ) {
                                     Box(
@@ -2956,7 +2992,7 @@ fun LibraryTab(
                         GlassCard(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { selectedArtist = Pair(artist, artistSongs) },
+                                .clickable { onNavigateToArtist(artist) },
                             cornerRadius = 14.dp
                         ) {
                             Row(
@@ -3534,33 +3570,8 @@ fun LibraryTab(
                         }
                     }
                 }
+                }
             }
-        }
-
-        // Écran Album par-dessus
-        selectedAlbum?.let { (albumName, albumSongs) ->
-            PlaylistScreen(
-                title = albumName,
-                songs = albumSongs,
-                currentSong = currentSong,
-                isPlaying = isPlaying,
-                onClose = { selectedAlbum = null },
-                onPlayAll = { onPlayPlaylist(albumSongs.first(), albumSongs) },
-                onSongClick = { song -> onPlayPlaylist(song, albumSongs) }
-            )
-        }
-
-        // Écran Artiste par-dessus
-        selectedArtist?.let { (artistName, artistSongs) ->
-            PlaylistScreen(
-                title = artistName,
-                songs = artistSongs,
-                currentSong = currentSong,
-                isPlaying = isPlaying,
-                onClose = { selectedArtist = null },
-                onPlayAll = { onPlayPlaylist(artistSongs.first(), artistSongs) },
-                onSongClick = { song -> onPlayPlaylist(song, artistSongs) }
-            )
         }
     }
 }

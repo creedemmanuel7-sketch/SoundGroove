@@ -4,7 +4,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 
-private val SoundGrooveColors = darkColorScheme(
+enum class AppTheme {
+    CLASSIC_DARK,
+    ORIGINAL_PURPLE,
+    CORAL_VIBRANT
+}
+
+private val OriginalPurpleColors = darkColorScheme(
     primary = LightPurple,
     secondary = CyanAccent,
     background = DeepPurple,
@@ -14,10 +20,39 @@ private val SoundGrooveColors = darkColorScheme(
     onSurface = TextPrimary,
 )
 
+private val ClassicDarkColors = darkColorScheme(
+    primary = ClassicAccent,
+    secondary = ClassicAccent,
+    background = ClassicBackground,
+    surface = ClassicSurface,
+    onPrimary = TextPrimary,
+    onBackground = TextPrimary,
+    onSurface = TextPrimary,
+)
+
+private val CoralVibrantColors = darkColorScheme(
+    primary = CoralAccent,
+    secondary = CoralAccent,
+    background = CoralBackground,
+    surface = CoralSurface,
+    onPrimary = TextPrimary,
+    onBackground = TextPrimary,
+    onSurface = TextPrimary,
+)
+
 @Composable
-fun SoundGrooveTheme(content: @Composable () -> Unit) {
+fun SoundGrooveTheme(
+    appTheme: AppTheme = AppTheme.CLASSIC_DARK,
+    content: @Composable () -> Unit
+) {
+    val colorScheme = when (appTheme) {
+        AppTheme.CLASSIC_DARK -> ClassicDarkColors
+        AppTheme.ORIGINAL_PURPLE -> OriginalPurpleColors
+        AppTheme.CORAL_VIBRANT -> CoralVibrantColors
+    }
+
     MaterialTheme(
-        colorScheme = SoundGrooveColors,
+        colorScheme = colorScheme,
         content = content
     )
 }
