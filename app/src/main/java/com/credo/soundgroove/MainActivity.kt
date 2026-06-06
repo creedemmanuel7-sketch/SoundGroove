@@ -513,6 +513,7 @@ fun MainScreen(
                                 db.playlistDao().removeSong(playlist.id, songId)
                             }
                         },
+                        onNavigateToPlaylist = onNavigateToPlaylist,
                         onNavigateToAlbum = onNavigateToAlbum,
                         onNavigateToArtist = onNavigateToArtist,
                         onPlayNext = { song -> insertPlayNext(song) },
@@ -589,7 +590,13 @@ fun MainScreen(
                 BottomNavBar(
                     selectedTab = selectedTab,
                     accentColor = accentColor,
-                    onTabSelected = onSelectedTabChange
+                    onTabSelected = { tab ->
+                        if (tab == 2) {
+                            onNavigateToSearch()
+                        } else {
+                            onSelectedTabChange(tab)
+                        }
+                    }
                 )
             }
         }
@@ -3078,6 +3085,7 @@ fun LibraryTab(
     onPlaylistDelete: (Playlist) -> Unit,
     onPlaylistRename: (Playlist, String) -> Unit,
     onRemoveSongFromPlaylist: (Playlist, Long) -> Unit = { _, _ -> },
+    onNavigateToPlaylist: (Long) -> Unit = {},
     onNavigateToAlbum: (String) -> Unit = {},
     onNavigateToArtist: (String) -> Unit = {},
     onPlayNext: (Song) -> Unit = {},
@@ -3423,9 +3431,6 @@ fun LibraryTab(
                 3 -> {
                     // Playlists
                     var showCreateDialog by remember { mutableStateOf(false) }
-                    var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
-                    
-                    BackHandler(enabled = selectedPlaylist != null) { selectedPlaylist = null }
 
                     Box(modifier = Modifier.fillMaxSize()) {
                         Column(modifier = Modifier.fillMaxSize()) {
@@ -3496,7 +3501,7 @@ fun LibraryTab(
                                                     CardSurface.copy(alpha = 0.32f),
                                                     RoundedCornerShape(14.dp)
                                                 )
-                                                .clickable { selectedPlaylist = playlist }
+                                                .clickable { onNavigateToPlaylist(playlist.id) }
                                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
@@ -3817,32 +3822,6 @@ fun LibraryTab(
                                     }
                                 }
                             }
-                        }
-
-                        // Écran playlist sélectionnée
-                        selectedPlaylist?.let { playlist ->
-                            PlaylistDetailScreen(
-                                playlist = playlist,
-                                allSongs = songs,
-                                currentSong = currentSong,
-                                isPlaying = isPlaying,
-                                onClose = { selectedPlaylist = null },
-                                onPlayAll = {
-                                    if (playlist.songs.isNotEmpty())
-                                        onPlayPlaylist(playlist.songs.first(), playlist.songs)
-                                },
-                                onSongClick = { song -> onPlayPlaylist(song, playlist.songs) },
-                                onAddSong = { song -> onPlaylistAddSong(playlist, song) },
-                                onDeletePlaylist = {
-                                    onPlaylistDelete(playlist)
-                                    selectedPlaylist = null
-                                },
-                                onRemoveSongs = { idsToRemove ->
-                                    idsToRemove.forEach { songId ->
-                                        onRemoveSongFromPlaylist(playlist, songId)
-                                    }
-                                }
-                            )
                         }
                     }
                 }

@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -19,6 +20,7 @@ import androidx.navigation.compose.rememberNavController
 import com.credo.soundgroove.ui.screens.PlaylistDetailScreen
 import com.credo.soundgroove.ui.screens.AlbumDetailScreen
 import com.credo.soundgroove.ui.screens.ArtistDetailScreen
+import com.credo.soundgroove.PlayerScreen
 import android.net.Uri
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.ui.components.MiniPlayer
@@ -27,6 +29,7 @@ import com.credo.soundgroove.viewmodel.SoundGrooveViewModel
 object Routes {
     const val HOME = "home"
     const val SEARCH = "search"
+    const val PLAYER = "player"
     const val PLAYLIST_DETAIL = "playlist/{playlistId}"
     const val ALBUM_DETAIL = "album/{albumName}"
     const val ARTIST_DETAIL = "artist/{artistName}"
@@ -48,8 +51,11 @@ fun AppNavigation(
     val isPlaying by viewModel.isPlaying.collectAsState()
     val playbackPosition by viewModel.playbackPosition.collectAsState()
     val favoriteSongs by viewModel.favoriteSongs.collectAsState()
+    val controller by viewModel.mediaController.collectAsState()
+    val playbackSpeed by viewModel.playbackSpeed.collectAsState()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    val context = LocalContext.current
 
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
@@ -91,13 +97,50 @@ fun AppNavigation(
             ) {
                 com.credo.soundgroove.ui.screens.SearchScreen(
                     allSongs = songs,
+                    playlists = playlists,
                     favoriteSongs = favoriteSongs,
                     currentSong = currentSong,
                     accentColor = accentColor,
                     onBack = { navController.popBackStack() },
                     onPlaySong = { song -> viewModel.playSongs(songs, song) },
+                    onAlbumClick = { albumName -> navController.navigate(Routes.albumDetail(albumName)) },
+                    onArtistClick = { artistName -> navController.navigate(Routes.artistDetail(artistName)) },
+                    onPlaylistClick = { playlistId -> navController.navigate(Routes.playlistDetail(playlistId)) },
                     onMenuClick = { /* TODO: show bottom sheet from search */ }
                 )
+            }
+
+            composable(
+                route = Routes.PLAYER,
+                enterTransition = { slideInVertically(initialOffsetY = { it }, animationSpec = tween(250)) + fadeIn(tween(250)) },
+                exitTransition = { slideOutVertically(targetOffsetY = { it }, animationSpec = tween(250)) + fadeOut(tween(180)) },
+                popEnterTransition = { fadeIn(tween(180)) },
+                popExitTransition = { slideOutVertically(targetOffsetY = { it }, animationSpec = tween(250)) + fadeOut(tween(180)) }
+            ) {
+                val song = currentSong
+                val player = controller
+                if (song != null && player != null) {
+                    PlayerScreen(
+                        song = song,
+                        isPlaying = isPlaying,
+                        accentColor = accentColor,
+                        isFavorite = favoriteSongs.any { it.id == song.id },
+                        onPlayPause = { viewModel.togglePlayPause() },
+                        onClose = { navController.popBackStack() },
+                        onSwipeDown = { navController.popBackStack() },
+                        onSwipeUp = { },
+                        onToggleFavorite = { viewModel.toggleFavorite(song) },
+                        onOpenQueue = { },
+                        player = player,
+                        onShowInfo = { },
+                        onShare = { com.credo.soundgroove.util.PlayerActions.shareSong(context, song) },
+                        onSetRingtone = { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, song) },
+                        playbackSpeed = playbackSpeed,
+                        onOpenPlaybackSpeed = { }
+                    )
+                } else {
+                    LaunchedEffect(Unit) { navController.popBackStack() }
+                }
             }
 
             composable(Routes.PLAYLIST_DETAIL) { backStackEntry ->
@@ -181,7 +224,7 @@ fun AppNavigation(
             }
         }
 
-        if (currentRoute != Routes.HOME) {
+        if (currentRoute != Routes.HOME && currentRoute != Routes.PLAYER) {
             currentSong?.let { song ->
                 val duration = song.duration.takeIf { it > 0L } ?: 1L
                 MiniPlayer(
@@ -191,7 +234,7 @@ fun AppNavigation(
                     accentColor = accentColor,
                     onPlayPause = { viewModel.togglePlayPause() },
                     onSkipNext = { viewModel.skipNext() },
-                    onOpen = { },
+                    onOpen = { navController.navigate(Routes.PLAYER) },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
