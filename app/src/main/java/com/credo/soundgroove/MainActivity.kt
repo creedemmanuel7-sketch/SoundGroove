@@ -47,6 +47,7 @@ import androidx.media3.session.SessionToken
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.ui.theme.*
+import com.credo.soundgroove.ui.components.formatDuration
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.flow.first
@@ -146,19 +147,19 @@ fun MainScreen(
     var showRecentlyPlayed by remember { mutableStateOf(false) }
     var currentPlaylist by remember { mutableStateOf<List<Song>>(emptyList()) }
 
-    // Base de donnÃ©es
+    // Base de données
     val db = remember { SoundGrooveDatabase.getInstance(context) }
 
-    // DonnÃ©es persistantes
+    // Données persistantes
     var favoriteSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var recentlyPlayed by remember { mutableStateOf<List<Song>>(emptyList()) }
     var playlists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
-    // Ã‰tat des overlays globaux
+    // État des overlays globaux
     var overlayedSong by remember { mutableStateOf<Song?>(null) }
     var showSongInfo by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
 
-    // Charger depuis la DB au dÃ©marrage
+    // Charger depuis la DB au démarrage
     LaunchedEffect(Unit) {
         db.favoriteDao().getAll().collect { entities ->
             favoriteSongs = entities.map { it.toSong() }
@@ -267,7 +268,7 @@ fun MainScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "SoundGroove a besoin d'accÃ©der Ã  votre musique pour la lire.",
+                        text = "SoundGroove a besoin d'accéder à votre musique pour la lire.",
                         color = TextPrimary,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
@@ -591,7 +592,7 @@ fun MainScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     InfoRow(Icons.Filled.Person, "Artiste", song.artist)
                     InfoRow(Icons.Filled.MusicNote, "Titre", song.title)
-                    InfoRow(Icons.Filled.AudioFile, "Fichier", song.uri.lastPathSegment ?: "â€”")
+                    InfoRow(Icons.Filled.AudioFile, "Fichier", song.uri.lastPathSegment ?: "—")
                     Spacer(modifier = Modifier.height(20.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -689,10 +690,10 @@ fun MainScreen(
                             .align(Alignment.CenterHorizontally)
                     )
                     Spacer(modifier = Modifier.height(20.dp))
-                    Text("Ajouter Ã  une playlist", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text("Ajouter à une playlist", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(16.dp))
                     if (playlists.isEmpty()) {
-                        Text("Aucune playlist â€” crÃ©e-en une d'abord dans BibliothÃ¨que", color = TextSecondary, fontSize = 14.sp)
+                        Text("Aucune playlist — crée-en une d'abord dans Bibliothèque", color = TextSecondary, fontSize = 14.sp)
                     } else {
                         playlists.forEach { playlist ->
                             Row(
@@ -799,7 +800,7 @@ fun BottomNavBar(selectedTab: Int, accentColor: Color, onTabSelected: (Int) -> U
 
     val tabs = listOf(
         NavItem("Accueil", Icons.Filled.Home, Icons.Outlined.Home),
-        NavItem("BibliothÃ¨que", Icons.Filled.LibraryMusic, Icons.Outlined.LibraryMusic),
+        NavItem("Bibliothèque", Icons.Filled.LibraryMusic, Icons.Outlined.LibraryMusic),
         NavItem("Recherche", Icons.Filled.Search, Icons.Outlined.Search),
         NavItem("Profil", Icons.Filled.Person, Icons.Outlined.Person)
     )
@@ -858,11 +859,11 @@ fun HomeTab(
     currentSong: Song?,
     isPlaying: Boolean,
     recentlyPlayed: List<Song>,
-    favoriteSongs: List<Song>,        // â† nouveau
-    playlists: List<Playlist>,         // â† nouveau
+    favoriteSongs: List<Song>,        // ← nouveau
+    playlists: List<Playlist>,         // ← nouveau
     onSeeAllRecent: () -> Unit,
     onSongClick: (Song) -> Unit,
-    onToggleFavorite: (Song) -> Unit,  // â† nouveau
+    onToggleFavorite: (Song) -> Unit,  // ← nouveau
     onShowSongInfo: (Song) -> Unit,
     onShowPlaylistPicker: (Song) -> Unit,
     onOpenPlayer: () -> Unit,
@@ -881,7 +882,7 @@ fun HomeTab(
     val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
     val greeting = when {
         hour < 12 -> "Bonjour"
-        hour < 18 -> "Bon aprÃ¨s-midi"
+        hour < 18 -> "Bon après-midi"
         else -> "Bonsoir"
     }
 
@@ -913,7 +914,7 @@ fun HomeTab(
                 }
                 Icon(
                     imageVector = Icons.Filled.Settings,
-                    contentDescription = "ParamÃ¨tres",
+                    contentDescription = "Paramètres",
                     tint = TextPrimary,
                     modifier = Modifier.size(22.dp)
                 )
@@ -1008,14 +1009,22 @@ fun HomeTab(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Spacer(modifier = Modifier.height(8.dp))
-                            Box(
+                            Row(
                                 modifier = Modifier
                                     .background(LightPurple.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
                                     .border(1.dp, LightPurple.copy(0.4f), RoundedCornerShape(20.dp))
-                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                                    contentDescription = null,
+                                    tint = LightPurple,
+                                    modifier = Modifier.size(14.dp)
+                                )
                                 Text(
-                                    text = if (isPlaying) "â–¶ En lecture" else "â¸ En pause",
+                                    text = if (isPlaying) "En lecture" else "En pause",
                                     color = LightPurple,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
@@ -1064,7 +1073,7 @@ fun HomeTab(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "RÃ‰CEMMENT Ã‰COUTÃ‰S",
+                    text = "RÉCEMMENT ÉCOUTÉS",
                     color = TextSecondary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
@@ -1079,7 +1088,7 @@ fun HomeTab(
             }
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Grille 2x2 â€” seulement 4 chansons
+            // Grille 2x2 — seulement 4 chansons
             val rows = recentlyPlayed.take(4).chunked(2)
             rows.forEach { rowSongs ->
                 Row(
@@ -1142,9 +1151,9 @@ fun HomeTab(
     item {
         Text(
             text = if (searchQuery.isEmpty())
-                "TOUTES LES CHANSONS  â€¢  ${songs.size}"
+                "TOUTES LES CHANSONS  •  ${songs.size}"
             else
-                "${filteredSongs.size} RÃ‰SULTAT(S) POUR \"${searchQuery.uppercase()}\"",
+                "${filteredSongs.size} RÉSULTAT(S) POUR \"${searchQuery.uppercase()}\"",
             color = TextSecondary,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
@@ -1325,12 +1334,12 @@ fun MiniPlayer(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Boutons de contrÃ´le
+                // Boutons de contrôle
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // PrÃ©cÃ©dent
+                    // Précédent
                     Box(
                         modifier = Modifier
                             .size(34.dp)
@@ -1342,7 +1351,7 @@ fun MiniPlayer(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.SkipPrevious,
-                            contentDescription = "PrÃ©cÃ©dent",
+                            contentDescription = "Précédent",
                             tint = TextPrimary,
                             modifier = Modifier.size(22.dp)
                         )
@@ -1397,7 +1406,7 @@ fun SongItem(
     song: Song,
     isPlaying: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,  // â† nouveau
+    modifier: Modifier = Modifier,  // ← nouveau
     onLongClick: (() -> Unit)? = null,
     showMenu: Boolean = false,
     isFavorite: Boolean = false,
@@ -1479,6 +1488,13 @@ fun SongItem(
                 )
             }
 
+            Text(
+                text = formatDuration(song.duration),
+                color = TextSecondary,
+                fontSize = 12.sp
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+
             if (isPlaying) {
                 Icon(
                     imageVector = Icons.Filled.MusicNote,
@@ -1546,7 +1562,7 @@ fun SongItem(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Filled.PlaylistAdd, null, tint = CyanAccent, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(10.dp))
-                                    Text("Ajouter Ã  une playlist", color = TextPrimary, fontSize = 14.sp)
+                                    Text("Ajouter à une playlist", color = TextPrimary, fontSize = 14.sp)
                                 }
                             },
                             onClick = { menuExpanded = false; onShowPlaylistPicker?.invoke() }
@@ -1622,7 +1638,7 @@ fun RecentlyPlayedScreen(
                     )
                 )
             )
-            .pointerInput(Unit) { detectTapGestures { } } // â† absorbe TOUS les taps
+            .pointerInput(Unit) { detectTapGestures { } } // ← absorbe TOUS les taps
     ) {
         Column(
             modifier = Modifier
@@ -1640,7 +1656,7 @@ fun RecentlyPlayedScreen(
                         .size(40.dp)
                         .background(GlassSurface, CircleShape)
                         .border(1.dp, GlassBorder, CircleShape)
-                        .clickable { onClose() },  // â† garde le mÃªme lambda qu'avant
+                        .clickable { onClose() },  // ← garde le même lambda qu'avant
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -1653,7 +1669,7 @@ fun RecentlyPlayedScreen(
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(
-                        text = "RÃ©cemment Ã©coutÃ©s",
+                        text = "Récemment écoutés",
                         color = TextPrimary,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold
@@ -1679,7 +1695,12 @@ fun RecentlyPlayedScreen(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "â–¶", color = Color.White, fontSize = 16.sp)
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "Tout jouer",
@@ -1872,7 +1893,7 @@ fun SearchTab(
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Aucun rÃ©sultat",
+                        text = "Aucun résultat",
                         color = TextSecondary,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium
@@ -1886,7 +1907,7 @@ fun SearchTab(
             }
         } else {
             Text(
-                text = "${filteredSongs.size} rÃ©sultat(s)",
+                text = "${filteredSongs.size} résultat(s)",
                 color = TextSecondary,
                 fontSize = 13.sp
             )
@@ -1961,7 +1982,7 @@ fun PlayerScreen(
                 )
             }
     ) {
-        // Fond floutÃ©
+        // Fond flouté
         if (song.albumArtUri != null) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
@@ -1998,7 +2019,7 @@ fun PlayerScreen(
         ) {
             Spacer(modifier = Modifier.height(52.dp))
 
-            // Header â€” retour + titre + menu
+            // Header — retour + titre + menu
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -2194,7 +2215,7 @@ fun PlayerScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(12.dp),   // â† rÃ©duit la taille du slider
+                    .height(12.dp),   // ← réduit la taille du slider
                 colors = androidx.compose.material3.SliderDefaults.colors(
                     thumbColor = LightPurple,
                     activeTrackColor = LightPurple,
@@ -2216,7 +2237,7 @@ fun PlayerScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ContrÃ´les
+            // Contrôles
             GlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2259,7 +2280,7 @@ fun PlayerScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.SkipPrevious,
-                            contentDescription = "PrÃ©cÃ©dent",
+                            contentDescription = "Précédent",
                             tint = TextPrimary,
                             modifier = Modifier.size(28.dp)
                         )
@@ -2319,7 +2340,7 @@ fun PlayerScreen(
                     ) {
                         Icon(
                             imageVector = if (repeatMode == 2) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-                            contentDescription = "RÃ©pÃ©ter",
+                            contentDescription = "Répéter",
                             tint = if (repeatMode > 0) Color.White else TextSecondary,
                             modifier = Modifier.size(22.dp)
                         )
@@ -2513,9 +2534,9 @@ fun ProfileTab(
                 ) {
                     topArtists.take(3).forEachIndexed { index, artist ->
                         val rankColors = listOf(
-                            Color(0xFFFFD700), // #1 â€” or
-                            Color(0xFFC0C0C0), // #2 â€” argent
-                            Color(0xFFCD7F32)  // #3 â€” bronze
+                            Color(0xFFFFD700), // #1 — or
+                            Color(0xFFC0C0C0), // #2 — argent
+                            Color(0xFFCD7F32)  // #3 — bronze
                         )
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -2637,7 +2658,7 @@ fun ProfileTab(
 
         item {
             Text(
-                text = "RÃ‰CEMMENT Ã‰COUTÃ‰S",
+                text = "RÉCEMMENT ÉCOUTÉS",
                 color = TextSecondary,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
@@ -2751,7 +2772,7 @@ fun LibraryTab(
     BackHandler(enabled = selectedArtist != null) { selectedArtist = null }
     val tabs = listOf("Chansons", "Albums", "Artistes", "Playlists", "Favoris")
     val albums = remember(songs) {
-        songs.groupBy { it.artist }
+        songs.groupBy { it.albumName }
             .entries
             .sortedBy { it.key }
             .map { Pair(it.key, it.value) }
@@ -2830,17 +2851,17 @@ fun LibraryTab(
             ) { page ->
                 when (page) {
                     0 -> {
-                        // Ã‰tat du tri
+                        // État du tri
                         var sortMode by remember { mutableStateOf(0) }
-                        val sortLabels = listOf("A-Z", "Z-A", "Artiste", "RÃ©cent")
+                        val sortLabels = listOf("A-Z", "Z-A", "Artiste", "Récent")
 
-                    // Chansons triÃ©es selon le mode choisi
+                    // Chansons triées selon le mode choisi
                     val sortedSongs = remember(sortMode, songs) {
                         when (sortMode) {
                             0 -> songs.sortedBy { it.title.lowercase() }
                             1 -> songs.sortedByDescending { it.title.lowercase() }
                             2 -> songs.sortedBy { it.artist.lowercase() }
-                            3 -> songs.reversed() // MediaStore renvoie dÃ©jÃ  par date d'ajout
+                            3 -> songs.reversed() // MediaStore renvoie déjà par date d'ajout
                             else -> songs
                         }
                     }
@@ -2884,7 +2905,7 @@ fun LibraryTab(
                         }
                     }
 
-                    // Liste triÃ©e
+                    // Liste triée
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(sortedSongs, key = { it.id }) { song ->
                             val isFav = favoriteSongs.any { it.id == song.id }
@@ -2976,12 +2997,12 @@ fun LibraryTab(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            rowAlbums.forEach { (artist, albumSongs) ->
+                            rowAlbums.forEach { (albumName, albumSongs) ->
                                 GlassCard(
                                     modifier = Modifier
                                         .weight(1f)
                                         .aspectRatio(1f)
-                                        .clickable { onNavigateToAlbum(artist) },
+                                        .clickable { onNavigateToAlbum(albumName) },
                                     cornerRadius = 16.dp
                                 ) {
                                     Box(
@@ -3015,7 +3036,7 @@ fun LibraryTab(
                                         )
                                         Column(modifier = Modifier.padding(8.dp)) {
                                             Text(
-                                                text = artist,
+                                                text = albumName,
                                                 color = TextPrimary,
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.Bold,
@@ -3112,7 +3133,7 @@ fun LibraryTab(
 
                     Box(modifier = Modifier.fillMaxSize()) {
                         Column(modifier = Modifier.fillMaxSize()) {
-                            // Bouton crÃ©er
+                            // Bouton créer
                             GlassCard(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -3172,7 +3193,7 @@ fun LibraryTab(
                                             fontSize = 16.sp
                                         )
                                         Text(
-                                            text = "Appuie sur + pour crÃ©er",
+                                            text = "Appuie sur + pour créer",
                                             color = TextSecondary,
                                             fontSize = 13.sp
                                         )
@@ -3248,7 +3269,7 @@ fun LibraryTab(
                                                 )
                                             }
 
-                                            // Bouton â‹® avec menu
+                                            // Bouton ⋮ avec menu
                                             Box {
                                                 Icon(
                                                     imageVector = Icons.Filled.MoreVert,
@@ -3410,7 +3431,7 @@ fun LibraryTab(
                             }
                         }
 
-                        // Dialog crÃ©er playlist
+                        // Dialog créer playlist
                         if (showCreateDialog) {
                             var playlistName by remember { mutableStateOf("") }
                             Box(
@@ -3483,7 +3504,7 @@ fun LibraryTab(
                                                 .padding(horizontal = 20.dp, vertical = 8.dp)
                                         ) {
                                             Text(
-                                                text = "CrÃ©er",
+                                                text = "Créer",
                                                 color = Color.White,
                                                 fontWeight = FontWeight.Bold
                                             )
@@ -3493,7 +3514,7 @@ fun LibraryTab(
                             }
                         }
 
-                        // Ã‰cran playlist sÃ©lectionnÃ©e
+                        // Écran playlist sélectionnée
                         selectedPlaylist?.let { playlist ->
                             PlaylistDetailScreen(
                                 playlist = playlist,
@@ -3537,7 +3558,7 @@ fun LibraryTab(
                                     fontSize = 16.sp
                                 )
                                 Text(
-                                    text = "Appuie sur l'icÃ´ne cÅ“ur pour ajouter\ndes chansons Ã  tes favoris",
+                                    text = "Appuie sur l'icône cœur pour ajouter\ndes chansons à tes favoris",
                                     color = TextSecondary,
                                     fontSize = 13.sp,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -3645,7 +3666,7 @@ fun PlaylistScreen(
                     listOf(Color(0xFF2D1B4E), Color(0xFF1A0A2E), Color(0xFF0D0D1A))
                 )
             )
-            .pointerInput(Unit) { detectTapGestures { } } // â† absorbe TOUS les taps
+            .pointerInput(Unit) { detectTapGestures { } } // ← absorbe TOUS les taps
     ) {
         Column(
             modifier = Modifier
@@ -3663,7 +3684,7 @@ fun PlaylistScreen(
                         .size(40.dp)
                         .background(GlassSurface, CircleShape)
                         .border(1.dp, GlassBorder, CircleShape)
-                        .clickable { onClose() },  // â† garde le mÃªme lambda qu'avant
+                        .clickable { onClose() },  // ← garde le même lambda qu'avant
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -3702,7 +3723,12 @@ fun PlaylistScreen(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "â–¶", color = Color.White, fontSize = 16.sp)
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "Tout jouer",
@@ -3738,8 +3764,8 @@ fun PlaylistDetailScreen(
     onPlayAll: () -> Unit,
     onSongClick: (Song) -> Unit,
     onAddSong: (Song) -> Unit,
-    onDeletePlaylist: () -> Unit,        // â† nouveau
-    onRemoveSongs: (Set<Long>) -> Unit   // â† nouveau
+    onDeletePlaylist: () -> Unit,        // ← nouveau
+    onRemoveSongs: (Set<Long>) -> Unit   // ← nouveau
 ) {
     var showAddSongs by remember { mutableStateOf(false) }
     var showOptionsMenu by remember { mutableStateOf(false) }
@@ -3773,7 +3799,7 @@ fun PlaylistDetailScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize()
         ) {
-            // â”€â”€ Hero section â”€â”€
+            // ── Hero section ──
             item {
                 Box(
                     modifier = Modifier
@@ -3812,7 +3838,7 @@ fun PlaylistDetailScreen(
                         }
                     }
 
-                    // DÃ©gradÃ© sombre du bas
+                    // Dégradé sombre du bas
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -3827,7 +3853,7 @@ fun PlaylistDetailScreen(
                             )
                     )
 
-                    // Bouton retour en haut Ã  gauche
+                    // Bouton retour en haut à gauche
                     Box(
                         modifier = Modifier
                             .padding(16.dp)
@@ -3846,7 +3872,7 @@ fun PlaylistDetailScreen(
                         )
                     }
 
-                    // Bouton â‹® en haut Ã  droite (remplace le bouton + Ajouter du hero)
+                    // Bouton ⋮ en haut à droite (remplace le bouton + Ajouter du hero)
                     // showOptionsMenu is declared at function level
 
                     Box(
@@ -3891,7 +3917,7 @@ fun PlaylistDetailScreen(
                 }
             }
 
-            // â”€â”€ Boutons Lire + AlÃ©atoire â”€â”€
+            // ── Boutons Lire + Aléatoire ──
             item {
                 Row(
                     modifier = Modifier
@@ -3930,7 +3956,7 @@ fun PlaylistDetailScreen(
                         }
                     }
 
-                    // Bouton AlÃ©atoire
+                    // Bouton Aléatoire
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -3956,7 +3982,7 @@ fun PlaylistDetailScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "AlÃ©atoire",
+                                text = "Aléatoire",
                                 color = LightPurple,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
@@ -3966,7 +3992,7 @@ fun PlaylistDetailScreen(
                 }
             }
 
-            // â”€â”€ Liste vide â”€â”€
+            // ── Liste vide ──
             if (displaySongs.isEmpty()) {
                 item {
                     Box(
@@ -3998,7 +4024,7 @@ fun PlaylistDetailScreen(
                 }
             }
 
-            // â”€â”€ Liste des chansons â”€â”€
+            // ── Liste des chansons ──
             items(displaySongs) { song ->
                 SongItem(
                     song = song,
@@ -4037,7 +4063,7 @@ fun PlaylistDetailScreen(
                             )
                             .padding(24.dp)
                     ) {
-                        // PoignÃ©e
+                        // Poignée
                         Box(
                             modifier = Modifier
                                 .width(40.dp)
@@ -4072,7 +4098,7 @@ fun PlaylistDetailScreen(
 
                         Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(GlassBorder))
 
-                        // Option : GÃ©rer
+                        // Option : Gérer
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -4092,7 +4118,7 @@ fun PlaylistDetailScreen(
                                 Icon(Icons.Filled.Tune, null, tint = CyanAccent, modifier = Modifier.size(22.dp))
                             }
                             Spacer(modifier = Modifier.width(16.dp))
-                            Text("GÃ©rer", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                            Text("Gérer", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                         }
 
                         Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(GlassBorder))
@@ -4126,7 +4152,7 @@ fun PlaylistDetailScreen(
             }
         }
 
-        // Ã‰cran GÃ©rer
+        // Écran Gérer
         if (showManage) {
             var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
             var searchQuery by remember { mutableStateOf("") }
@@ -4173,7 +4199,7 @@ fun PlaylistDetailScreen(
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(
-                            text = "${selectedIds.size} sÃ©lectionnÃ©(s)",
+                            text = "${selectedIds.size} sélectionné(s)",
                             color = TextPrimary,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold
@@ -4216,7 +4242,7 @@ fun PlaylistDetailScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // SÃ©lectionner tout
+                    // Sélectionner tout
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -4250,7 +4276,7 @@ fun PlaylistDetailScreen(
                             }
                         }
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text("SÃ©lectionner tout", color = LightPurple, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text("Sélectionner tout", color = LightPurple, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     }
 
                     // Liste
@@ -4277,7 +4303,7 @@ fun PlaylistDetailScreen(
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Cercle de sÃ©lection
+                                // Cercle de sélection
                                 Box(
                                     modifier = Modifier
                                         .size(24.dp)
@@ -4366,7 +4392,7 @@ fun PlaylistDetailScreen(
         }
 
 
-        // â”€â”€ Ã‰cran ajouter chansons â”€â”€
+        // ── Écran ajouter chansons ──
         if (showAddSongs) {
             val filteredSongs = remember(searchQuery, allSongs) {
                 if (searchQuery.isEmpty()) allSongs
@@ -4421,7 +4447,7 @@ fun PlaylistDetailScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "${(localAddedIds.size - playlist.songs.size).coerceAtLeast(0)} ajoutÃ©e(s) cette session",
+                                text = "${(localAddedIds.size - playlist.songs.size).coerceAtLeast(0)} ajoutée(s) cette session",
                                 color = LightPurple,
                                 fontSize = 12.sp
                             )
@@ -4569,9 +4595,9 @@ fun PlaylistDetailScreen(
     }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// QueueScreen â€” file d'attente interactive
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────
+// QueueScreen — file d'attente interactive
+// ─────────────────────────────────────────────────────────────
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun QueueScreen(
@@ -4795,10 +4821,10 @@ fun QueueScreen(
 
                                 Spacer(modifier = Modifier.width(8.dp))
 
-                                // IcÃ´ne Drag Handle (compact â€” remplace les grosses flÃ¨ches)
+                                // Icône Drag Handle (compact — remplace les grosses flèches)
                                 Icon(
                                     imageVector = Icons.Filled.DragHandle,
-                                    contentDescription = "DÃ©placer",
+                                    contentDescription = "Déplacer",
                                     tint = TextSecondary.copy(alpha = 0.6f),
                                     modifier = Modifier.size(20.dp)
                                 )

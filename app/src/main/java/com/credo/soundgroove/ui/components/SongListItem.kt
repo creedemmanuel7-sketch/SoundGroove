@@ -24,6 +24,14 @@ import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.theme.*
 
+fun formatDuration(durationMs: Long): String {
+    if (durationMs <= 0L) return "0:00"
+    val totalSeconds = durationMs / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%d:%02d".format(minutes, seconds)
+}
+
 @Composable
 fun SongListItem(
     song: Song,
@@ -102,6 +110,13 @@ fun SongListItem(
                 overflow = TextOverflow.Ellipsis
             )
         }
+
+        // Duration
+        Text(
+            text = formatDuration(song.duration),
+            color = TextSecondary,
+            fontSize = 12.sp
+        )
 
         // Favorite indicator
         if (isFavorite) {
