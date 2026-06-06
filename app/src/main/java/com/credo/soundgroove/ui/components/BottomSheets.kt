@@ -446,3 +446,94 @@ fun SongContextMenuSheet(
         }
     }
 }
+
+// ─── Sleep Timer Sheet ──────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SleepTimerBottomSheet(
+    accentColor: Color,
+    onDismiss: () -> Unit,
+    onSelectMinutes: (Int) -> Unit,
+    onSelectEndOfTrack: () -> Unit,
+    onCancel: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF150B2B),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 40.dp)
+        ) {
+            Text(
+                "Minuterie de sommeil",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                "La lecture s'arrêtera automatiquement",
+                fontSize = 14.sp,
+                color = TextSecondary
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+
+            val options = listOf(
+                15 to "15 minutes",
+                30 to "30 minutes",
+                60 to "60 minutes"
+            )
+            options.forEach { (minutes, label) ->
+                SleepTimerOption(
+                    label = label,
+                    accentColor = accentColor,
+                    onClick = { onSelectMinutes(minutes); onDismiss() }
+                )
+            }
+            SleepTimerOption(
+                label = "Fin de la piste en cours",
+                accentColor = accentColor,
+                onClick = { onSelectEndOfTrack(); onDismiss() }
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            SleepTimerOption(
+                label = "Annuler la minuterie",
+                accentColor = TextSecondary,
+                onClick = { onCancel(); onDismiss() }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SleepTimerOption(
+    label: String,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onClick() }
+            .background(GlassSurface)
+            .border(1.dp, GlassBorder, RoundedCornerShape(14.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_play),
+            contentDescription = null,
+            tint = accentColor,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Text(label, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+}

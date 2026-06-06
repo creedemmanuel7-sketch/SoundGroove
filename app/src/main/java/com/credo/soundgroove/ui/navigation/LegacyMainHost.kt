@@ -19,18 +19,20 @@ fun LegacyMainHost(
     onNavigateToAlbum: (String) -> Unit,
     onNavigateToArtist: (String) -> Unit
 ) {
-    // Collect all ViewModel state here and pass down to MainScreen
     val controller by viewModel.mediaController.collectAsState()
+    val currentTheme by viewModel.currentTheme.collectAsState()
+    val sleepTimerRemainingSeconds by viewModel.sleepTimerRemainingSeconds.collectAsState()
 
-    // If the MediaController isn't ready yet, show nothing (or a splash)
     if (controller != null) {
-        // Legacy MainScreen still manages its own internal state for now.
-        // It receives the controller and handles tabs / overlays internally.
-        // This is the transitional bridge – as each screen is migrated,
-        // remove it from MainScreen and drive it from the ViewModel here.
         com.credo.soundgroove.MainScreen(
             player = controller!!,
             accentColor = accentColor,
+            currentTheme = currentTheme,
+            onThemeSelected = { viewModel.setTheme(it) },
+            sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
+            onSetSleepTimer = { viewModel.setSleepTimer(it) },
+            onSetSleepTimerEndOfTrack = { viewModel.setSleepTimerEndOfTrack() },
+            onCancelSleepTimer = { viewModel.cancelSleepTimer() },
             onNavigateToPlaylist = onNavigateToPlaylist,
             onNavigateToSearch = onNavigateToSearch,
             onNavigateToAlbum = onNavigateToAlbum,

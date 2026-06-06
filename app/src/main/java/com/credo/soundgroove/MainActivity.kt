@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -112,11 +113,7 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 } else {
-                    val accentColor = when (currentTheme) {
-                        AppTheme.CLASSIC_DARK -> ClassicAccent
-                        AppTheme.ORIGINAL_PURPLE -> LightPurple
-                        AppTheme.CORAL_VIBRANT -> CoralAccent
-                    }
+                    val accentColor = accentColorForTheme(currentTheme)
                     com.credo.soundgroove.ui.navigation.AppNavigation(
                         viewModel = viewModel,
                         accentColor = accentColor
@@ -130,9 +127,15 @@ class MainActivity : ComponentActivity() {
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
-    player: MediaController, 
+    player: MediaController,
     accentColor: Color,
-    onNavigateToPlaylist: (Long) -> Unit = {}, 
+    currentTheme: AppTheme = AppTheme.ORIGINAL_PURPLE,
+    onThemeSelected: (AppTheme) -> Unit = {},
+    sleepTimerRemainingSeconds: Int? = null,
+    onSetSleepTimer: (Int) -> Unit = {},
+    onSetSleepTimerEndOfTrack: () -> Unit = {},
+    onCancelSleepTimer: () -> Unit = {},
+    onNavigateToPlaylist: (Long) -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
     onNavigateToAlbum: (String) -> Unit = {},
     onNavigateToArtist: (String) -> Unit = {}
@@ -238,19 +241,22 @@ fun MainScreen(
     BackHandler(enabled = showPlayer) { showPlayer = false }
     var showQueue by remember { mutableStateOf(false) }
     BackHandler(enabled = showQueue) { showQueue = false }
+    var showSettings by remember { mutableStateOf(false) }
+    BackHandler(enabled = showSettings) { showSettings = false }
+    var showSleepTimerSheet by remember { mutableStateOf(false) }
+    val secondaryAccent = themeSecondaryAccent(accentColor)
+    val appVersion = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
+        } catch (_: Exception) {
+            "1.0"
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF2D1B4E),
-                        Color(0xFF1A0A2E),
-                        Color(0xFF0D0D1A)
-                    )
-                )
-            )
+            .background(themeBackgroundBrush(currentTheme))
     ) {
         if (!hasPermission) {
             Box(
@@ -263,7 +269,7 @@ fun MainScreen(
                     Icon(
                         imageVector = Icons.Filled.AudioFile,
                         contentDescription = null,
-                        tint = LightPurple,
+                        tint = accentColor,
                         modifier = Modifier.size(64.dp)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -277,7 +283,7 @@ fun MainScreen(
                     Spacer(modifier = Modifier.height(24.dp))
                     Box(
                         modifier = Modifier
-                            .background(LightPurple, RoundedCornerShape(12.dp))
+                            .background(accentColor, RoundedCornerShape(12.dp))
                             .clickable {
                                 permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
                             }
@@ -327,7 +333,9 @@ fun MainScreen(
                         },
                         onOpenPlayer = { showPlayer = true },
                         onNavigateToSearch = onNavigateToSearch,
-                        accentColor = accentColor
+                        onOpenSettings = { showSettings = true },
+                        accentColor = accentColor,
+                        secondaryAccent = secondaryAccent
                     )
 
                     1 -> LibraryTab(
@@ -452,6 +460,7 @@ fun MainScreen(
                         song = song,
                         isPlaying = isPlaying,
                         accentColor = accentColor,
+                        sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
                         onPlayPause = {
                             if (isPlaying) player.pause() else player.play()
                             isPlaying = !isPlaying
@@ -499,6 +508,7 @@ fun MainScreen(
         PlayerScreen(
             song = currentSong!!,
             isPlaying = isPlaying,
+            accentColor = accentColor,
             onPlayPause = {
                 if (isPlaying) player.pause() else player.play()
                 isPlaying = !isPlaying
@@ -522,6 +532,37 @@ fun MainScreen(
             onOpenQueue = { showQueue = true }
         )
     }
+
+    AnimatedVisibility(
+        visible = showSettings,
+        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+    ) {
+        com.credo.soundgroove.ui.screens.SettingsScreen(
+            currentTheme = currentTheme,
+            accentColor = accentColor,
+            appVersion = appVersion,
+            songCount = songs.size,
+            favoriteCount = favoriteSongs.size,
+            playlistCount = playlists.size,
+            sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
+            onBack = { showSettings = false },
+            onThemeSelected = onThemeSelected,
+            onOpenSleepTimer = { showSleepTimerSheet = true },
+            onCancelSleepTimer = onCancelSleepTimer
+        )
+    }
+
+    if (showSleepTimerSheet) {
+        com.credo.soundgroove.ui.components.SleepTimerBottomSheet(
+            accentColor = accentColor,
+            onDismiss = { showSleepTimerSheet = false },
+            onSelectMinutes = onSetSleepTimer,
+            onSelectEndOfTrack = onSetSleepTimerEndOfTrack,
+            onCancel = onCancelSleepTimer
+        )
+    }
+
     // Overlay infos chanson
     AnimatedVisibility(
         visible = showSongInfo && overlayedSong != null,
@@ -868,7 +909,9 @@ fun HomeTab(
     onShowPlaylistPicker: (Song) -> Unit,
     onOpenPlayer: () -> Unit,
     onNavigateToSearch: () -> Unit = {},
-    accentColor: Color
+    onOpenSettings: () -> Unit = {},
+    accentColor: Color,
+    secondaryAccent: Color = themeSecondaryAccent(accentColor)
 ){
     var searchQuery by remember { mutableStateOf("") }
     val filteredSongs = remember(searchQuery, songs) {
@@ -916,7 +959,9 @@ fun HomeTab(
                     imageVector = Icons.Filled.Settings,
                     contentDescription = "Paramètres",
                     tint = TextPrimary,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clickable { onOpenSettings() }
                 )
             }
         }
@@ -951,7 +996,7 @@ fun HomeTab(
                             unfocusedTextColor = TextPrimary,
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent,
-                            cursorColor = LightPurple
+                            cursorColor = accentColor
                         ),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
@@ -987,7 +1032,7 @@ fun HomeTab(
                             .fillMaxWidth()
                             .background(
                                 Brush.linearGradient(
-                                    listOf(MediumPurple.copy(0.4f), DarkPurple.copy(0.2f))
+                                    listOf(accentColor.copy(0.4f), secondaryAccent.copy(0.2f))
                                 )
                             )
                             .padding(16.dp),
@@ -996,7 +1041,7 @@ fun HomeTab(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = currentSong.artist,
-                                color = PurpleAccent,
+                                color = accentColor,
                                 fontSize = 13.sp
                             )
                             Spacer(modifier = Modifier.height(4.dp))
@@ -1011,8 +1056,8 @@ fun HomeTab(
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(
                                 modifier = Modifier
-                                    .background(LightPurple.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
-                                    .border(1.dp, LightPurple.copy(0.4f), RoundedCornerShape(20.dp))
+                                    .background(accentColor.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
+                                    .border(1.dp, accentColor.copy(0.4f), RoundedCornerShape(20.dp))
                                     .padding(horizontal = 10.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -1020,12 +1065,12 @@ fun HomeTab(
                                 Icon(
                                     imageVector = if (isPlaying) Icons.Filled.PlayArrow else Icons.Filled.Pause,
                                     contentDescription = null,
-                                    tint = LightPurple,
+                                    tint = accentColor,
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Text(
                                     text = if (isPlaying) "En lecture" else "En pause",
-                                    color = LightPurple,
+                                    color = accentColor,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -1200,12 +1245,14 @@ fun MiniPlayer(
     song: Song,
     isPlaying: Boolean,
     accentColor: Color,
+    sleepTimerRemainingSeconds: Int? = null,
     onPlayPause: () -> Unit,
     onOpen: () -> Unit,
     onSwipeNext: () -> Unit = {},
     onSwipePrev: () -> Unit = {},
     player: androidx.media3.common.Player
 ) {
+    val secondaryAccent = themeSecondaryAccent(accentColor)
     var progress by remember { mutableStateOf(0f) }
     var swipeOffsetX by remember { mutableStateOf(0f) }
     val swipeThresholdPx = 80f
@@ -1262,7 +1309,7 @@ fun MiniPlayer(
                         .fillMaxHeight()
                         .background(
                             Brush.horizontalGradient(
-                                listOf(accentColor, CyanAccent)
+                                listOf(accentColor, secondaryAccent)
                             )
                         )
                 )
@@ -1287,7 +1334,7 @@ fun MiniPlayer(
                         modifier = Modifier
                             .size(42.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(DarkPurple),
+                            .background(MaterialTheme.colorScheme.surface),
                         contentAlignment = Alignment.Center
                     ) {
                         if (song.albumArtUri != null) {
@@ -1329,6 +1376,19 @@ fun MiniPlayer(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                        com.credo.soundgroove.ui.screens.formatSleepTimerDisplay(sleepTimerRemainingSeconds)?.let { timerText ->
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.Bedtime,
+                                    contentDescription = null,
+                                    tint = accentColor,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(timerText, color = accentColor, fontSize = 9.sp)
+                            }
+                        }
                     }
                 }
 
@@ -1925,6 +1985,7 @@ fun SearchTab(
 fun PlayerScreen(
     song: Song,
     isPlaying: Boolean,
+    accentColor: Color,
     isFavorite: Boolean,
     onPlayPause: () -> Unit,
     onClose: () -> Unit,
@@ -1934,6 +1995,7 @@ fun PlayerScreen(
     onOpenQueue: () -> Unit,
     player: androidx.media3.common.Player
 ) {
+    val secondaryAccent = themeSecondaryAccent(accentColor)
     var progress by remember { mutableStateOf(0f) }
     var isShuffled by remember { mutableStateOf(false) }
     var repeatMode by remember { mutableStateOf(0) }
@@ -2004,9 +2066,9 @@ fun PlayerScreen(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFF3D2060).copy(alpha = 0.6f),
-                            Color(0xFF1A0A2E).copy(alpha = 0.8f),
-                            Color(0xFF0D0D1A).copy(alpha = 0.95f)
+                            accentColor.copy(alpha = 0.35f),
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.95f)
                         )
                     )
                 )
@@ -2113,7 +2175,7 @@ fun PlayerScreen(
                     .offset { androidx.compose.ui.unit.IntOffset(dragOffsetX.toInt(), 0) }
                     .size(300.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(DarkPurple)
+                    .background(MaterialTheme.colorScheme.surface)
                     .pointerInput(Unit) {
                         detectHorizontalDragGestures(
                             onDragEnd = {
@@ -2180,7 +2242,7 @@ fun PlayerScreen(
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = song.artist,
-                            color = LightPurple,
+                            color = accentColor,
                             fontSize = 14.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -2217,8 +2279,8 @@ fun PlayerScreen(
                     .fillMaxWidth()
                     .height(12.dp),   // ← réduit la taille du slider
                 colors = androidx.compose.material3.SliderDefaults.colors(
-                    thumbColor = LightPurple,
-                    activeTrackColor = LightPurple,
+                    thumbColor = accentColor,
+                    activeTrackColor = accentColor,
                     inactiveTrackColor = CardSurface
                 )
             )
@@ -2254,7 +2316,7 @@ fun PlayerScreen(
                     Box(
                         modifier = Modifier
                             .size(44.dp)
-                            .background(if (isShuffled) LightPurple else GlassSurface, CircleShape)
+                            .background(if (isShuffled) accentColor else GlassSurface, CircleShape)
                             .border(1.dp, GlassBorder, CircleShape)
                             .clickable {
                                 isShuffled = !isShuffled
@@ -2290,7 +2352,7 @@ fun PlayerScreen(
                         modifier = Modifier
                             .size(68.dp)
                             .background(
-                                Brush.radialGradient(listOf(LightPurple, MediumPurple)),
+                                Brush.radialGradient(listOf(accentColor, secondaryAccent)),
                                 CircleShape
                             )
                             .clickable { onPlayPause() },
@@ -2324,7 +2386,7 @@ fun PlayerScreen(
                         modifier = Modifier
                             .size(44.dp)
                             .background(
-                                if (repeatMode > 0) LightPurple else GlassSurface,
+                                if (repeatMode > 0) accentColor else GlassSurface,
                                 CircleShape
                             )
                             .border(1.dp, GlassBorder, CircleShape)

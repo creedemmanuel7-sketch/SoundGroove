@@ -258,6 +258,34 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun setSleepTimerEndOfTrack() {
+        sleepTimerJob?.cancel()
+        _sleepTimerRemainingSeconds.value = -1
+        sleepTimerJob = viewModelScope.launch {
+            val controller = mediaController.value ?: run {
+                _sleepTimerRemainingSeconds.value = null
+                return@launch
+            }
+            while (true) {
+                val dur = controller.duration
+                val pos = controller.currentPosition
+                if (dur > 0 && pos >= dur - 800) {
+                    controller.pause()
+                    _sleepTimerRemainingSeconds.value = null
+                    break
+                }
+                if (controller.playbackState == Player.STATE_ENDED) {
+                    controller.pause()
+                    _sleepTimerRemainingSeconds.value = null
+                    break
+                }
+                delay(500L)
+            }
+        }
+    }
+
+    fun cancelSleepTimer() = setSleepTimer(0)
+
     override fun onCleared() {
         super.onCleared()
         controllerFuture?.let { MediaController.releaseFuture(it) }
