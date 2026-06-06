@@ -3,6 +3,8 @@ package com.credo.soundgroove.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +37,7 @@ fun formatDuration(durationMs: Long): String {
     return "%d:%02d".format(minutes, seconds)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SongListItem(
     song: Song,
@@ -58,7 +61,10 @@ fun SongListItem(
             .fillMaxWidth()
             .clip(RoundedCornerShape(SgRadius.sm))
             .background(rowBg)
-            .clickable { onClick() }
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onMenuClick
+            )
             .padding(horizontal = SgSpacing.xs, vertical = SgSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(SgSpacing.sm)

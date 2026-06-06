@@ -152,7 +152,14 @@ fun MainScreen(
     onLibrarySelectedTabChange: (Int) -> Unit = {},
     onSyncSongs: (List<Song>) -> Unit = {},
     onReloadMusic: () -> Unit = {},
-    listeningTimeLabel: String = "0 min"
+    listeningTimeLabel: String = "0 min",
+    smartNotificationsEnabled: Boolean = true,
+    onSmartNotificationsChange: (Boolean) -> Unit = {},
+    persistentMiniPlayerEnabled: Boolean = true,
+    onPersistentMiniPlayerChange: (Boolean) -> Unit = {},
+    performanceModeEnabled: Boolean = false,
+    onPerformanceModeChange: (Boolean) -> Unit = {},
+    onClearRecentlyPlayed: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -549,7 +556,11 @@ fun MainScreen(
                         songs = songs,
                         recentlyPlayed = recentlyPlayed,
                         favoriteSongs = favoriteSongs,
+                        playlists = playlists,
+                        listeningTimeLabel = listeningTimeLabel,
                         accentColor = accentColor,
+                        onOpenSettings = { showSettings = true },
+                        onOpenFavorites = { onSelectedTabChange(1) },
                         onSongClick = { song ->
                             currentSong = song
                             playSong(song, recentlyPlayed)
@@ -564,7 +575,7 @@ fun MainScreen(
                 }
             }
             AnimatedVisibility(
-                visible = !showPlayer && !showRecentlyPlayed && currentSong != null,
+                visible = persistentMiniPlayerEnabled && !showPlayer && !showRecentlyPlayed && currentSong != null,
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
             ) {
@@ -683,7 +694,15 @@ fun MainScreen(
             onOpenSleepTimer = { showSleepTimerSheet = true },
             onCancelSleepTimer = onCancelSleepTimer,
             playbackSpeed = playbackSpeed,
-            onOpenPlaybackSpeed = { showPlaybackSpeedSheet = true }
+            onOpenPlaybackSpeed = { showPlaybackSpeedSheet = true },
+            smartNotificationsEnabled = smartNotificationsEnabled,
+            onSmartNotificationsChange = onSmartNotificationsChange,
+            persistentMiniPlayerEnabled = persistentMiniPlayerEnabled,
+            onPersistentMiniPlayerChange = onPersistentMiniPlayerChange,
+            performanceModeEnabled = performanceModeEnabled,
+            onPerformanceModeChange = onPerformanceModeChange,
+            onReloadMusic = onReloadMusic,
+            onClearRecentlyPlayed = onClearRecentlyPlayed
         )
     }
 
@@ -958,47 +977,48 @@ fun MainScreen(
         }
     }
 
-    val queueBaseIndex = player.currentMediaItemIndex.coerceIn(0, (currentPlaylist.size - 1).coerceAtLeast(0))
-    val queueDisplayList = remember(currentPlaylist, queueBaseIndex) {
-        if (currentPlaylist.isEmpty()) emptyList()
-        else currentPlaylist.drop(queueBaseIndex) + currentPlaylist.take(queueBaseIndex)
-    }
+    val queueCurrentIndex = player.currentMediaItemIndex.coerceIn(0, (currentPlaylist.size - 1).coerceAtLeast(0))
 
     AnimatedVisibility(
         visible = showQueue,
-        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+        enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(animationSpec = tween(180)),
+        exit = slideOutVertically(targetOffsetY = { it / 2 }) + fadeOut(animationSpec = tween(140))
     ) {
-        QueueScreen(
-            playlist = queueDisplayList,
-            currentIndex = 0,
-            accentColor = accentColor,
-            onClose = { showQueue = false },
-            onPlaySong = { displayIndex ->
-                val actualIndex = (queueBaseIndex + displayIndex) % currentPlaylist.size.coerceAtLeast(1)
-                player.seekToDefaultPosition(actualIndex)
-                player.play()
-                isPlaying = true
-            },
-            onRemoveSong = { displayIndex ->
-                if (currentPlaylist.isEmpty()) return@QueueScreen
-                val actualIndex = (queueBaseIndex + displayIndex) % currentPlaylist.size
-                player.removeMediaItem(actualIndex)
-                val newList = currentPlaylist.toMutableList()
-                newList.removeAt(actualIndex)
-                currentPlaylist = newList
-            },
-            onMoveSong = { from, to ->
-                if (currentPlaylist.isEmpty()) return@QueueScreen
-                val actualFrom = (queueBaseIndex + from) % currentPlaylist.size
-                val actualTo = (queueBaseIndex + to) % currentPlaylist.size
-                player.moveMediaItem(actualFrom, actualTo)
-                val newList = currentPlaylist.toMutableList()
-                val item = newList.removeAt(actualFrom)
-                newList.add(actualTo, item)
-                currentPlaylist = newList
-            }
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.22f))
+                .pointerInput(Unit) { detectTapGestures { showQueue = false } },
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            QueueScreen(
+                playlist = currentPlaylist,
+                currentIndex = queueCurrentIndex,
+                accentColor = accentColor,
+                onClose = { showQueue = false },
+                onPlaySong = { index ->
+                    if (currentPlaylist.isEmpty()) return@QueueScreen
+                    player.seekToDefaultPosition(index)
+                    player.play()
+                    isPlaying = true
+                },
+                onRemoveSong = { index ->
+                    if (currentPlaylist.isEmpty() || index !in currentPlaylist.indices) return@QueueScreen
+                    player.removeMediaItem(index)
+                    val newList = currentPlaylist.toMutableList()
+                    newList.removeAt(index)
+                    currentPlaylist = newList
+                },
+                onMoveSong = { from, to ->
+                    if (currentPlaylist.isEmpty() || from !in currentPlaylist.indices || to !in currentPlaylist.indices || from == to) return@QueueScreen
+                    player.moveMediaItem(from, to)
+                    val newList = currentPlaylist.toMutableList()
+                    val item = newList.removeAt(from)
+                    newList.add(to, item)
+                    currentPlaylist = newList
+                }
+            )
+        }
     }
 
 }
@@ -1095,6 +1115,30 @@ fun HomeTab(
             song.title.contains(searchQuery, ignoreCase = true) ||
                     song.artist.contains(searchQuery, ignoreCase = true)
         }
+    }
+    val dailySuggestions = remember(songs, recentlyPlayed) {
+        val calendar = java.util.Calendar.getInstance()
+        val daySeed = calendar.get(java.util.Calendar.YEAR) * 400L +
+                calendar.get(java.util.Calendar.DAY_OF_YEAR)
+        val listenCounts = recentlyPlayed.groupingBy { it.id }.eachCount()
+
+        fun hasUsefulMetadata(song: Song): Boolean {
+            val unknownValues = setOf("", "inconnu", "unknown", "<unknown>")
+            return song.title.trim().lowercase() !in unknownValues &&
+                    song.artist.trim().lowercase() !in unknownValues
+        }
+
+        fun stableDailyRank(song: Song): Long {
+            val mixed = song.id * 1103515245L + daySeed * 12345L
+            return if (mixed == Long.MIN_VALUE) Long.MAX_VALUE else kotlin.math.abs(mixed)
+        }
+
+        songs.sortedWith(
+            compareByDescending<Song> { listenCounts[it.id] ?: 0 }
+                .thenByDescending { if (it.albumArtUri != null) 1 else 0 }
+                .thenByDescending { if (hasUsefulMetadata(it)) 1 else 0 }
+                .thenBy { stableDailyRank(it) }
+        ).take(8)
     }
 
     val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
@@ -1368,35 +1412,98 @@ fun HomeTab(
         }
     }
 
-    item {
-        Text(
-            text = if (searchQuery.isEmpty())
-                "TOUTES LES CHANSONS  •  ${songs.size}"
-            else
-                "${filteredSongs.size} RÉSULTAT(S) POUR \"${searchQuery.uppercase()}\"",
-            color = TextSecondary,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 2.sp
-        )
-    }
-
-        items(filteredSongs) { song ->
-            SongItem(
-                song = song,
-                isPlaying = currentSong?.id == song.id && isPlaying,
-                onClick = { onSongClick(song) },
-                showMenu = true,
-                isFavorite = favoriteSongs.any { it.id == song.id },
-                accentColor = accentColor,
-                onToggleFavorite = { onToggleFavorite(song) },
-                onShowInfo = { onShowSongInfo(song) },
-                onShowPlaylistPicker = { onShowPlaylistPicker(song) },
-                onPlayNow = { onSongClick(song) },
-                onPlayNext = { onPlayNext(song) },
-                onAddToQueue = { onAddToQueue(song) }
+    if (searchQuery.isEmpty()) {
+        item {
+            Text(
+                text = "SUGGESTION DU JOUR",
+                color = TextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
             )
         }
+
+        if (dailySuggestions.isEmpty()) {
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    cornerRadius = 18.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_songs),
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Tes suggestions apparaîtront dès que ta bibliothèque sera chargée.",
+                            color = TextSecondary,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
+        } else {
+            items(dailySuggestions, key = { it.id }) { song ->
+                SongItem(
+                    song = song,
+                    isPlaying = currentSong?.id == song.id && isPlaying,
+                    onClick = { onSongClick(song) },
+                    showMenu = true,
+                    isFavorite = favoriteSongs.any { it.id == song.id },
+                    accentColor = accentColor,
+                    onToggleFavorite = { onToggleFavorite(song) },
+                    onShowInfo = { onShowSongInfo(song) },
+                    onShowPlaylistPicker = { onShowPlaylistPicker(song) },
+                    onPlayNow = { onSongClick(song) },
+                    onPlayNext = { onPlayNext(song) },
+                    onAddToQueue = { onAddToQueue(song) }
+                )
+            }
+            item {
+                Text(
+                    text = "Retrouve toutes les chansons dans Bibliothèque > Chansons.",
+                    color = TextTertiary,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+    } else {
+        item {
+            Text(
+                text = "${filteredSongs.size} RÉSULTAT(S) POUR \"${searchQuery.uppercase()}\"",
+                color = TextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
+            )
+        }
+
+        items(filteredSongs, key = { it.id }) { song ->
+                SongItem(
+                    song = song,
+                    isPlaying = currentSong?.id == song.id && isPlaying,
+                    onClick = { onSongClick(song) },
+                    showMenu = true,
+                    isFavorite = favoriteSongs.any { it.id == song.id },
+                    accentColor = accentColor,
+                    onToggleFavorite = { onToggleFavorite(song) },
+                    onShowInfo = { onShowSongInfo(song) },
+                    onShowPlaylistPicker = { onShowPlaylistPicker(song) },
+                    onPlayNow = { onSongClick(song) },
+                    onPlayNext = { onPlayNext(song) },
+                    onAddToQueue = { onAddToQueue(song) }
+                )
+        }
+    }
 
     item { Spacer(modifier = Modifier.height(16.dp)) }
 }
@@ -2549,116 +2656,156 @@ fun PlayerScreen(
             Spacer(modifier = Modifier.height(18.dp))
 
             // Contrôles
-            GlassCard(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 2.dp),
-                cornerRadius = 24.dp
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
+                        .size(44.dp)
+                        .clickable {
+                            isShuffled = !isShuffled
+                            player.shuffleModeEnabled = isShuffled
+                        },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(if (isShuffled) accentColor else GlassSurface, CircleShape)
-                            .border(1.dp, GlassBorder, CircleShape)
-                            .clickable {
-                                isShuffled = !isShuffled
-                                player.shuffleModeEnabled = isShuffled
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_shuffle),
-                            contentDescription = "Shuffle",
-                            tint = if (isShuffled) Color.White else TextSecondary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
+                    Icon(
+                        painter = painterResource(R.drawable.ic_shuffle),
+                        contentDescription = "Shuffle",
+                        tint = if (isShuffled) accentColor else TextSecondary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
 
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .background(GlassSurface, CircleShape)
-                            .border(1.dp, GlassBorder, CircleShape)
-                            .clickable { player.seekToPreviousMediaItem() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_previous),
-                            contentDescription = "Précédent",
-                            tint = TextPrimary,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clickable { player.seekToPreviousMediaItem() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_previous),
+                        contentDescription = "Précédent",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
 
-                    Box(
-                        modifier = Modifier
-                            .size(68.dp)
-                            .background(
-                                Brush.radialGradient(listOf(accentColor, secondaryAccent)),
-                                CircleShape
-                            )
-                            .clickable { onPlayPause() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
-                            contentDescription = if (isPlaying) "Pause" else "Lecture",
-                            tint = Color.White,
-                            modifier = Modifier.size(36.dp)
+                Box(
+                    modifier = Modifier
+                        .size(68.dp)
+                        .background(
+                            Brush.radialGradient(listOf(accentColor, secondaryAccent)),
+                            CircleShape
                         )
-                    }
+                        .clickable { onPlayPause() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
+                        contentDescription = if (isPlaying) "Pause" else "Lecture",
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
 
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .background(GlassSurface, CircleShape)
-                            .border(1.dp, GlassBorder, CircleShape)
-                            .clickable { player.seekToNextMediaItem() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_next),
-                            contentDescription = "Suivant",
-                            tint = TextPrimary,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clickable { player.seekToNextMediaItem() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_next),
+                        contentDescription = "Suivant",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
 
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(
-                                if (repeatMode > 0) accentColor else GlassSurface,
-                                CircleShape
-                            )
-                            .border(1.dp, GlassBorder, CircleShape)
-                            .clickable {
-                                repeatMode = (repeatMode + 1) % 3
-                                player.repeatMode = when (repeatMode) {
-                                    1 -> androidx.media3.common.Player.REPEAT_MODE_ALL
-                                    2 -> androidx.media3.common.Player.REPEAT_MODE_ONE
-                                    else -> androidx.media3.common.Player.REPEAT_MODE_OFF
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            painter = painterResource(if (repeatMode == 2) R.drawable.ic_repeat_one else R.drawable.ic_repeat),
-                            contentDescription = "Répéter",
-                            tint = if (repeatMode > 0) Color.White else TextSecondary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clickable {
+                            repeatMode = (repeatMode + 1) % 3
+                            player.repeatMode = when (repeatMode) {
+                                1 -> androidx.media3.common.Player.REPEAT_MODE_ALL
+                                2 -> androidx.media3.common.Player.REPEAT_MODE_ONE
+                                else -> androidx.media3.common.Player.REPEAT_MODE_OFF
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(if (repeatMode == 2) R.drawable.ic_repeat_one else R.drawable.ic_repeat),
+                        contentDescription = "Répéter",
+                        tint = if (repeatMode > 0) accentColor else TextSecondary,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PlayerActionButton(
+                    iconRes = if (isFavorite) R.drawable.ic_favorite_filled else R.drawable.ic_favorite_outline,
+                    label = "Favori",
+                    tint = if (isFavorite) Color(0xFFFF6B9D) else TextSecondary,
+                    onClick = onToggleFavorite
+                )
+                PlayerActionButton(
+                    iconRes = R.drawable.ic_queue,
+                    label = "File",
+                    tint = TextSecondary,
+                    onClick = onOpenQueue
+                )
+                PlayerActionButton(
+                    iconRes = R.drawable.ic_sort,
+                    label = "Vitesse",
+                    tint = TextSecondary,
+                    onClick = onOpenPlaybackSpeed
+                )
+                PlayerActionButton(
+                    iconRes = R.drawable.ic_songs,
+                    label = "Infos",
+                    tint = TextSecondary,
+                    onClick = onShowInfo
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun PlayerActionButton(
+    iconRes: Int,
+    label: String,
+    tint: Color,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(SgRadius.pill))
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = label,
+            tint = tint,
+            modifier = Modifier.size(22.dp)
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(label, color = TextSecondary, fontSize = 11.sp)
     }
 }
 
@@ -2717,10 +2864,16 @@ fun ProfileTab(
     songs: List<Song>,
     recentlyPlayed: List<Song>,
     favoriteSongs: List<Song>,
+    playlists: List<Playlist>,
+    listeningTimeLabel: String,
     accentColor: Color = MaterialTheme.colorScheme.primary,
+    onOpenSettings: () -> Unit = {},
+    onOpenFavorites: () -> Unit = {},
     onSongClick: (Song) -> Unit
 ) {
-    var userName by remember { mutableStateOf("Credson") }
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("soundgroove_prefs", android.content.Context.MODE_PRIVATE) }
+    var userName by remember { mutableStateOf(prefs.getString("profile_name", "Credson") ?: "Credson") }
     var showEditDialog by remember { mutableStateOf(false) }
 
     val topArtists = remember(recentlyPlayed) {
@@ -2730,6 +2883,36 @@ fun ProfileTab(
             .sortedByDescending { it.value.size }
             .take(5)
             .map { it.key }
+    }
+    val topAlbums = remember(recentlyPlayed) {
+        recentlyPlayed
+            .filter { it.albumName.isNotBlank() && it.albumName != "Inconnu" }
+            .groupBy { it.albumName }
+            .entries
+            .sortedByDescending { it.value.size }
+            .take(3)
+            .map { it.key to it.value.size }
+    }
+    val mostPlayedRecentSongs = remember(recentlyPlayed) {
+        recentlyPlayed
+            .groupBy { it.id }
+            .values
+            .sortedByDescending { it.size }
+            .mapNotNull { it.firstOrNull()?.let { song -> song to it.size } }
+            .take(3)
+    }
+    val albumCount = remember(songs) { songs.map { it.albumName }.filter { it.isNotBlank() && it != "Inconnu" }.distinct().size }
+    val folderCount = remember(songs) { songs.map { it.folderPath }.filter { it.isNotBlank() }.distinct().size }
+    val totalLibraryDuration = remember(songs) { songs.sumOf { it.duration } }
+    val libraryDurationLabel = remember(totalLibraryDuration) {
+        val totalMinutes = totalLibraryDuration / 60000
+        val hours = totalMinutes / 60
+        val minutes = totalMinutes % 60
+        when {
+            hours > 0 -> "${hours} h ${minutes.toString().padStart(2, '0')}"
+            minutes > 0 -> "$minutes min"
+            else -> "< 1 min"
+        }
     }
 
     LazyColumn(
@@ -2840,6 +3023,58 @@ fun ProfileTab(
                         Text(text = "Favoris", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     }
                 }
+            }
+        }
+
+        item {
+            GlassCard(modifier = Modifier.fillMaxWidth(), cornerRadius = SgRadius.lg, accentColor = accentColor) {
+                Column(modifier = Modifier.padding(SgSpacing.lg)) {
+                    Text(
+                        text = "TON ÉCOUTE",
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        ProfileMetric("Écouté", listeningTimeLabel, modifier = Modifier.weight(1f))
+                        ProfileMetric("Playlists", "${playlists.size}", modifier = Modifier.weight(1f))
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        ProfileMetric("Albums", "$albumCount", modifier = Modifier.weight(1f))
+                        ProfileMetric("Durée locale", libraryDurationLabel, modifier = Modifier.weight(1f))
+                    }
+                    if (folderCount > 0) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        ProfileMetric("Dossiers détectés", "$folderCount", modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ProfileShortcut(
+                    title = "Favoris",
+                    subtitle = "${favoriteSongs.size} titres",
+                    iconRes = R.drawable.ic_favorite_filled,
+                    tint = FavoritePink,
+                    modifier = Modifier.weight(1f),
+                    onClick = onOpenFavorites
+                )
+                ProfileShortcut(
+                    title = "Réglages",
+                    subtitle = "Confort et thèmes",
+                    iconRes = R.drawable.ic_settings,
+                    tint = accentColor,
+                    modifier = Modifier.weight(1f),
+                    onClick = onOpenSettings
+                )
             }
         }
         if (topArtists.isNotEmpty()) {
@@ -2981,6 +3216,90 @@ fun ProfileTab(
             }
         }
 
+        if (topAlbums.isNotEmpty()) {
+            item {
+                Text(
+                    text = "TOP ALBUMS RÉCENTS",
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    topAlbums.forEachIndexed { index, (album, count) ->
+                        GlassCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 14.dp) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "#${index + 1}",
+                                    color = accentColor,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.width(36.dp)
+                                )
+                                Icon(
+                                    imageVector = Icons.Filled.Album,
+                                    contentDescription = null,
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = album,
+                                    color = TextPrimary,
+                                    fontSize = 14.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = "$count écoutes",
+                                    color = TextSecondary,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (mostPlayedRecentSongs.isNotEmpty()) {
+            item {
+                Text(
+                    text = "MORCEAUX À RETROUVER",
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+            items(mostPlayedRecentSongs) { (song, count) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSongClick(song) }
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SongItem(song = song, isPlaying = false, onClick = { onSongClick(song) })
+                    Text(
+                        text = "x$count",
+                        color = accentColor,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+            }
+        }
+
         item {
             Text(
                 text = "RÉCEMMENT ÉCOUTÉS",
@@ -3053,7 +3372,8 @@ fun ProfileTab(
                         modifier = Modifier
                             .background(LightPurple, RoundedCornerShape(12.dp))
                             .clickable {
-                                userName = tempName
+                                userName = tempName.ifBlank { "Credson" }
+                                prefs.edit().putString("profile_name", userName).apply()
                                 showEditDialog = false
                             }
                             .padding(horizontal = 20.dp, vertical = 8.dp)
@@ -3065,6 +3385,91 @@ fun ProfileTab(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileMetric(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(GlassSurface.copy(alpha = 0.32f))
+            .border(1.dp, GlassBorder.copy(alpha = 0.24f), RoundedCornerShape(14.dp))
+            .padding(12.dp)
+    ) {
+        Text(
+            text = value,
+            color = TextPrimary,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = label,
+            color = TextSecondary,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun ProfileShortcut(
+    title: String,
+    subtitle: String,
+    iconRes: Int,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    GlassCard(
+        modifier = modifier.clickable { onClick() },
+        cornerRadius = SgRadius.lg,
+        accentColor = tint
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .background(tint.copy(alpha = 0.18f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    color = TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = subtitle,
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
@@ -3098,9 +3503,11 @@ fun LibraryTab(
 ) {
     var selectedAlbum by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     var selectedArtist by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
+    var selectedFolder by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     
     BackHandler(enabled = selectedAlbum != null) { selectedAlbum = null }
     BackHandler(enabled = selectedArtist != null) { selectedArtist = null }
+    BackHandler(enabled = selectedFolder != null) { selectedFolder = null }
     val tabs = listOf("Chansons", "Albums", "Artistes", "Playlists", "Dossiers", "Favoris")
     val albums = remember(songs) {
         songs.groupBy { it.albumName }
@@ -3146,12 +3553,34 @@ fun LibraryTab(
                 R.drawable.ic_songs,
                 R.drawable.ic_favorite_outline
             )
+            val pagerState = androidx.compose.foundation.pager.rememberPagerState(
+                initialPage = selectedTab.coerceIn(0, tabs.lastIndex),
+                pageCount = { tabs.size }
+            )
+            val tabsListState = androidx.compose.foundation.lazy.rememberLazyListState()
+            val scope = rememberCoroutineScope()
+            val activeTab = pagerState.currentPage.coerceIn(0, tabs.lastIndex)
+
+            LaunchedEffect(selectedTab) {
+                val target = selectedTab.coerceIn(0, tabs.lastIndex)
+                if (pagerState.currentPage != target) {
+                    pagerState.animateScrollToPage(target)
+                }
+            }
+            LaunchedEffect(activeTab) {
+                if (selectedTab != activeTab) {
+                    onSelectedTabChange(activeTab)
+                }
+                tabsListState.animateScrollToItem(activeTab)
+            }
+
             androidx.compose.foundation.lazy.LazyRow(
                 modifier = Modifier.fillMaxWidth(),
+                state = tabsListState,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(tabs.size) { index ->
-                    val selected = selectedTab == index
+                    val selected = activeTab == index
                     val iconRes = if (index == 5 && selected) R.drawable.ic_favorite_filled else tabIcons.getOrElse(index) { R.drawable.ic_songs }
                     Row(
                         modifier = Modifier
@@ -3161,7 +3590,13 @@ fun LibraryTab(
                                 else Brush.horizontalGradient(listOf(GlassSurface, GlassSurface))
                             )
                             .border(1.dp, if (selected) accentColor.copy(0.5f) else GlassBorder, RoundedCornerShape(SgRadius.pill))
-                            .clickable { onSelectedTabChange(index) }
+                            .clickable {
+                                onSelectedTabChange(index)
+                                scope.launch {
+                                    pagerState.animateScrollToPage(index)
+                                    tabsListState.animateScrollToItem(index)
+                                }
+                            }
                             .padding(horizontal = 12.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -3179,19 +3614,6 @@ fun LibraryTab(
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                         )
                     }
-                }
-            }
-
-            val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { tabs.size })
-
-            LaunchedEffect(selectedTab) {
-                if (pagerState.currentPage != selectedTab) {
-                    pagerState.animateScrollToPage(selectedTab)
-                }
-            }
-            LaunchedEffect(pagerState.currentPage, pagerState.isScrollInProgress) {
-                if (!pagerState.isScrollInProgress && selectedTab != pagerState.currentPage) {
-                    onSelectedTabChange(pagerState.currentPage)
                 }
             }
 
@@ -3827,7 +4249,29 @@ fun LibraryTab(
                 }
 
                 4 -> {
-                    if (folders.isEmpty()) {
+                    val folderDetail = selectedFolder
+                    if (folderDetail != null) {
+                        FolderDetailContent(
+                            folderName = folderDetail.first,
+                            folderSongs = folderDetail.second,
+                            currentSong = currentSong,
+                            isPlaying = isPlaying,
+                            favoriteSongs = favoriteSongs,
+                            accentColor = accentColor,
+                            onBack = { selectedFolder = null },
+                            onSongClick = { song -> onPlayPlaylist(song, folderDetail.second) },
+                            onPlayAll = {
+                                folderDetail.second.firstOrNull()?.let { firstSong ->
+                                    onPlayPlaylist(firstSong, folderDetail.second)
+                                }
+                            },
+                            onToggleFavorite = onToggleFavorite,
+                            onPlayNext = onPlayNext,
+                            onAddToQueue = onAddToQueue,
+                            onShowSongInfo = onShowSongInfo,
+                            onShowPlaylistPicker = onShowPlaylistPicker
+                        )
+                    } else if (folders.isEmpty()) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
@@ -3844,7 +4288,7 @@ fun LibraryTab(
                                 GlassCard(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { folderSongs.firstOrNull()?.let { onPlayPlaylist(it, folderSongs) } },
+                                        .clickable { selectedFolder = folderName to folderSongs },
                                     cornerRadius = 14.dp
                                 ) {
                                     Row(
@@ -3867,7 +4311,7 @@ fun LibraryTab(
                                             Text(folderName.substringAfterLast('/'), color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             Text("${folderSongs.size} chanson(s)", color = TextSecondary, fontSize = 12.sp)
                                         }
-                                        Icon(painter = painterResource(R.drawable.ic_play), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
+                                        Icon(painter = painterResource(R.drawable.ic_back), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -3968,6 +4412,122 @@ fun LibraryTab(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun FolderDetailContent(
+    folderName: String,
+    folderSongs: List<Song>,
+    currentSong: Song?,
+    isPlaying: Boolean,
+    favoriteSongs: List<Song>,
+    accentColor: Color,
+    onBack: () -> Unit,
+    onSongClick: (Song) -> Unit,
+    onPlayAll: () -> Unit,
+    onToggleFavorite: (Song) -> Unit,
+    onPlayNext: (Song) -> Unit,
+    onAddToQueue: (Song) -> Unit,
+    onShowSongInfo: (Song) -> Unit,
+    onShowPlaylistPicker: (Song) -> Unit
+) {
+    var menuSong by remember { mutableStateOf<Song?>(null) }
+    val folderLabel = folderName.substringAfterLast('/').ifBlank { "Dossier inconnu" }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(GlassSurface)
+                    .border(1.dp, GlassBorder, CircleShape)
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_back),
+                    contentDescription = "Retour",
+                    tint = TextPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = folderLabel,
+                    color = TextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "${folderSongs.size} chanson(s)",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(SgRadius.pill))
+                    .background(Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor))))
+                    .clickable(enabled = folderSongs.isNotEmpty()) { onPlayAll() }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_play),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text("Tout lire", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            items(folderSongs, key = { it.id }) { song ->
+                com.credo.soundgroove.ui.components.SongListItem(
+                    song = song,
+                    isFavorite = favoriteSongs.any { it.id == song.id },
+                    isCurrentSong = currentSong?.id == song.id && isPlaying,
+                    accentColor = accentColor,
+                    onClick = { onSongClick(song) },
+                    onMenuClick = { menuSong = song }
+                )
+            }
+            item { Spacer(modifier = Modifier.height(16.dp)) }
+        }
+    }
+
+    menuSong?.let { song ->
+        com.credo.soundgroove.ui.components.SongContextMenuSheet(
+            song = song,
+            isFavorite = favoriteSongs.any { it.id == song.id },
+            onToggleFavorite = { onToggleFavorite(song) },
+            onPlayNext = { onPlayNext(song); menuSong = null },
+            onAddToQueue = { onAddToQueue(song); menuSong = null },
+            onAddToPlaylist = { onShowPlaylistPicker(song); menuSong = null },
+            onViewInfo = { onShowSongInfo(song); menuSong = null },
+            onDismiss = { menuSong = null }
+        )
     }
 }
 
@@ -4933,6 +5493,8 @@ fun QueueScreen(
     onMoveSong: (Int, Int) -> Unit
 ) {
     var verticalDragOffset by remember { mutableStateOf(0f) }
+    var draggingIndex by remember { mutableStateOf<Int?>(null) }
+    var itemDragOffset by remember { mutableStateOf(0f) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val safeCurrentIndex = currentIndex.coerceIn(0, (playlist.size - 1).coerceAtLeast(0))
 
@@ -4944,7 +5506,9 @@ fun QueueScreen(
 
     Box(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
+            .fillMaxHeight(0.74f)
+            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
@@ -4974,7 +5538,7 @@ fun QueueScreen(
                 .fillMaxSize()
                 .padding(horizontal = 20.dp)
         ) {
-            Spacer(modifier = Modifier.height(52.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Indicateur de drag (pill) en haut
             Box(
@@ -4984,7 +5548,7 @@ fun QueueScreen(
                     .background(GlassBorder, RoundedCornerShape(2.dp))
                     .align(Alignment.CenterHorizontally)
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Header
             Row(
@@ -5024,7 +5588,7 @@ fun QueueScreen(
                 Spacer(modifier = Modifier.size(40.dp))
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             if (playlist.isEmpty()) {
                 Box(
@@ -5051,6 +5615,7 @@ fun QueueScreen(
             ) {
                 itemsIndexed(playlist, key = { _, song -> song.id }) { index, song ->
                     val isCurrent = index == safeCurrentIndex
+                    val isDragging = draggingIndex == index
                     val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
                         confirmValueChange = { value ->
                             if (value != androidx.compose.material3.SwipeToDismissBoxValue.Settled && !isCurrent) {
@@ -5093,7 +5658,14 @@ fun QueueScreen(
                         }
                     ) {
                         GlassCard(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .offset {
+                                    IntOffset(
+                                        x = 0,
+                                        y = if (isDragging) itemDragOffset.toInt() else 0
+                                    )
+                                },
                             cornerRadius = 16.dp
                         ) {
                             Row(
@@ -5173,12 +5745,52 @@ fun QueueScreen(
 
                                 Spacer(modifier = Modifier.width(8.dp))
 
-                                Icon(
-                                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_drag),
-                                    contentDescription = "Déplacer",
-                                    tint = TextSecondary.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .pointerInput(index, playlist.size) {
+                                            detectVerticalDragGestures(
+                                                onDragStart = {
+                                                    draggingIndex = index
+                                                    itemDragOffset = 0f
+                                                },
+                                                onVerticalDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    val currentDraggingIndex = draggingIndex ?: index
+                                                    itemDragOffset += dragAmount
+                                                    val rowHeightPx = 68f
+                                                    when {
+                                                        itemDragOffset > rowHeightPx && currentDraggingIndex < playlist.lastIndex -> {
+                                                            onMoveSong(currentDraggingIndex, currentDraggingIndex + 1)
+                                                            draggingIndex = currentDraggingIndex + 1
+                                                            itemDragOffset -= rowHeightPx
+                                                        }
+                                                        itemDragOffset < -rowHeightPx && currentDraggingIndex > 0 -> {
+                                                            onMoveSong(currentDraggingIndex, currentDraggingIndex - 1)
+                                                            draggingIndex = currentDraggingIndex - 1
+                                                            itemDragOffset += rowHeightPx
+                                                        }
+                                                    }
+                                                },
+                                                onDragEnd = {
+                                                    draggingIndex = null
+                                                    itemDragOffset = 0f
+                                                },
+                                                onDragCancel = {
+                                                    draggingIndex = null
+                                                    itemDragOffset = 0f
+                                                }
+                                            )
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_drag),
+                                        contentDescription = "Déplacer",
+                                        tint = if (isDragging) accentColor else TextSecondary.copy(alpha = 0.75f),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
                             }
                         }
                     }

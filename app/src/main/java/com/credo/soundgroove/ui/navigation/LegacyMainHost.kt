@@ -29,6 +29,9 @@ fun LegacyMainHost(
     val totalListeningSeconds by viewModel.totalListeningSeconds.collectAsState()
     val mainSelectedTab by viewModel.mainSelectedTab.collectAsState()
     val librarySelectedTab by viewModel.librarySelectedTab.collectAsState()
+    val smartNotificationsEnabled by viewModel.smartNotificationsEnabled.collectAsState()
+    val persistentMiniPlayerEnabled by viewModel.persistentMiniPlayerEnabled.collectAsState()
+    val performanceModeEnabled by viewModel.performanceModeEnabled.collectAsState()
 
     if (controller != null) {
         com.credo.soundgroove.MainScreen(
@@ -55,7 +58,14 @@ fun LegacyMainHost(
             onLibrarySelectedTabChange = { viewModel.updateLibrarySelectedTab(it) },
             onSyncSongs = { viewModel.syncSongs(it) },
             onReloadMusic = { viewModel.reloadMusic() },
-            listeningTimeLabel = viewModel.formatListeningTime(totalListeningSeconds)
+            listeningTimeLabel = viewModel.formatListeningTime(totalListeningSeconds),
+            smartNotificationsEnabled = smartNotificationsEnabled,
+            onSmartNotificationsChange = { viewModel.setSmartNotificationsEnabled(it) },
+            persistentMiniPlayerEnabled = persistentMiniPlayerEnabled,
+            onPersistentMiniPlayerChange = { viewModel.setPersistentMiniPlayerEnabled(it) },
+            performanceModeEnabled = performanceModeEnabled,
+            onPerformanceModeChange = { viewModel.setPerformanceModeEnabled(it) },
+            onClearRecentlyPlayed = { viewModel.clearRecentlyPlayed() }
         )
     }
 }

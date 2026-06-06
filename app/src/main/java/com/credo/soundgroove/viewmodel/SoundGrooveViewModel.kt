@@ -97,6 +97,15 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _playbackSpeed = MutableStateFlow(prefs.getFloat("playback_speed", 1.0f))
     val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
+
+    private val _smartNotificationsEnabled = MutableStateFlow(prefs.getBoolean("smart_notifications_enabled", true))
+    val smartNotificationsEnabled: StateFlow<Boolean> = _smartNotificationsEnabled.asStateFlow()
+
+    private val _persistentMiniPlayerEnabled = MutableStateFlow(prefs.getBoolean("persistent_miniplayer_enabled", true))
+    val persistentMiniPlayerEnabled: StateFlow<Boolean> = _persistentMiniPlayerEnabled.asStateFlow()
+
+    private val _performanceModeEnabled = MutableStateFlow(prefs.getBoolean("performance_mode_enabled", false))
+    val performanceModeEnabled: StateFlow<Boolean> = _performanceModeEnabled.asStateFlow()
     
     private val _sortMode = MutableStateFlow(0)
     val sortMode: StateFlow<Int> = _sortMode.asStateFlow()
@@ -275,6 +284,21 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         _mediaController.value?.setPlaybackSpeed(clamped)
     }
 
+    fun setSmartNotificationsEnabled(enabled: Boolean) {
+        _smartNotificationsEnabled.value = enabled
+        prefs.edit().putBoolean("smart_notifications_enabled", enabled).apply()
+    }
+
+    fun setPersistentMiniPlayerEnabled(enabled: Boolean) {
+        _persistentMiniPlayerEnabled.value = enabled
+        prefs.edit().putBoolean("persistent_miniplayer_enabled", enabled).apply()
+    }
+
+    fun setPerformanceModeEnabled(enabled: Boolean) {
+        _performanceModeEnabled.value = enabled
+        prefs.edit().putBoolean("performance_mode_enabled", enabled).apply()
+    }
+
     fun playNext(song: Song) {
         val controller = _mediaController.value ?: return
         val item = songToMediaItem(song)
@@ -332,6 +356,12 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     fun renamePlaylist(playlistId: Long, newName: String) {
         viewModelScope.launch {
             dbRepository.renamePlaylist(playlistId, newName)
+        }
+    }
+
+    fun clearRecentlyPlayed() {
+        viewModelScope.launch {
+            dbRepository.clearRecentlyPlayed()
         }
     }
 

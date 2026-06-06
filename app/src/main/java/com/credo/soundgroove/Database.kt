@@ -73,6 +73,9 @@ interface RecentlyPlayedDao {
 
     @Query("DELETE FROM recently_played WHERE songId NOT IN (SELECT songId FROM recently_played ORDER BY playedAt DESC LIMIT 70)")
     suspend fun trimToLimit()
+
+    @Query("DELETE FROM recently_played")
+    suspend fun clearAll()
 }
 
 @Dao

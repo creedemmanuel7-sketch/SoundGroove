@@ -45,6 +45,10 @@ class DatabaseRepository(
         recentlyPlayedDao.trimToLimit()
     }
 
+    suspend fun clearRecentlyPlayed() {
+        recentlyPlayedDao.clearAll()
+    }
+
     // --- Playlists ---
     fun getAllPlaylists(): Flow<List<Playlist>> {
         return playlistDao.getAllPlaylists().map { entities ->

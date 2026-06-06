@@ -48,9 +48,18 @@ fun SettingsScreen(
     onThemeSelected: (AppTheme) -> Unit,
     onOpenSleepTimer: () -> Unit,
     onCancelSleepTimer: () -> Unit,
-    onOpenPlaybackSpeed: () -> Unit
+    onOpenPlaybackSpeed: () -> Unit,
+    smartNotificationsEnabled: Boolean = true,
+    onSmartNotificationsChange: (Boolean) -> Unit = {},
+    persistentMiniPlayerEnabled: Boolean = true,
+    onPersistentMiniPlayerChange: (Boolean) -> Unit = {},
+    performanceModeEnabled: Boolean = false,
+    onPerformanceModeChange: (Boolean) -> Unit = {},
+    onReloadMusic: () -> Unit = {},
+    onClearRecentlyPlayed: () -> Unit = {}
 ) {
     val backgroundBrush = themeBackgroundBrush(currentTheme)
+    var showClearRecentConfirm by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -244,6 +253,57 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
+            SettingsSection(title = "Confort") {
+                SettingsToggleRow(
+                    icon = Icons.Filled.Notifications,
+                    title = "Notifications intelligentes",
+                    description = "Prépare les rappels discrets et résumés d'écoute",
+                    checked = smartNotificationsEnabled,
+                    accentColor = accentColor,
+                    onCheckedChange = onSmartNotificationsChange
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                SettingsToggleRow(
+                    icon = Icons.Filled.LibraryMusic,
+                    title = "Mini-player persistant",
+                    description = "Garder les contrôles rapides en bas de l'écran",
+                    checked = persistentMiniPlayerEnabled,
+                    accentColor = accentColor,
+                    onCheckedChange = onPersistentMiniPlayerChange
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                SettingsToggleRow(
+                    icon = Icons.Filled.Bolt,
+                    title = "Mode performance",
+                    description = "Réduire les effets visuels lors des longues sessions",
+                    checked = performanceModeEnabled,
+                    accentColor = accentColor,
+                    onCheckedChange = onPerformanceModeChange
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            SettingsSection(title = "Bibliothèque") {
+                SettingsActionRow(
+                    iconRes = R.drawable.ic_songs,
+                    title = "Rescanner la bibliothèque",
+                    description = "Rechercher les nouveaux fichiers audio",
+                    accentColor = accentColor,
+                    onClick = onReloadMusic
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                SettingsActionRow(
+                    iconRes = R.drawable.ic_trash,
+                    title = "Vider les écoutes récentes",
+                    description = "Efface l'historique local, sans toucher aux fichiers",
+                    accentColor = FavoritePink,
+                    onClick = { showClearRecentConfirm = true }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
             SettingsSection(title = "Statistiques") {
                 StatRowIcon(R.drawable.ic_songs, "Morceaux", "$songCount")
                 Spacer(modifier = Modifier.height(10.dp))
@@ -276,6 +336,37 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
         }
+    }
+
+    if (showClearRecentConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearRecentConfirm = false },
+            title = { Text("Vider les écoutes récentes ?", color = TextPrimary) },
+            text = {
+                Text(
+                    "Cette action supprime uniquement l'historique local affiché dans Profil.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onClearRecentlyPlayed()
+                        showClearRecentConfirm = false
+                    }
+                ) {
+                    Text("Vider", color = FavoritePink, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearRecentConfirm = false }) {
+                    Text("Annuler", color = TextSecondary)
+                }
+            },
+            containerColor = CardSurface,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary
+        )
     }
 }
 
@@ -349,6 +440,97 @@ private fun ThemeOptionRow(
                 modifier = Modifier.size(22.dp)
             )
         }
+    }
+}
+
+@Composable
+private fun SettingsToggleRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    description: String,
+    checked: Boolean,
+    accentColor: Color,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onCheckedChange(!checked) }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(accentColor.copy(alpha = 0.18f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(description, color = TextSecondary, fontSize = 12.sp)
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = accentColor,
+                uncheckedThumbColor = TextSecondary,
+                uncheckedTrackColor = GlassSurface
+            )
+        )
+    }
+}
+
+@Composable
+private fun SettingsActionRow(
+    iconRes: Int,
+    title: String,
+    description: String,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onClick() }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(accentColor.copy(alpha = 0.18f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(description, color = TextSecondary, fontSize = 12.sp)
+        }
+        Icon(
+            imageVector = Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = TextSecondary,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 
