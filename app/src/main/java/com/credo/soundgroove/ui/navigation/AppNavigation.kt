@@ -2,17 +2,26 @@ package com.credo.soundgroove.ui.navigation
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.credo.soundgroove.ui.screens.PlaylistDetailScreen
 import com.credo.soundgroove.ui.screens.AlbumDetailScreen
 import com.credo.soundgroove.ui.screens.ArtistDetailScreen
 import android.net.Uri
 import com.credo.soundgroove.data.model.Playlist
+import com.credo.soundgroove.ui.components.MiniPlayer
 import com.credo.soundgroove.viewmodel.SoundGrooveViewModel
 
 object Routes {
@@ -37,17 +46,21 @@ fun AppNavigation(
     val songs by viewModel.songs.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
+    val playbackPosition by viewModel.playbackPosition.collectAsState()
     val favoriteSongs by viewModel.favoriteSongs.collectAsState()
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
 
-    NavHost(
-        navController = navController,
-        startDestination = Routes.HOME,
-        enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) + fadeIn(tween(300)) },
-        exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeOut(tween(150)) },
-        popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeIn(tween(300)) },
-        popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) + fadeOut(tween(150)) }
-    ) {
-        composable(Routes.HOME) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        NavHost(
+            navController = navController,
+            startDestination = Routes.HOME,
+            enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) + fadeIn(tween(300)) },
+            exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeOut(tween(150)) },
+            popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeIn(tween(300)) },
+            popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) + fadeOut(tween(150)) }
+        ) {
+            composable(Routes.HOME) {
             // The legacy MainScreen still handles the tabbed home experience
             // It is wired to the ViewModel via state collection
             // This will be refactored progressively
@@ -69,45 +82,98 @@ fun AppNavigation(
             )
         }
 
-        composable(
-            route = Routes.SEARCH,
-            enterTransition = { fadeIn(tween(200)) },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(200)) },
-            popExitTransition = { fadeOut(tween(200)) }
-        ) {
-            com.credo.soundgroove.ui.screens.SearchScreen(
-                allSongs = songs,
-                favoriteSongs = favoriteSongs,
-                currentSong = currentSong,
-                accentColor = accentColor,
-                onBack = { navController.popBackStack() },
-                onPlaySong = { song -> viewModel.playSong(song) },
-                onMenuClick = { /* TODO: show bottom sheet from search */ }
-            )
-        }
+            composable(
+                route = Routes.SEARCH,
+                enterTransition = { fadeIn(tween(200)) },
+                exitTransition = { fadeOut(tween(200)) },
+                popEnterTransition = { fadeIn(tween(200)) },
+                popExitTransition = { fadeOut(tween(200)) }
+            ) {
+                com.credo.soundgroove.ui.screens.SearchScreen(
+                    allSongs = songs,
+                    favoriteSongs = favoriteSongs,
+                    currentSong = currentSong,
+                    accentColor = accentColor,
+                    onBack = { navController.popBackStack() },
+                    onPlaySong = { song -> viewModel.playSongs(songs, song) },
+                    onMenuClick = { /* TODO: show bottom sheet from search */ }
+                )
+            }
 
-        composable(Routes.PLAYLIST_DETAIL) { backStackEntry ->
-            val playlistId = backStackEntry.arguments?.getString("playlistId")?.toLongOrNull()
-            val playlist = playlists.find { it.id == playlistId }
+            composable(Routes.PLAYLIST_DETAIL) { backStackEntry ->
+                val playlistId = backStackEntry.arguments?.getString("playlistId")?.toLongOrNull()
+                val playlist = playlists.find { it.id == playlistId }
 
-            playlist?.let {
-                PlaylistDetailScreen(
-                    playlist = it,
+                playlist?.let {
+                    PlaylistDetailScreen(
+                        playlist = it,
+                        currentSong = currentSong,
+                        isPlaying = isPlaying,
+                        favoriteSongs = favoriteSongs,
+                        accentColor = accentColor,
+                        onBack = { navController.popBackStack() },
+                        onPlaySong = { song -> viewModel.playPlaylist(it, song) },
+                        onShufflePlay = {
+                            val shuffled = it.copy(songs = it.songs.shuffled())
+                            viewModel.playPlaylist(shuffled)
+                        },
+                        onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
+                        onRemoveSongFromPlaylist = { songId -> viewModel.removeSongFromPlaylist(it.id, songId) },
+                        onDeletePlaylist = { viewModel.deletePlaylist(it.id) },
+                        onRenamePlaylist = { newName -> viewModel.renamePlaylist(it.id, newName) },
+                        onPlayNext = { song -> viewModel.playNext(song) },
+                        onAddToQueue = { song -> viewModel.addToQueue(song) },
+                        onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
+                    )
+                }
+            }
+
+            composable(Routes.ALBUM_DETAIL) { backStackEntry ->
+                val encodedName = backStackEntry.arguments?.getString("albumName") ?: ""
+                val albumName = Uri.decode(encodedName)
+                val albumSongs = songs.filter { it.albumName == albumName }
+
+                AlbumDetailScreen(
+                    albumName = albumName,
+                    songs = albumSongs,
                     currentSong = currentSong,
                     isPlaying = isPlaying,
                     favoriteSongs = favoriteSongs,
                     accentColor = accentColor,
                     onBack = { navController.popBackStack() },
-                    onPlaySong = { song -> viewModel.playPlaylist(it, song) },
+                    onPlaySong = { song -> viewModel.playSongs(albumSongs, song) },
                     onShufflePlay = {
-                        val shuffled = it.copy(songs = it.songs.shuffled())
-                        viewModel.playPlaylist(shuffled)
+                        if (albumSongs.isNotEmpty()) {
+                            viewModel.playPlaylist(Playlist(name = albumName, songs = albumSongs.shuffled()))
+                        }
                     },
                     onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
-                    onRemoveSongFromPlaylist = { songId -> viewModel.removeSongFromPlaylist(it.id, songId) },
-                    onDeletePlaylist = { viewModel.deletePlaylist(it.id) },
-                    onRenamePlaylist = { newName -> viewModel.renamePlaylist(it.id, newName) },
+                    onPlayNext = { song -> viewModel.playNext(song) },
+                    onAddToQueue = { song -> viewModel.addToQueue(song) },
+                    onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
+                )
+            }
+
+            composable(Routes.ARTIST_DETAIL) { backStackEntry ->
+                val encodedName = backStackEntry.arguments?.getString("artistName") ?: ""
+                val artistName = Uri.decode(encodedName)
+                val artistSongs = songs.filter { it.artist == artistName }
+
+                ArtistDetailScreen(
+                    artistName = artistName,
+                    songs = artistSongs,
+                    currentSong = currentSong,
+                    isPlaying = isPlaying,
+                    favoriteSongs = favoriteSongs,
+                    accentColor = accentColor,
+                    onBack = { navController.popBackStack() },
+                    onPlaySong = { song -> viewModel.playSongs(artistSongs, song) },
+                    onShufflePlay = {
+                        if (artistSongs.isNotEmpty()) {
+                            viewModel.playPlaylist(Playlist(name = artistName, songs = artistSongs.shuffled()))
+                        }
+                    },
+                    onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
                     onPlayNext = { song -> viewModel.playNext(song) },
                     onAddToQueue = { song -> viewModel.addToQueue(song) },
                     onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
@@ -115,56 +181,23 @@ fun AppNavigation(
             }
         }
 
-        composable(Routes.ALBUM_DETAIL) { backStackEntry ->
-            val encodedName = backStackEntry.arguments?.getString("albumName") ?: ""
-            val albumName = Uri.decode(encodedName)
-            val albumSongs = songs.filter { it.albumName == albumName }
-
-            AlbumDetailScreen(
-                albumName = albumName,
-                songs = albumSongs,
-                currentSong = currentSong,
-                isPlaying = isPlaying,
-                favoriteSongs = favoriteSongs,
-                accentColor = accentColor,
-                onBack = { navController.popBackStack() },
-                onPlaySong = { song -> viewModel.playSong(song) },
-                onShufflePlay = {
-                    if (albumSongs.isNotEmpty()) {
-                        viewModel.playPlaylist(Playlist(name = albumName, songs = albumSongs.shuffled()))
-                    }
-                },
-                onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
-                onPlayNext = { song -> viewModel.playNext(song) },
-                onAddToQueue = { song -> viewModel.addToQueue(song) },
-                onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
-            )
-        }
-
-        composable(Routes.ARTIST_DETAIL) { backStackEntry ->
-            val encodedName = backStackEntry.arguments?.getString("artistName") ?: ""
-            val artistName = Uri.decode(encodedName)
-            val artistSongs = songs.filter { it.artist == artistName }
-
-            ArtistDetailScreen(
-                artistName = artistName,
-                songs = artistSongs,
-                currentSong = currentSong,
-                isPlaying = isPlaying,
-                favoriteSongs = favoriteSongs,
-                accentColor = accentColor,
-                onBack = { navController.popBackStack() },
-                onPlaySong = { song -> viewModel.playSong(song) },
-                onShufflePlay = {
-                    if (artistSongs.isNotEmpty()) {
-                        viewModel.playPlaylist(Playlist(name = artistName, songs = artistSongs.shuffled()))
-                    }
-                },
-                onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
-                onPlayNext = { song -> viewModel.playNext(song) },
-                onAddToQueue = { song -> viewModel.addToQueue(song) },
-                onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
-            )
+        if (currentRoute != Routes.HOME) {
+            currentSong?.let { song ->
+                val duration = song.duration.takeIf { it > 0L } ?: 1L
+                MiniPlayer(
+                    song = song,
+                    isPlaying = isPlaying,
+                    progress = (playbackPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f),
+                    accentColor = accentColor,
+                    onPlayPause = { viewModel.togglePlayPause() },
+                    onSkipNext = { viewModel.skipNext() },
+                    onOpen = { },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 8.dp)
+                )
+            }
         }
     }
 }

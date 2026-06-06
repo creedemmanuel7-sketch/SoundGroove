@@ -5,6 +5,7 @@ import android.content.ComponentName
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -100,6 +101,12 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     private val _sortMode = MutableStateFlow(0)
     val sortMode: StateFlow<Int> = _sortMode.asStateFlow()
 
+    private val _mainSelectedTab = MutableStateFlow(0)
+    val mainSelectedTab: StateFlow<Int> = _mainSelectedTab.asStateFlow()
+
+    private val _librarySelectedTab = MutableStateFlow(0)
+    val librarySelectedTab: StateFlow<Int> = _librarySelectedTab.asStateFlow()
+
     private val _totalListeningSeconds = MutableStateFlow(prefs.getLong("total_listening_seconds", 0L))
     val totalListeningSeconds: StateFlow<Long> = _totalListeningSeconds.asStateFlow()
 
@@ -122,6 +129,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     fun syncSongs(songs: List<Song>) {
         if (songs.isNotEmpty()) {
             _songs.value = songs
+            updateCurrentSongFromMediaItem(_mediaController.value?.currentMediaItem)
         }
     }
 
@@ -141,15 +149,11 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                     _isPlaying.value = isPlaying
                 }
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                    val uriStr = mediaItem?.mediaId
-                    _currentSong.value = _songs.value.find { it.uri.toString() == uriStr }
-                    _currentSong.value?.let { song ->
-                        viewModelScope.launch {
-                            dbRepository.addRecentlyPlayed(song)
-                        }
-                    }
+                    updateCurrentSongFromMediaItem(mediaItem)
                 }
             })
+            updateCurrentSongFromMediaItem(controller?.currentMediaItem)
+            _isPlaying.value = controller?.isPlaying == true
             startProgressUpdate()
         }, MoreExecutors.directExecutor())
     }
@@ -172,6 +176,42 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             val loadedSongs = musicRepository.getSongs()
             _songs.value = loadedSongs
+            updateCurrentSongFromMediaItem(_mediaController.value?.currentMediaItem)
+        }
+    }
+
+    private fun songToMediaItem(song: Song): MediaItem {
+        val title = song.title.takeIf { it.isNotBlank() } ?: (song.uri.lastPathSegment ?: "Titre inconnu")
+        val artist = song.artist.takeIf { it.isNotBlank() } ?: "Artiste inconnu"
+        val album = song.albumName.takeIf { it.isNotBlank() } ?: "Album inconnu"
+
+        return MediaItem.Builder()
+            .setUri(song.uri)
+            .setMediaId(song.uri.toString())
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setArtist(artist)
+                    .setAlbumTitle(album)
+                    .setArtworkUri(song.albumArtUri)
+                    .build()
+            )
+            .build()
+    }
+
+    private fun updateCurrentSongFromMediaItem(mediaItem: MediaItem?) {
+        val item = mediaItem ?: return
+        val uriStr = item.mediaId
+        val resolved = _songs.value.find { it.uri.toString() == uriStr }
+            ?: item.localConfiguration?.uri?.let { uri -> _songs.value.find { it.uri == uri } }
+
+        resolved?.let { song ->
+            if (_currentSong.value?.id != song.id) {
+                _currentSong.value = song
+                viewModelScope.launch {
+                    dbRepository.addRecentlyPlayed(song)
+                }
+            }
         }
     }
 
@@ -189,30 +229,35 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     // --- Player Actions ---
     fun playSong(song: Song) {
+        playSongs(_songs.value, song)
+    }
+
+    fun playSongs(queue: List<Song>, startSong: Song) {
         val controller = _mediaController.value ?: return
-        val currentQueue = controller.mediaItemCount
-        val items = _songs.value.map { MediaItem.Builder().setMediaId(it.uri.toString()).setUri(it.uri).build() }
-        
-        if (currentQueue == 0) {
-            controller.setMediaItems(items)
-        }
-        
-        val index = _songs.value.indexOf(song)
+        val safeQueue = queue.ifEmpty { listOf(startSong) }
+        val items = safeQueue.map { songToMediaItem(it) }
+        val index = safeQueue.indexOf(startSong)
         if (index != -1) {
+            controller.setMediaItems(items)
             controller.seekTo(index, 0)
+            controller.prepare()
             controller.play()
+            _currentSong.value = startSong
             _isPlaying.value = true
         }
     }
     
     fun playPlaylist(playlist: Playlist, startSong: Song? = null) {
         val controller = _mediaController.value ?: return
-        val items = playlist.songs.map { MediaItem.Builder().setMediaId(it.uri.toString()).setUri(it.uri).build() }
+        val items = playlist.songs.map { songToMediaItem(it) }
         controller.setMediaItems(items)
         
         val index = startSong?.let { playlist.songs.indexOf(it) }?.takeIf { it != -1 } ?: 0
         controller.seekTo(index, 0)
+        controller.prepare()
         controller.play()
+        playlist.songs.getOrNull(index)?.let { _currentSong.value = it }
+        _isPlaying.value = true
     }
 
     fun togglePlayPause() {
@@ -232,7 +277,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     fun playNext(song: Song) {
         val controller = _mediaController.value ?: return
-        val item = MediaItem.Builder().setMediaId(song.uri.toString()).setUri(song.uri).build()
+        val item = songToMediaItem(song)
         if (controller.mediaItemCount == 0) {
             controller.setMediaItems(listOf(item))
             controller.prepare()
@@ -244,7 +289,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     fun addToQueue(song: Song) {
         val controller = _mediaController.value ?: return
-        val item = MediaItem.Builder().setMediaId(song.uri.toString()).setUri(song.uri).build()
+        val item = songToMediaItem(song)
         if (controller.mediaItemCount == 0) {
             controller.setMediaItems(listOf(item))
             controller.prepare()
@@ -298,6 +343,14 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     
     fun updateSortMode(mode: Int) {
         _sortMode.value = mode
+    }
+
+    fun updateMainSelectedTab(tab: Int) {
+        _mainSelectedTab.value = tab
+    }
+
+    fun updateLibrarySelectedTab(tab: Int) {
+        _librarySelectedTab.value = tab
     }
 
     // --- Sleep Timer ---

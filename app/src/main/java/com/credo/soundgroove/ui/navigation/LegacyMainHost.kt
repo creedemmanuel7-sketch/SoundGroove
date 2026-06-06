@@ -24,7 +24,11 @@ fun LegacyMainHost(
     val sleepTimerRemainingSeconds by viewModel.sleepTimerRemainingSeconds.collectAsState()
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
     val vmSongs by viewModel.songs.collectAsState()
+    val currentSong by viewModel.currentSong.collectAsState()
+    val isPlaying by viewModel.isPlaying.collectAsState()
     val totalListeningSeconds by viewModel.totalListeningSeconds.collectAsState()
+    val mainSelectedTab by viewModel.mainSelectedTab.collectAsState()
+    val librarySelectedTab by viewModel.librarySelectedTab.collectAsState()
 
     if (controller != null) {
         com.credo.soundgroove.MainScreen(
@@ -43,6 +47,12 @@ fun LegacyMainHost(
             onNavigateToAlbum = onNavigateToAlbum,
             onNavigateToArtist = onNavigateToArtist,
             vmSongs = vmSongs,
+            vmCurrentSong = currentSong,
+            vmIsPlaying = isPlaying,
+            selectedTab = mainSelectedTab,
+            onSelectedTabChange = { viewModel.updateMainSelectedTab(it) },
+            librarySelectedTab = librarySelectedTab,
+            onLibrarySelectedTabChange = { viewModel.updateLibrarySelectedTab(it) },
             onSyncSongs = { viewModel.syncSongs(it) },
             onReloadMusic = { viewModel.reloadMusic() },
             listeningTimeLabel = viewModel.formatListeningTime(totalListeningSeconds)

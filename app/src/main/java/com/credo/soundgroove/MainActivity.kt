@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import coil.compose.AsyncImage
@@ -143,11 +144,16 @@ fun MainScreen(
     playbackSpeed: Float = 1f,
     onPlaybackSpeedChange: (Float) -> Unit = {},
     vmSongs: List<Song> = emptyList(),
+    vmCurrentSong: Song? = null,
+    vmIsPlaying: Boolean = false,
+    selectedTab: Int = 0,
+    onSelectedTabChange: (Int) -> Unit = {},
+    librarySelectedTab: Int = 0,
+    onLibrarySelectedTabChange: (Int) -> Unit = {},
     onSyncSongs: (List<Song>) -> Unit = {},
     onReloadMusic: () -> Unit = {},
     listeningTimeLabel: String = "0 min"
 ) {
-    var selectedTab by remember { mutableStateOf(0) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var songs by remember { mutableStateOf<List<Song>>(emptyList()) }
@@ -217,10 +223,11 @@ fun MainScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasPermission = granted }
 
-    LaunchedEffect(hasPermission) {
+    LaunchedEffect(hasPermission, vmSongs.isNotEmpty()) {
         if (hasPermission) {
-            songs = loadSongs(context)
-            onReloadMusic()
+            if (vmSongs.isEmpty()) {
+                onReloadMusic()
+            }
         } else {
             permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
         }
@@ -234,14 +241,28 @@ fun MainScreen(
         if (songs.isNotEmpty()) onSyncSongs(songs)
     }
 
-    LaunchedEffect(player) {
+    LaunchedEffect(vmCurrentSong) {
+        if (vmCurrentSong != null) currentSong = vmCurrentSong
+    }
+
+    LaunchedEffect(vmIsPlaying) {
+        isPlaying = vmIsPlaying
+    }
+
+    LaunchedEffect(player, songs) {
         while (true) {
             val index = player.currentMediaItemIndex
-            if (index >= 0 && index < currentPlaylist.size && currentPlaylist.isNotEmpty()) {
-                currentSong = currentPlaylist[index]
-                isPlaying = player.isPlaying
+            val resolvedSong = currentPlaylist.getOrNull(index)
+                ?: player.currentMediaItem?.let { item ->
+                    val mediaId = item.mediaId
+                    songs.find { it.uri.toString() == mediaId }
+                        ?: item.localConfiguration?.uri?.let { uri -> songs.find { it.uri == uri } }
+                }
+            if (resolvedSong != null) {
+                currentSong = resolvedSong
             }
-            kotlinx.coroutines.delay(300)
+            isPlaying = player.isPlaying
+            kotlinx.coroutines.delay(500)
         }
     }
 
@@ -249,6 +270,14 @@ fun MainScreen(
         MediaItem.Builder()
             .setUri(song.uri)
             .setMediaId(song.uri.toString())
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(song.title.ifBlank { song.uri.lastPathSegment ?: "Titre inconnu" })
+                    .setArtist(song.artist.ifBlank { "Artiste inconnu" })
+                    .setAlbumTitle(song.albumName.ifBlank { "Album inconnu" })
+                    .setArtworkUri(song.albumArtUri)
+                    .build()
+            )
             .build()
 
     fun resolveSongFromMediaItem(item: MediaItem): Song? {
@@ -301,7 +330,7 @@ fun MainScreen(
     LaunchedEffect(playbackSpeed) {
         player.setPlaybackSpeed(playbackSpeed)
     }
-    BackHandler(enabled = selectedTab != 0) { selectedTab = 0 }
+    BackHandler(enabled = selectedTab != 0) { onSelectedTabChange(0) }
     BackHandler(enabled = showSongInfo) { showSongInfo = false }
     BackHandler(enabled = showPlaylistPicker) { showPlaylistPicker = false }
     BackHandler(enabled = showRecentlyPlayed) { showRecentlyPlayed = false }
@@ -496,6 +525,8 @@ fun MainScreen(
                             overlayedSong = song
                             showPlaylistPicker = true
                         },
+                        selectedTab = librarySelectedTab,
+                        onSelectedTabChange = onLibrarySelectedTabChange,
                         accentColor = accentColor
                     )
 
@@ -558,7 +589,7 @@ fun MainScreen(
                 BottomNavBar(
                     selectedTab = selectedTab,
                     accentColor = accentColor,
-                    onTabSelected = { selectedTab = it }
+                    onTabSelected = onSelectedTabChange
                 )
             }
         }
@@ -2227,7 +2258,7 @@ fun PlayerScreen(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(100.dp)
+                    .blur(24.dp)
             )
         }
         
@@ -2248,7 +2279,7 @@ fun PlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 28.dp),
+                .padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(modifier = Modifier.height(52.dp))
@@ -3052,15 +3083,16 @@ fun LibraryTab(
     onAddToQueue: (Song) -> Unit = {},
     onShowSongInfo: (Song) -> Unit = {},
     onShowPlaylistPicker: (Song) -> Unit = {},
+    selectedTab: Int = 0,
+    onSelectedTabChange: (Int) -> Unit = {},
     accentColor: Color
 ) {
-    var selectedTab by remember { mutableStateOf(0) }
     var selectedAlbum by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     var selectedArtist by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     
     BackHandler(enabled = selectedAlbum != null) { selectedAlbum = null }
     BackHandler(enabled = selectedArtist != null) { selectedArtist = null }
-    val tabs = listOf("Chansons", "Albums", "Artistes", "Playlists", "Favoris")
+    val tabs = listOf("Chansons", "Albums", "Artistes", "Playlists", "Dossiers", "Favoris")
     val albums = remember(songs) {
         songs.groupBy { it.albumName }
             .entries
@@ -3072,13 +3104,19 @@ fun LibraryTab(
         songs.map { it.artist }.distinct().sorted()
     }
 
+    val folders = remember(songs) {
+        songs.groupBy { song ->
+            song.folderPath.takeIf { it.isNotBlank() } ?: "Dossier inconnu"
+        }.entries.sortedBy { it.key }.map { it.key to it.value }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
 
         // Contenu principal
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 12.dp)
         ) {
             Spacer(modifier = Modifier.height(52.dp))
 
@@ -3096,6 +3134,7 @@ fun LibraryTab(
                 R.drawable.ic_playlists,
                 R.drawable.ic_profile,
                 R.drawable.ic_queue,
+                R.drawable.ic_songs,
                 R.drawable.ic_favorite_outline
             )
             androidx.compose.foundation.lazy.LazyRow(
@@ -3104,7 +3143,7 @@ fun LibraryTab(
             ) {
                 items(tabs.size) { index ->
                     val selected = selectedTab == index
-                    val iconRes = if (index == 4 && selected) R.drawable.ic_favorite_filled else tabIcons.getOrElse(index) { R.drawable.ic_songs }
+                    val iconRes = if (index == 5 && selected) R.drawable.ic_favorite_filled else tabIcons.getOrElse(index) { R.drawable.ic_songs }
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(SgRadius.pill))
@@ -3113,7 +3152,7 @@ fun LibraryTab(
                                 else Brush.horizontalGradient(listOf(GlassSurface, GlassSurface))
                             )
                             .border(1.dp, if (selected) accentColor.copy(0.5f) else GlassBorder, RoundedCornerShape(SgRadius.pill))
-                            .clickable { selectedTab = index }
+                            .clickable { onSelectedTabChange(index) }
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -3143,7 +3182,7 @@ fun LibraryTab(
             }
             LaunchedEffect(pagerState.currentPage, pagerState.isScrollInProgress) {
                 if (!pagerState.isScrollInProgress && selectedTab != pagerState.currentPage) {
-                    selectedTab = pagerState.currentPage
+                    onSelectedTabChange(pagerState.currentPage)
                 }
             }
 
@@ -3248,7 +3287,7 @@ fun LibraryTab(
 
                 1 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     val rows = albums.chunked(2)
-                    items(rows) { rowAlbums ->
+                    items(rows, key = { row -> row.joinToString("|") { it.first } }) { rowAlbums ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -3315,7 +3354,7 @@ fun LibraryTab(
                 }
 
                 2 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(artists) { artist ->
+                    items(artists, key = { it }) { artist ->
                         val artistSongs = songs.filter { it.artist == artist }
                         GlassCard(
                             modifier = Modifier
@@ -3389,49 +3428,37 @@ fun LibraryTab(
 
                     Box(modifier = Modifier.fillMaxSize()) {
                         Column(modifier = Modifier.fillMaxSize()) {
-                            // Bouton créer
-                            GlassCard(
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable {
-                                        val playlist = null
-                                        selectedPlaylist = playlist
-                                    },
-                                cornerRadius = 14.dp
+                                    .padding(bottom = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                Column {
+                                    Text(
+                                        text = "Playlists",
+                                        color = TextPrimary,
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                     Text(
                                         text = "${playlists.size} playlist(s)",
                                         color = TextSecondary,
                                         fontSize = 13.sp
                                     )
-                                    Box(
-                                        modifier = Modifier
-                                            .background(LightPurple, RoundedCornerShape(20.dp))
-                                            .clickable { showCreateDialog = true }
-                                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = "+",
-                                                color = Color.White,
-                                                fontSize = 18.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = "Nouvelle playlist",
-                                                color = Color.White,
-                                                fontSize = 13.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(SgRadius.pill))
+                                        .background(Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor))))
+                                        .clickable { showCreateDialog = true }
+                                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(painter = painterResource(R.drawable.ic_add), contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                    Text("Créer", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
 
@@ -3457,7 +3484,7 @@ fun LibraryTab(
                                 }
                             } else {
                                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    items(playlists) { playlist ->
+                                    items(playlists, key = { it.id }) { playlist ->
                                         var showMenu by remember { mutableStateOf(false) }
                                         var showRenameDialog by remember { mutableStateOf(false) }
 
@@ -3694,39 +3721,53 @@ fun LibraryTab(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .background(Color.Black.copy(alpha = 0.7f)),
-                                contentAlignment = Alignment.Center
+                                contentAlignment = Alignment.BottomCenter
                             ) {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(32.dp)
-                                        .background(CardSurface, RoundedCornerShape(20.dp))
-                                        .padding(24.dp)
+                                        .padding(16.dp)
+                                        .navigationBarsPadding()
+                                        .background(
+                                            Brush.verticalGradient(listOf(SurfaceOverlay.copy(0.98f), CardSurface)),
+                                            RoundedCornerShape(28.dp)
+                                        )
+                                        .border(1.dp, GlassBorder, RoundedCornerShape(28.dp))
+                                        .padding(22.dp)
                                 ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(42.dp)
+                                            .height(4.dp)
+                                            .background(GlassBorder, RoundedCornerShape(2.dp))
+                                            .align(Alignment.CenterHorizontally)
+                                    )
+                                    Spacer(modifier = Modifier.height(18.dp))
                                     Text(
-                                        text = "Nouvelle playlist",
+                                        text = "Créer une playlist",
                                         color = TextPrimary,
                                         fontSize = 20.sp,
                                         fontWeight = FontWeight.Bold
                                     )
+                                    Text(
+                                        text = "Donne-lui un nom, tu pourras ajouter des titres ensuite.",
+                                        color = TextSecondary,
+                                        fontSize = 13.sp
+                                    )
                                     Spacer(modifier = Modifier.height(16.dp))
-                                    androidx.compose.material3.TextField(
+                                    androidx.compose.material3.OutlinedTextField(
                                         value = playlistName,
                                         onValueChange = { playlistName = it },
-                                        label = {
-                                            Text(
-                                                "Nom de la playlist",
-                                                color = TextSecondary
-                                            )
-                                        },
-                                        colors = androidx.compose.material3.TextFieldDefaults.colors(
-                                            focusedContainerColor = DarkPurple,
-                                            unfocusedContainerColor = DarkPurple,
+                                        placeholder = { Text("Nom de la playlist", color = TextSecondary) },
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = accentColor,
+                                            unfocusedBorderColor = GlassBorder,
                                             focusedTextColor = TextPrimary,
                                             unfocusedTextColor = TextPrimary,
-                                            cursorColor = LightPurple,
-                                            focusedIndicatorColor = LightPurple,
-                                            unfocusedIndicatorColor = TextSecondary
+                                            cursorColor = accentColor,
+                                            focusedContainerColor = GlassSurface,
+                                            unfocusedContainerColor = GlassSurface
                                         ),
                                         modifier = Modifier.fillMaxWidth(),
                                         singleLine = true
@@ -3734,21 +3775,28 @@ fun LibraryTab(
                                     Spacer(modifier = Modifier.height(24.dp))
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.End
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        Text(
-                                            text = "Annuler",
-                                            color = TextSecondary,
-                                            modifier = Modifier
-                                                .clickable { showCreateDialog = false }
-                                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
                                         Box(
                                             modifier = Modifier
+                                                .weight(1f)
+                                                .height(48.dp)
+                                                .clip(RoundedCornerShape(16.dp))
+                                                .background(GlassSurface)
+                                                .clickable { showCreateDialog = false }
+                                                .border(1.dp, GlassBorder, RoundedCornerShape(16.dp)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("Annuler", color = TextSecondary, fontWeight = FontWeight.Bold)
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(48.dp)
+                                                .clip(RoundedCornerShape(16.dp))
                                                 .background(
-                                                    if (playlistName.isNotBlank()) LightPurple else TextSecondary,
-                                                    RoundedCornerShape(12.dp)
+                                                    if (playlistName.isNotBlank()) Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor)))
+                                                    else Brush.horizontalGradient(listOf(TextSecondary.copy(alpha = 0.35f), TextSecondary.copy(alpha = 0.25f)))
                                                 )
                                                 .clickable {
                                                     if (playlistName.isNotBlank()) {
@@ -3756,8 +3804,8 @@ fun LibraryTab(
                                                         showCreateDialog = false
                                                         playlistName = ""
                                                     }
-                                                }
-                                                .padding(horizontal = 20.dp, vertical = 8.dp)
+                                                },
+                                            contentAlignment = Alignment.Center
                                         ) {
                                             Text(
                                                 text = "Créer",
@@ -3799,7 +3847,56 @@ fun LibraryTab(
                 }
 
                 4 -> {
-                    // Favoris (ancien cas 3)
+                    if (folders.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(painter = painterResource(R.drawable.ic_songs), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(48.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text("Aucun dossier trouvé", color = TextSecondary, fontSize = 16.sp)
+                            }
+                        }
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(folders, key = { it.first }) { (folderName, folderSongs) ->
+                                GlassCard(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { folderSongs.firstOrNull()?.let { onPlayPlaylist(it, folderSongs) } },
+                                    cornerRadius = 14.dp
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(46.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(GlassSurface),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(painter = painterResource(R.drawable.ic_songs), contentDescription = null, tint = accentColor, modifier = Modifier.size(22.dp))
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(folderName.substringAfterLast('/'), color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text("${folderSongs.size} chanson(s)", color = TextSecondary, fontSize = 12.sp)
+                                        }
+                                        Icon(painter = painterResource(R.drawable.ic_play), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                            }
+                            item { Spacer(modifier = Modifier.height(16.dp)) }
+                        }
+                    }
+                }
+
+                5 -> {
                     if (favoriteSongs.isEmpty()) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -3808,22 +3905,12 @@ fun LibraryTab(
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(painter = painterResource(R.drawable.ic_favorite_outline), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(48.dp))
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = "Aucun favori encore",
-                                    color = TextSecondary,
-                                    fontSize = 16.sp
-                                )
-                                Text(
-                                    text = "Appuie sur l'icône cœur pour ajouter\ndes chansons à tes favoris",
-                                    color = TextSecondary,
-                                    fontSize = 13.sp,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
+                                Text("Aucun favori", color = TextSecondary, fontSize = 16.sp)
                             }
                         }
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            items(favoriteSongs) { song ->
+                            items(favoriteSongs, key = { it.id }) { song ->
                                 GlassCard(
                                     modifier = Modifier
                                         .fillMaxWidth()
