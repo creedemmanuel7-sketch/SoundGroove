@@ -52,7 +52,11 @@ fun ArtistDetailScreen(
     // Get a nice image for the artist (using first album art)
     val artistCover = songs.firstOrNull { it.albumArtUri != null }?.albumArtUri
 
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0D0517))) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(SurfaceOverlay, DeepPurple)))
+    ) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
 
             // ── Header ────────────────────────────────────────────────────────

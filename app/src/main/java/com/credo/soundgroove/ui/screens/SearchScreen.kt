@@ -9,7 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
@@ -19,12 +19,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.SongListItem
 import com.credo.soundgroove.ui.theme.*
@@ -43,132 +43,121 @@ fun SearchScreen(
     var searchQuery by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
-
-    // Fake recent searches for now (can be persisted in DB later)
     var recentSearches by remember { mutableStateOf(listOf("Lofi hip hop", "Eminem", "Amapiano 2024", "Piano chill")) }
 
     val filteredSongs = remember(searchQuery, allSongs) {
         if (searchQuery.isBlank()) emptyList()
         else allSongs.filter {
             it.title.contains(searchQuery, ignoreCase = true) ||
-            it.artist.contains(searchQuery, ignoreCase = true)
-        }.take(20) // limit results for performance
+                it.artist.contains(searchQuery, ignoreCase = true)
+        }.take(20)
     }
 
-    LaunchedEffect(Unit) {
-        // Auto focus search bar when screen opens
-        focusRequester.requestFocus()
-    }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0512))
+            .background(
+                Brush.verticalGradient(listOf(SurfaceOverlay, DeepPurple, Color(0xFF06030C)))
+            )
             .statusBarsPadding()
     ) {
-        // Search Bar Top Area
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Retour", tint = TextPrimary)
-            }
-            
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(focusRequester),
-                placeholder = { Text("Rechercher des chansons, artistes...", color = TextSecondary, fontSize = 14.sp) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                shape = RoundedCornerShape(24.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = accentColor,
-                    unfocusedBorderColor = GlassBorder,
-                    focusedContainerColor = GlassSurface,
-                    unfocusedContainerColor = GlassSurface,
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary,
-                    cursorColor = accentColor
-                ),
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(20.dp))
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Effacer", tint = TextSecondary)
+                    .fillMaxWidth()
+                    .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SgIconButton(onClick = onBack, accentColor = accentColor) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Retour",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(SgSpacing.sm))
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(focusRequester),
+                    placeholder = {
+                        Text(
+                            "Rechercher des chansons, artistes...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextTertiary
+                        )
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                    shape = RoundedCornerShape(SgRadius.pill),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = accentColor.copy(alpha = 0.6f),
+                        unfocusedBorderColor = BorderSubtle,
+                        focusedContainerColor = SurfaceElevated.copy(alpha = 0.8f),
+                        unfocusedContainerColor = SurfaceElevated.copy(alpha = 0.5f),
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        cursorColor = accentColor
+                    ),
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, null, tint = TextTertiary, modifier = Modifier.size(20.dp))
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, "Effacer", tint = TextSecondary)
+                            }
                         }
                     }
-                }
-            )
-        }
-
-        // Content Area
-        if (searchQuery.isBlank()) {
-            // Recent Searches
-            if (recentSearches.isNotEmpty()) {
-                Text(
-                    text = "Recherches récentes",
-                    color = TextPrimary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
                 )
-                LazyColumn {
-                    items(recentSearches) { searchItem ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { searchQuery = searchItem }
-                                .padding(horizontal = 20.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.History, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text(searchItem, color = TextSecondary, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                            Icon(Icons.Default.Clear, contentDescription = "Retirer", tint = TextSecondary.copy(0.5f), modifier = Modifier
-                                .size(20.dp)
-                                .clickable { recentSearches = recentSearches - searchItem })
-                        }
+            }
+
+            if (searchQuery.isBlank()) {
+                Text(
+                    text = "RECHERCHES RÉCENTES",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = SgSpacing.xl, vertical = SgSpacing.lg)
+                )
+                recentSearches.forEach { term ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { searchQuery = term }
+                            .padding(horizontal = SgSpacing.xl, vertical = SgSpacing.md),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.History, null, tint = TextTertiary, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(SgSpacing.md))
+                        Text(term, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
                     }
                 }
             } else {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Recherchez vos musiques préférées", color = TextSecondary)
-                }
-            }
-        } else {
-            // Search Results
-            if (filteredSongs.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize().padding(top = 100.dp), contentAlignment = Alignment.TopCenter) {
-                    Text("Aucun résultat pour \"$searchQuery\"", color = TextSecondary)
-                }
-            } else {
-                LazyColumn {
-                    items(filteredSongs) { song ->
+                Text(
+                    text = "${filteredSongs.size} résultat(s)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = accentColor,
+                    modifier = Modifier.padding(horizontal = SgSpacing.xl, vertical = SgSpacing.sm)
+                )
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = SgSpacing.lg, vertical = SgSpacing.sm)
+                ) {
+                    items(filteredSongs, key = { it.id }) { song ->
                         SongListItem(
                             song = song,
                             isFavorite = favoriteSongs.any { it.id == song.id },
                             isCurrentSong = currentSong?.id == song.id,
                             accentColor = accentColor,
-                            onClick = { 
-                                focusManager.clearFocus()
-                                if (!recentSearches.contains(searchQuery)) {
-                                    recentSearches = listOf(searchQuery) + recentSearches.take(9)
-                                }
-                                onPlaySong(song) 
-                            },
+                            onClick = { onPlaySong(song) },
                             onMenuClick = { onMenuClick(song) }
                         )
                     }
-                    item { Spacer(modifier = Modifier.height(100.dp)) } // padding for miniplayer
                 }
             }
         }

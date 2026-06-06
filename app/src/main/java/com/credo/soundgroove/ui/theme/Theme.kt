@@ -50,13 +50,13 @@ fun accentColorForTheme(appTheme: AppTheme): Color = when (appTheme) {
 
 fun themeBackgroundBrush(appTheme: AppTheme): Brush = when (appTheme) {
     AppTheme.CLASSIC_DARK -> Brush.verticalGradient(
-        listOf(Color(0xFF0A1A10), Color(0xFF000000), Color(0xFF000000))
+        listOf(Color(0xFF0A1810), Color(0xFF030303), Color(0xFF000000))
     )
     AppTheme.ORIGINAL_PURPLE -> Brush.verticalGradient(
-        listOf(Color(0xFF2D1B4E), Color(0xFF1A0A2E), Color(0xFF0D0D1A))
+        listOf(Color(0xFF1A0E30), Color(0xFF0C0616), Color(0xFF06030C))
     )
     AppTheme.CORAL_VIBRANT -> Brush.verticalGradient(
-        listOf(Color(0xFF3D1A1F), Color(0xFF1C1113), Color(0xFF130406))
+        listOf(Color(0xFF2A1014), Color(0xFF14080A), Color(0xFF0A0406))
     )
 }
 
@@ -76,6 +76,7 @@ fun SoundGrooveTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
+        typography = Typography,
         content = content
     )
 }

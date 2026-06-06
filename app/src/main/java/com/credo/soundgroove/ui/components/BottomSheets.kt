@@ -41,7 +41,7 @@ fun CreatePlaylistSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF150B2B),
+        containerColor = SurfaceOverlay,
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(
@@ -69,11 +69,11 @@ fun CreatePlaylistSheet(
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = LightPurple,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = GlassBorder,
                     focusedTextColor = TextPrimary,
                     unfocusedTextColor = TextPrimary,
-                    cursorColor = LightPurple,
+                    cursorColor = MaterialTheme.colorScheme.primary,
                     focusedContainerColor = GlassSurface,
                     unfocusedContainerColor = GlassSurface
                 ),
@@ -95,12 +95,12 @@ fun CreatePlaylistSheet(
                         Box(
                             modifier = Modifier
                                 .background(
-                                    if (name == suggestion) LightPurple.copy(0.2f) else GlassSurface,
+                                    if (name == suggestion) MaterialTheme.colorScheme.primary.copy(0.2f) else GlassSurface,
                                     RoundedCornerShape(20.dp)
                                 )
                                 .border(
                                     1.dp,
-                                    if (name == suggestion) LightPurple else GlassBorder,
+                                    if (name == suggestion) MaterialTheme.colorScheme.primary else GlassBorder,
                                     RoundedCornerShape(20.dp)
                                 )
                                 .clickable { name = suggestion }
@@ -108,7 +108,7 @@ fun CreatePlaylistSheet(
                         ) {
                             Text(
                                 suggestion,
-                                color = if (name == suggestion) LightPurple else TextSecondary,
+                                color = if (name == suggestion) MaterialTheme.colorScheme.primary else TextSecondary,
                                 fontSize = 13.sp
                             )
                         }
@@ -126,7 +126,7 @@ fun CreatePlaylistSheet(
                     .height(52.dp)
                     .background(
                         if (name.isNotBlank()) Brush.horizontalGradient(
-                            listOf(LightPurple, MediumPurple)
+                            listOf(MaterialTheme.colorScheme.primary, MediumPurple)
                         ) else Brush.horizontalGradient(
                             listOf(GlassSurface, GlassSurface)
                         ),
@@ -189,7 +189,7 @@ fun SortBottomSheet(
                     headlineContent = {
                         Text(
                             label,
-                            color = if (isSelected) LightPurple else TextPrimary,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else TextPrimary,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                         )
                     },
@@ -198,7 +198,7 @@ fun SortBottomSheet(
                         Icon(
                             painter = painterResource(iconRes),
                             contentDescription = null,
-                            tint = if (isSelected) LightPurple else TextSecondary,
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary else TextSecondary,
                             modifier = Modifier.size(20.dp)
                         )
                     },
@@ -207,14 +207,14 @@ fun SortBottomSheet(
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
-                                    .background(LightPurple, CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
                             )
                         }
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (isSelected) LightPurple.copy(alpha = 0.08f) else Color.Transparent)
+                        .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent)
                         .clickable { onModeSelected(idx); onDismiss() }
                 )
             }
@@ -235,7 +235,7 @@ fun AddToPlaylistSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF150B2B),
+        containerColor = SurfaceOverlay,
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(
@@ -259,8 +259,8 @@ fun AddToPlaylistSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(LightPurple.copy(0.12f))
-                    .border(1.dp, LightPurple.copy(0.3f), RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(0.12f))
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(0.3f), RoundedCornerShape(12.dp))
                     .clickable { onCreateAndAdd(); onDismiss() }
                     .padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -269,7 +269,7 @@ fun AddToPlaylistSheet(
                 Box(
                     modifier = Modifier
                         .size(36.dp)
-                        .background(LightPurple, CircleShape),
+                        .background(MaterialTheme.colorScheme.primary, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -279,7 +279,7 @@ fun AddToPlaylistSheet(
                         modifier = Modifier.size(18.dp)
                     )
                 }
-                Text("Créer une nouvelle playlist", color = LightPurple, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text("Créer une nouvelle playlist", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             }
 
             if (playlists.isNotEmpty()) {
@@ -301,7 +301,7 @@ fun AddToPlaylistSheet(
                             modifier = Modifier
                                 .size(44.dp)
                                 .background(
-                                    Brush.radialGradient(listOf(LightPurple, MediumPurple)),
+                                    Brush.radialGradient(listOf(MaterialTheme.colorScheme.primary, MediumPurple)),
                                     RoundedCornerShape(10.dp)
                                 ),
                             contentAlignment = Alignment.Center
@@ -332,7 +332,7 @@ fun AddToPlaylistSheet(
                         Icon(
                             painter = painterResource(R.drawable.ic_add),
                             contentDescription = null,
-                            tint = LightPurple,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -365,7 +365,7 @@ fun SongContextMenuSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF150B2B),
+        containerColor = SurfaceOverlay,
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(
@@ -437,7 +437,7 @@ fun SongContextMenuSheet(
                     Icon(
                         painter = painterResource(iconRes),
                         contentDescription = null,
-                        tint = if (label.contains("favoris")) Color(0xFFFF6B9D) else TextSecondary,
+                        tint = if (label.contains("favoris")) FavoritePink else TextSecondary,
                         modifier = Modifier.size(20.dp)
                     )
                     Text(
@@ -464,7 +464,7 @@ fun SleepTimerBottomSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF150B2B),
+        containerColor = SurfaceOverlay,
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(
@@ -557,7 +557,7 @@ fun SongInfoBottomSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF150B2B),
+        containerColor = SurfaceOverlay,
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(
@@ -618,7 +618,7 @@ fun SongInfoBottomSheet(
                 InfoActionChip(
                     label = if (isFavorite) "Favori" else "Favoris",
                     icon = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                    tint = Color(0xFFFF6B9D),
+                    tint = FavoritePink,
                     modifier = Modifier.weight(1f),
                     onClick = onToggleFavorite
                 )
@@ -697,7 +697,7 @@ fun PlaybackSpeedBottomSheet(
     val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF150B2B),
+        containerColor = SurfaceOverlay,
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(

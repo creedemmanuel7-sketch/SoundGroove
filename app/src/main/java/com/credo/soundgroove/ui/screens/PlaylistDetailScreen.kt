@@ -59,7 +59,11 @@ fun PlaylistDetailScreen(
     var infoSong by remember { mutableStateOf<Song?>(null) }
     val context = LocalContext.current
 
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0D0517))) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(SurfaceOverlay, DeepPurple)))
+    ) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
 
             // ── Header ────────────────────────────────────────────────────────

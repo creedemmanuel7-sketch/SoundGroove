@@ -473,6 +473,7 @@ fun MainScreen(
                         songs = songs,
                         recentlyPlayed = recentlyPlayed,
                         favoriteSongs = favoriteSongs,
+                        accentColor = accentColor,
                         onSongClick = { song ->
                             currentSong = song
                             playSong(song, recentlyPlayed)
@@ -921,47 +922,51 @@ fun BottomNavBar(selectedTab: Int, accentColor: Color, onTabSelected: (Int) -> U
         NavItem("Profil", Icons.Filled.Person, Icons.Outlined.Person)
     )
 
-    GlassCard(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        cornerRadius = 24.dp
+            .padding(horizontal = SgSpacing.lg, vertical = SgSpacing.sm)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Brush.linearGradient(listOf(Color(0x33000000), Color(0x1A000000))))
-                .padding(vertical = 8.dp, horizontal = 16.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically
+        GlassCard(
+            modifier = Modifier.fillMaxWidth(),
+            cornerRadius = SgRadius.pill,
+            accentColor = accentColor
         ) {
-            tabs.forEachIndexed { index, item ->
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .clickable { onTabSelected(index) }
-                        .padding(8.dp)
-                ) {
-                    Icon(
-                        imageVector = if (selectedTab == index) item.selectedIcon else item.unselectedIcon,
-                        contentDescription = item.label,
-                        tint = if (selectedTab == index) accentColor else TextSecondary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = item.label,
-                        color = if (selectedTab == index) accentColor else TextSecondary,
-                        fontSize = 10.sp,
-                        fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
-                    )
-                    if (selectedTab == index) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(4.dp)
-                                .background(accentColor, CircleShape)
-                        )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = SgSpacing.sm, vertical = SgSpacing.sm),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                tabs.forEachIndexed { index, item ->
+                    val selected = selectedTab == index
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(SgRadius.pill))
+                            .background(
+                                if (selected) accentColor.copy(alpha = 0.18f) else Color.Transparent
+                            )
+                            .clickable { onTabSelected(index) }
+                            .padding(vertical = SgSpacing.sm, horizontal = SgSpacing.xs),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
+                                contentDescription = item.label,
+                                tint = if (selected) accentColor else TextTertiary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = item.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (selected) accentColor else TextTertiary,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
@@ -1022,14 +1027,14 @@ fun HomeTab(
                 Column {
                     Text(
                         text = greeting,
+                        style = MaterialTheme.typography.displaySmall,
                         color = TextPrimary,
-                        fontSize = 26.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Ready to groove ?",
-                        color = TextSecondary,
-                        fontSize = 14.sp
+                        text = "Prêt à écouter ?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
                     )
                 }
                 Icon(
@@ -1203,8 +1208,8 @@ fun HomeTab(
                 )
                 Text(
                     text = "Voir tout",
-                    color = LightPurple,
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = accentColor,
                     modifier = Modifier.clickable { onSeeAllRecent() }
                 )
             }
@@ -1348,7 +1353,7 @@ fun MiniPlayer(
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.xs)
             .offset { androidx.compose.ui.unit.IntOffset(swipeOffsetX.toInt(), 0) }
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
@@ -1365,14 +1370,15 @@ fun MiniPlayer(
                     }
                 )
             },
-        cornerRadius = 20.dp
+        cornerRadius = SgRadius.xl,
+        accentColor = accentColor
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    Brush.linearGradient(
-                        listOf(accentColor.copy(alpha = 0.3f), DarkPurple.copy(alpha = 0.8f))
+                    Brush.verticalGradient(
+                        listOf(SurfaceOverlay.copy(0.95f), DeepPurple.copy(0.98f))
                     )
                 )
         ) {
@@ -1412,9 +1418,10 @@ fun MiniPlayer(
                     // Pochette
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.surface),
+                            .size(46.dp)
+                            .border(1.5.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(SgRadius.sm))
+                            .clip(RoundedCornerShape(SgRadius.sm))
+                            .background(SurfaceElevated),
                         contentAlignment = Alignment.Center
                     ) {
                         if (song.albumArtUri != null) {
@@ -1444,8 +1451,8 @@ fun MiniPlayer(
                         Text(
                             text = song.title,
                             color = TextPrimary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -2314,9 +2321,10 @@ fun PlayerScreen(
             Box(
                 modifier = Modifier
                     .offset { androidx.compose.ui.unit.IntOffset(dragOffsetX.toInt(), 0) }
-                    .size(300.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(MaterialTheme.colorScheme.surface)
+                    .size(280.dp)
+                    .border(2.dp, accentColor.copy(alpha = 0.25f), RoundedCornerShape(SgRadius.xl))
+                    .clip(RoundedCornerShape(SgRadius.xl))
+                    .background(SurfaceElevated)
                     .pointerInput(Unit) {
                         detectHorizontalDragGestures(
                             onDragEnd = {
@@ -2609,6 +2617,7 @@ fun ProfileTab(
     songs: List<Song>,
     recentlyPlayed: List<Song>,
     favoriteSongs: List<Song>,
+    accentColor: Color = MaterialTheme.colorScheme.primary,
     onSongClick: (Song) -> Unit
 ) {
     var userName by remember { mutableStateOf("Credson") }
@@ -2650,7 +2659,7 @@ fun ProfileTab(
                         modifier = Modifier
                             .size(70.dp)
                             .background(
-                                Brush.radialGradient(listOf(LightPurple, MediumPurple)),
+                                Brush.radialGradient(listOf(accentColor, accentColor.copy(alpha = 0.5f))),
                                 CircleShape
                             ),
                         contentAlignment = Alignment.Center
@@ -2658,7 +2667,7 @@ fun ProfileTab(
                         Text(
                             text = userName.first().uppercase(),
                             color = Color.White,
-                            fontSize = 28.sp,
+                            style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -2667,10 +2676,10 @@ fun ProfileTab(
                         Text(
                             text = userName,
                             color = TextPrimary,
-                            fontSize = 22.sp,
+                            style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(text = "Appuie pour modifier", color = TextSecondary, fontSize = 13.sp)
+                        Text(text = "Appuie pour modifier", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     }
                 }
             }
@@ -2681,54 +2690,54 @@ fun ProfileTab(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                GlassCard(modifier = Modifier.weight(1f), cornerRadius = 16.dp) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                GlassCard(modifier = Modifier.weight(1f), cornerRadius = SgRadius.lg, accentColor = accentColor) {
+                    Column(modifier = Modifier.padding(SgSpacing.lg)) {
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
-                                .background(LightPurple.copy(alpha = 0.2f), CircleShape),
+                                .background(accentColor.copy(alpha = 0.18f), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.LibraryMusic,
                                 contentDescription = null,
-                                tint = LightPurple,
+                                tint = accentColor,
                                 modifier = Modifier.size(22.dp)
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "${songs.size}",
-                            color = LightPurple,
-                            fontSize = 28.sp,
+                            color = accentColor,
+                            style = MaterialTheme.typography.displaySmall,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(text = "Titres", color = TextSecondary, fontSize = 12.sp)
+                        Text(text = "Titres", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     }
                 }
-                GlassCard(modifier = Modifier.weight(1f), cornerRadius = 16.dp) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                GlassCard(modifier = Modifier.weight(1f), cornerRadius = SgRadius.lg, accentColor = accentColor) {
+                    Column(modifier = Modifier.padding(SgSpacing.lg)) {
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
-                                .background(Color(0xFFFF6B9D).copy(alpha = 0.2f), CircleShape),
+                                .background(FavoritePink.copy(alpha = 0.18f), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Favorite,
                                 contentDescription = null,
-                                tint = Color(0xFFFF6B9D),
+                                tint = FavoritePink,
                                 modifier = Modifier.size(22.dp)
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "${favoriteSongs.size}",
-                            color = Color(0xFFFF6B9D),
-                            fontSize = 28.sp,
+                            color = FavoritePink,
+                            style = MaterialTheme.typography.displaySmall,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(text = "Favoris", color = TextSecondary, fontSize = 12.sp)
+                        Text(text = "Favoris", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     }
                 }
             }
@@ -3010,8 +3019,8 @@ fun LibraryTab(
 
             Text(
                 text = "Ma Musique",
+                style = MaterialTheme.typography.displaySmall,
                 color = TextPrimary,
-                fontSize = 26.sp,
                 fontWeight = FontWeight.Bold
             )
 
@@ -3100,13 +3109,13 @@ fun LibraryTab(
                             Box(
                                 modifier = Modifier
                                     .background(
-                                        if (sortMode == index) LightPurple else GlassSurface,
-                                        RoundedCornerShape(20.dp)
+                                        if (sortMode == index) accentColor.copy(alpha = 0.2f) else GlassSurface,
+                                        RoundedCornerShape(SgRadius.pill)
                                     )
                                     .border(
                                         1.dp,
-                                        if (sortMode == index) LightPurple else GlassBorder,
-                                        RoundedCornerShape(20.dp)
+                                        if (sortMode == index) accentColor.copy(alpha = 0.5f) else GlassBorder,
+                                        RoundedCornerShape(SgRadius.pill)
                                     )
                                     .clickable { sortMode = index }
                                     .padding(horizontal = 12.dp, vertical = 6.dp)
@@ -4833,9 +4842,9 @@ fun QueueScreen(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF2D1B4E),
-                        Color(0xFF1A0A2E),
-                        Color(0xFF0D0D1A)
+                        SurfaceOverlay,
+                        DeepPurple,
+                        Color(0xFF06030C)
                     )
                 )
             )

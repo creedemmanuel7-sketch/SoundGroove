@@ -4,10 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -15,79 +16,93 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-// ── Couleurs glass ──────────────────────────────────────────
-val GlassSurface     = Color(0x1AFFFFFF)   // blanc 10 %
-val GlassBorder      = Color(0x33FFFFFF)   // blanc 20 %
-val GlassSurfaceDark = Color(0x0DFFFFFF)   // blanc  5 %
-val GlassHighlight   = Color(0x26FFFFFF)   // blanc 15 %
+val GlassSurface = Color(0x14FFFFFF)
+val GlassBorder = Color(0x28FFFFFF)
+val GlassSurfaceDark = Color(0x0AFFFFFF)
+val GlassHighlight = Color(0x1FFFFFFF)
 
-// ── Brush dégradé glass violet ──────────────────────────────
-val GlassBrushPurple = Brush.linearGradient(
+fun surfaceBrush(accentColor: Color = LightPurple): Brush = Brush.linearGradient(
     colors = listOf(
-        Color(0x33BB86FC),  // violet clair 20 %
-        Color(0x1A6B3FA0),  // violet moyen 10 %
-        Color(0x0D1A0A2E),  // violet foncé  5 %
+        SurfaceElevated.copy(alpha = 0.95f),
+        SurfaceOverlay.copy(alpha = 0.88f),
+        accentColor.copy(alpha = 0.06f)
     )
 )
 
-val GlassBrushDark = Brush.linearGradient(
-    colors = listOf(
-        Color(0x26FFFFFF),  // blanc 15 %
-        Color(0x0DFFFFFF),  // blanc  5 %
-    )
-)
-
-// ── Modificateur glassEffect réutilisable ───────────────────
 fun Modifier.glassEffect(
-    cornerRadius: Dp = 16.dp,
-    borderAlpha: Float = 0.2f
+    cornerRadius: Dp = SgRadius.lg,
+    accentColor: Color = LightPurple,
+    borderAlpha: Float = 0.18f
 ): Modifier = this
     .clip(RoundedCornerShape(cornerRadius))
-    .background(GlassBrushPurple)
+    .background(surfaceBrush(accentColor))
     .border(
         width = 1.dp,
         brush = Brush.linearGradient(
             colors = listOf(
                 Color.White.copy(alpha = borderAlpha),
-                Color.White.copy(alpha = borderAlpha * 0.5f)
+                accentColor.copy(alpha = borderAlpha * 0.4f),
+                Color.White.copy(alpha = borderAlpha * 0.15f)
             )
         ),
         shape = RoundedCornerShape(cornerRadius)
     )
 
-// ── GlassCard — composant principal ────────────────────────
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 16.dp,
+    cornerRadius: Dp = SgRadius.lg,
+    accentColor: Color = MaterialTheme.colorScheme.primary,
     content: @Composable BoxScope.() -> Unit
 ) {
     Box(
         modifier = modifier
             .shadow(
-                elevation = 8.dp,
+                elevation = 12.dp,
                 shape = RoundedCornerShape(cornerRadius),
-                spotColor = Color.Black.copy(alpha = 0.5f)
+                spotColor = accentColor.copy(alpha = 0.15f),
+                ambientColor = Color.Black.copy(alpha = 0.4f)
             )
             .clip(RoundedCornerShape(cornerRadius))
-            .background(
-                Brush.linearGradient(
+            .background(surfaceBrush(accentColor))
+            .border(
+                width = 1.dp,
+                brush = Brush.linearGradient(
                     colors = listOf(
-                        Color(0xFF2D1B4E).copy(alpha = 0.5f),
-                        Color(0xFF1A0A2E).copy(alpha = 0.85f)
+                        Color.White.copy(alpha = 0.22f),
+                        accentColor.copy(alpha = 0.12f),
+                        Color.White.copy(alpha = 0.04f)
+                    )
+                ),
+                shape = RoundedCornerShape(cornerRadius)
+            ),
+        content = content
+    )
+}
+
+@Composable
+fun SgBottomSheetContainer(
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        SurfaceOverlay.copy(alpha = 0.98f),
+                        DeepPurple.copy(alpha = 0.99f)
                     )
                 )
             )
             .border(
                 width = 1.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.4f),
-                        Color.White.copy(alpha = 0.05f),
-                        Color.White.copy(alpha = 0.0f)
-                    )
+                brush = Brush.verticalGradient(
+                    listOf(accentColor.copy(alpha = 0.2f), Color.Transparent)
                 ),
-                shape = RoundedCornerShape(cornerRadius)
+                shape = RoundedCornerShape(topStart = SgRadius.xl, topEnd = SgRadius.xl)
             ),
         content = content
     )

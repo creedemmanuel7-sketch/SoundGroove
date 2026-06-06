@@ -1,15 +1,19 @@
 package com.credo.soundgroove.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -17,7 +21,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.R
@@ -42,20 +45,33 @@ fun SongListItem(
     onMenuClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val rowBg = if (isCurrentSong) {
+        Brush.horizontalGradient(
+            listOf(accentColor.copy(alpha = 0.14f), Color.Transparent)
+        )
+    } else {
+        Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(SgRadius.md))
+            .background(rowBg)
             .clickable { onClick() }
-            .padding(horizontal = 4.dp, vertical = 8.dp),
+            .padding(horizontal = SgSpacing.sm, vertical = SgSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(SgSpacing.md)
     ) {
-        // Album Art
         Box(
             modifier = Modifier
-                .size(50.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(DarkPurple),
+                .size(52.dp)
+                .then(
+                    if (isCurrentSong) Modifier.border(1.5.dp, accentColor.copy(alpha = 0.6f), RoundedCornerShape(SgRadius.sm))
+                    else Modifier
+                )
+                .clip(RoundedCornerShape(SgRadius.sm))
+                .background(SurfaceElevated),
             contentAlignment = Alignment.Center
         ) {
             if (song.albumArtUri != null) {
@@ -70,11 +86,10 @@ fun SongListItem(
                 Icon(
                     painter = painterResource(R.drawable.ic_songs),
                     contentDescription = null,
-                    tint = TextSecondary,
+                    tint = TextTertiary,
                     modifier = Modifier.size(22.dp)
                 )
             }
-            // Playing indicator overlay
             if (isCurrentSong) {
                 Box(
                     modifier = Modifier
@@ -86,57 +101,65 @@ fun SongListItem(
                         painter = painterResource(R.drawable.ic_play),
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
         }
 
-        // Title & Artist
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = song.title,
+                style = MaterialTheme.typography.bodyMedium,
                 color = if (isCurrentSong) accentColor else TextPrimary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
+                fontWeight = if (isCurrentSong) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = song.artist,
+                style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
-                fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
 
-        // Duration
         Text(
             text = formatDuration(song.duration),
-            color = TextSecondary,
-            fontSize = 12.sp
+            style = MaterialTheme.typography.labelMedium,
+            color = TextTertiary
         )
 
-        // Favorite indicator
         if (isFavorite) {
-            Icon(
-                painter = painterResource(R.drawable.ic_favorite_filled),
-                contentDescription = null,
-                tint = Color(0xFFFF6B9D),
-                modifier = Modifier.size(16.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .background(FavoritePink.copy(alpha = 0.15f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_favorite_filled),
+                    contentDescription = null,
+                    tint = FavoritePink,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
         }
 
-        // More menu
-        Icon(
-            painter = painterResource(R.drawable.ic_options),
-            contentDescription = "Menu",
-            tint = TextSecondary,
+        Box(
             modifier = Modifier
-                .size(20.dp)
-                .clickable { onMenuClick() }
-                .padding(2.dp)
-        )
+                .size(32.dp)
+                .clip(CircleShape)
+                .clickable { onMenuClick() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_options),
+                contentDescription = "Menu",
+                tint = TextTertiary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
     }
 }

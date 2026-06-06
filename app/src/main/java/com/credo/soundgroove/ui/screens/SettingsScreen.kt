@@ -281,24 +281,18 @@ private fun SettingsSection(
 ) {
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 20.dp
+        cornerRadius = SgRadius.lg
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        listOf(Color.White.copy(alpha = 0.04f), Color.Transparent)
-                    )
-                )
-                .padding(18.dp)
+                .padding(SgSpacing.lg)
         ) {
             Text(
                 text = title.uppercase(),
-                color = TextSecondary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.5.sp
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary,
+                fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(14.dp))
             content()

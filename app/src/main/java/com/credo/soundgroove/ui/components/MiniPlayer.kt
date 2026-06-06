@@ -3,15 +3,19 @@ package com.credo.soundgroove.ui.components
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -20,7 +24,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.R
@@ -31,7 +34,7 @@ import com.credo.soundgroove.ui.theme.*
 fun MiniPlayer(
     song: Song,
     isPlaying: Boolean,
-    progress: Float,          // 0f..1f
+    progress: Float,
     accentColor: Color,
     onPlayPause: () -> Unit,
     onSkipNext: () -> Unit,
@@ -47,51 +50,40 @@ fun MiniPlayer(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.xs)
+            .shadow(16.dp, RoundedCornerShape(SgRadius.xl), spotColor = accentColor.copy(0.2f))
+            .clip(RoundedCornerShape(SgRadius.xl))
+            .background(
+                Brush.verticalGradient(
+                    listOf(SurfaceOverlay.copy(0.97f), DeepPurple.copy(0.99f))
+                )
+            )
+            .border(1.dp, accentColor.copy(alpha = 0.12f), RoundedCornerShape(SgRadius.xl))
             .clickable { onOpen() }
     ) {
-        // Background glass card
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(72.dp)
+                .fillMaxWidth(animatedProgress.coerceIn(0.02f, 1f))
+                .height(2.dp)
                 .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color(0xFF1E0A3C).copy(alpha = 0.97f),
-                            Color(0xFF0D0517).copy(alpha = 0.99f)
-                        )
-                    ),
-                    RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
-                )
-        )
-
-        // Progress bar as thin accent line at top
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(animatedProgress)
-                .height(2.5.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(accentColor, accentColor.copy(alpha = 0.5f))
-                    ),
-                    RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                    Brush.horizontalGradient(listOf(accentColor, accentColor.copy(0.4f))),
+                    RoundedCornerShape(topStart = SgRadius.xl, topEnd = SgRadius.xl)
                 )
         )
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(72.dp)
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = SgSpacing.lg, vertical = SgSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(SgSpacing.md)
         ) {
-            // Album Art
             Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(DarkPurple),
+                    .size(48.dp)
+                    .border(1.5.dp, accentColor.copy(0.35f), RoundedCornerShape(SgRadius.sm))
+                    .clip(RoundedCornerShape(SgRadius.sm))
+                    .background(SurfaceElevated),
                 contentAlignment = Alignment.Center
             ) {
                 if (song.albumArtUri != null) {
@@ -106,48 +98,54 @@ fun MiniPlayer(
                     Icon(
                         painter = painterResource(R.drawable.ic_songs),
                         contentDescription = null,
-                        tint = TextSecondary,
+                        tint = accentColor,
                         modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            // Title & artist
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = song.title,
+                    style = MaterialTheme.typography.titleSmall,
                     color = TextPrimary,
-                    fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = song.artist,
+                    style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
-                    fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            // Play / Pause button
-            Icon(
-                painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
-                contentDescription = if (isPlaying) "Pause" else "Jouer",
-                tint = Color.White,
+            Box(
                 modifier = Modifier
-                    .size(32.dp)
-                    .clickable { onPlayPause() }
-            )
+                    .size(40.dp)
+                    .background(
+                        Brush.radialGradient(listOf(accentColor, accentColor.copy(0.7f))),
+                        CircleShape
+                    )
+                    .clickable { onPlayPause() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
+                    contentDescription = if (isPlaying) "Pause" else "Jouer",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
 
-            // Skip next button
             Icon(
                 painter = painterResource(R.drawable.ic_next),
                 contentDescription = "Suivant",
                 tint = TextSecondary,
                 modifier = Modifier
-                    .size(26.dp)
+                    .size(28.dp)
                     .clickable { onSkipNext() }
             )
         }
