@@ -64,7 +64,7 @@ fun ArtistDetailScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(300.dp)
+                        .height(280.dp)
                 ) {
                     // Background blur / gradient
                     Box(
@@ -93,7 +93,7 @@ fun ArtistDetailScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(140.dp)
+                                .size(128.dp)
                                 .clip(CircleShape)
                                 .background(GlassSurface)
                                 .padding(if (artistCover == null) 30.dp else 0.dp),
@@ -135,7 +135,7 @@ fun ArtistDetailScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Box(
@@ -177,7 +177,7 @@ fun ArtistDetailScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onPlaySong(song) }
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {

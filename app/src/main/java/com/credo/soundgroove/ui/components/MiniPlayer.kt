@@ -50,15 +50,15 @@ fun MiniPlayer(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.xs)
-            .shadow(16.dp, RoundedCornerShape(SgRadius.xl), spotColor = accentColor.copy(0.2f))
+            .padding(horizontal = SgSpacing.sm, vertical = 2.dp)
+            .shadow(6.dp, RoundedCornerShape(SgRadius.xl), spotColor = accentColor.copy(0.12f))
             .clip(RoundedCornerShape(SgRadius.xl))
             .background(
                 Brush.verticalGradient(
                     listOf(SurfaceOverlay.copy(0.97f), DeepPurple.copy(0.99f))
                 )
             )
-            .border(1.dp, accentColor.copy(alpha = 0.12f), RoundedCornerShape(SgRadius.xl))
+            .border(1.dp, accentColor.copy(alpha = 0.08f), RoundedCornerShape(SgRadius.xl))
             .clickable { onOpen() }
     ) {
         Box(
@@ -74,14 +74,14 @@ fun MiniPlayer(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = SgSpacing.lg, vertical = SgSpacing.md),
+                .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(SgSpacing.md)
+            horizontalArrangement = Arrangement.spacedBy(SgSpacing.sm)
         ) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .border(1.5.dp, accentColor.copy(0.35f), RoundedCornerShape(SgRadius.sm))
+                    .size(44.dp)
+                    .border(1.dp, accentColor.copy(0.24f), RoundedCornerShape(SgRadius.sm))
                     .clip(RoundedCornerShape(SgRadius.sm))
                     .background(SurfaceElevated),
                 contentAlignment = Alignment.Center
@@ -124,7 +124,7 @@ fun MiniPlayer(
 
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(38.dp)
                     .background(
                         Brush.radialGradient(listOf(accentColor, accentColor.copy(0.7f))),
                         CircleShape
@@ -145,7 +145,7 @@ fun MiniPlayer(
                 contentDescription = "Suivant",
                 tint = TextSecondary,
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(26.dp)
                     .clickable { onSkipNext() }
             )
         }

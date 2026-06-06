@@ -47,7 +47,7 @@ fun SongListItem(
 ) {
     val rowBg = if (isCurrentSong) {
         Brush.horizontalGradient(
-            listOf(accentColor.copy(alpha = 0.14f), Color.Transparent)
+            listOf(accentColor.copy(alpha = 0.10f), Color.Transparent)
         )
     } else {
         Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
@@ -56,18 +56,18 @@ fun SongListItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(SgRadius.md))
+            .clip(RoundedCornerShape(SgRadius.sm))
             .background(rowBg)
             .clickable { onClick() }
-            .padding(horizontal = SgSpacing.sm, vertical = SgSpacing.md),
+            .padding(horizontal = SgSpacing.xs, vertical = SgSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(SgSpacing.md)
+        horizontalArrangement = Arrangement.spacedBy(SgSpacing.sm)
     ) {
         Box(
             modifier = Modifier
-                .size(52.dp)
+                .size(48.dp)
                 .then(
-                    if (isCurrentSong) Modifier.border(1.5.dp, accentColor.copy(alpha = 0.6f), RoundedCornerShape(SgRadius.sm))
+                    if (isCurrentSong) Modifier.border(1.dp, accentColor.copy(alpha = 0.46f), RoundedCornerShape(SgRadius.sm))
                     else Modifier
                 )
                 .clip(RoundedCornerShape(SgRadius.sm))
@@ -149,7 +149,7 @@ fun SongListItem(
 
         Box(
             modifier = Modifier
-                .size(32.dp)
+                .size(30.dp)
                 .clip(CircleShape)
                 .clickable { onMenuClick() },
             contentAlignment = Alignment.Center

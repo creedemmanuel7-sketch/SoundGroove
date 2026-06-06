@@ -23,16 +23,16 @@ val GlassHighlight = Color(0x1FFFFFFF)
 
 fun surfaceBrush(accentColor: Color = LightPurple): Brush = Brush.linearGradient(
     colors = listOf(
-        SurfaceElevated.copy(alpha = 0.95f),
-        SurfaceOverlay.copy(alpha = 0.88f),
-        accentColor.copy(alpha = 0.06f)
+        SurfaceElevated.copy(alpha = 0.72f),
+        SurfaceOverlay.copy(alpha = 0.58f),
+        accentColor.copy(alpha = 0.035f)
     )
 )
 
 fun Modifier.glassEffect(
     cornerRadius: Dp = SgRadius.lg,
     accentColor: Color = LightPurple,
-    borderAlpha: Float = 0.18f
+    borderAlpha: Float = 0.08f
 ): Modifier = this
     .clip(RoundedCornerShape(cornerRadius))
     .background(surfaceBrush(accentColor))
@@ -58,10 +58,10 @@ fun GlassCard(
     Box(
         modifier = modifier
             .shadow(
-                elevation = 12.dp,
+                elevation = 3.dp,
                 shape = RoundedCornerShape(cornerRadius),
-                spotColor = accentColor.copy(alpha = 0.15f),
-                ambientColor = Color.Black.copy(alpha = 0.4f)
+                spotColor = accentColor.copy(alpha = 0.06f),
+                ambientColor = Color.Black.copy(alpha = 0.18f)
             )
             .clip(RoundedCornerShape(cornerRadius))
             .background(surfaceBrush(accentColor))
@@ -69,9 +69,9 @@ fun GlassCard(
                 width = 1.dp,
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.22f),
-                        accentColor.copy(alpha = 0.12f),
-                        Color.White.copy(alpha = 0.04f)
+                        Color.White.copy(alpha = 0.08f),
+                        accentColor.copy(alpha = 0.045f),
+                        Color.White.copy(alpha = 0.015f)
                     )
                 ),
                 shape = RoundedCornerShape(cornerRadius)
@@ -92,15 +92,15 @@ fun SgBottomSheetContainer(
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        SurfaceOverlay.copy(alpha = 0.98f),
-                        DeepPurple.copy(alpha = 0.99f)
+                        SurfaceOverlay.copy(alpha = 0.94f),
+                        DeepPurple.copy(alpha = 0.97f)
                     )
                 )
             )
             .border(
                 width = 1.dp,
                 brush = Brush.verticalGradient(
-                    listOf(accentColor.copy(alpha = 0.2f), Color.Transparent)
+                    listOf(accentColor.copy(alpha = 0.10f), Color.Transparent)
                 ),
                 shape = RoundedCornerShape(topStart = SgRadius.xl, topEnd = SgRadius.xl)
             ),

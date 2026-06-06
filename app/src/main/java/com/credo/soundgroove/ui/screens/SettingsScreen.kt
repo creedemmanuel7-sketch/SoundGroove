@@ -61,9 +61,9 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(52.dp))
+            Spacer(modifier = Modifier.height(38.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -93,7 +93,7 @@ fun SettingsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             SettingsSection(title = "Apparence") {
                 Text(
@@ -127,7 +127,7 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             SettingsSection(title = "Lecture") {
                 Row(
@@ -242,7 +242,7 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             SettingsSection(title = "Statistiques") {
                 StatRowIcon(R.drawable.ic_songs, "Morceaux", "$songCount")
@@ -254,7 +254,7 @@ fun SettingsScreen(
                 StatRowIcon(R.drawable.ic_play, "Heures d'écoute", listeningTimeLabel)
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             SettingsSection(title = "À propos") {
                 Row(
@@ -274,7 +274,7 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(28.dp))
         }
     }
 }
@@ -284,24 +284,21 @@ private fun SettingsSection(
     title: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        cornerRadius = SgRadius.lg
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = SgSpacing.sm)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(SgSpacing.lg)
-        ) {
-            Text(
-                text = title.uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                color = TextTertiary,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(14.dp))
-            content()
-        }
+        Text(
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = TextTertiary,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        content()
+        Spacer(modifier = Modifier.height(12.dp))
+        HorizontalDivider(color = GlassBorder.copy(alpha = 0.22f))
     }
 }
 
@@ -317,14 +314,14 @@ private fun ThemeOptionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(if (isSelected) accentColor.copy(alpha = 0.12f) else Color.Transparent)
+            .background(if (isSelected) accentColor.copy(alpha = 0.11f) else GlassSurface.copy(alpha = 0.28f))
             .border(
-                width = if (isSelected) 1.5.dp else 1.dp,
-                color = if (isSelected) accentColor.copy(alpha = 0.6f) else GlassBorder,
+                width = 1.dp,
+                color = if (isSelected) accentColor.copy(alpha = 0.45f) else GlassBorder.copy(alpha = 0.26f),
                 shape = RoundedCornerShape(14.dp)
             )
             .clickable { onClick() }
-            .padding(12.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(

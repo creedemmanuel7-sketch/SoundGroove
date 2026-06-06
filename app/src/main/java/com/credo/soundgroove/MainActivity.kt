@@ -1011,7 +1011,7 @@ fun BottomNavBar(selectedTab: Int, accentColor: Color, onTabSelected: (Int) -> U
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SgSpacing.lg, vertical = SgSpacing.sm)
+            .padding(horizontal = SgSpacing.sm, vertical = SgSpacing.xs)
     ) {
         GlassCard(
             modifier = Modifier.fillMaxWidth(),
@@ -1021,7 +1021,7 @@ fun BottomNavBar(selectedTab: Int, accentColor: Color, onTabSelected: (Int) -> U
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = SgSpacing.sm, vertical = SgSpacing.sm),
+                    .padding(horizontal = SgSpacing.xs, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1035,7 +1035,7 @@ fun BottomNavBar(selectedTab: Int, accentColor: Color, onTabSelected: (Int) -> U
                                 if (selected) accentColor.copy(alpha = 0.18f) else Color.Transparent
                             )
                             .clickable { onTabSelected(index) }
-                            .padding(vertical = SgSpacing.sm, horizontal = SgSpacing.xs),
+                            .padding(vertical = 7.dp, horizontal = SgSpacing.xs),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1043,7 +1043,7 @@ fun BottomNavBar(selectedTab: Int, accentColor: Color, onTabSelected: (Int) -> U
                                 painter = androidx.compose.ui.res.painterResource(item.iconRes),
                                 contentDescription = item.label,
                                 tint = if (selected) accentColor else TextTertiary,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(21.dp)
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
@@ -1100,11 +1100,11 @@ fun HomeTab(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Spacer(modifier = Modifier.height(52.dp))
+            Spacer(modifier = Modifier.height(40.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1142,7 +1142,7 @@ fun HomeTab(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                        .padding(horizontal = 14.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(painter = painterResource(R.drawable.ic_search), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
@@ -1200,10 +1200,10 @@ fun HomeTab(
                             .fillMaxWidth()
                             .background(
                                 Brush.linearGradient(
-                                    listOf(accentColor.copy(0.4f), secondaryAccent.copy(0.2f))
+                                    listOf(accentColor.copy(0.28f), secondaryAccent.copy(0.12f))
                                 )
                             )
-                            .padding(16.dp),
+                            .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
@@ -1247,9 +1247,9 @@ fun HomeTab(
                         Spacer(modifier = Modifier.width(12.dp))
                         Box(
                             modifier = Modifier
-                                .size(100.dp)
+                                .size(88.dp)
                                 .clip(RoundedCornerShape(16.dp))
-                                .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
+                                .border(1.dp, GlassBorder.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
                                 .background(CardSurface),
                             contentAlignment = Alignment.Center
                         ) {
@@ -1439,7 +1439,7 @@ fun MiniPlayer(
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.xs)
+            .padding(horizontal = SgSpacing.sm, vertical = 2.dp)
             .offset { androidx.compose.ui.unit.IntOffset(swipeOffsetX.toInt(), 0) }
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
@@ -1456,7 +1456,7 @@ fun MiniPlayer(
                     }
                 )
             },
-        cornerRadius = SgRadius.xl,
+        cornerRadius = 24.dp,
         accentColor = accentColor
     ) {
         Column(
@@ -1464,7 +1464,7 @@ fun MiniPlayer(
                 .fillMaxWidth()
                 .background(
                     Brush.verticalGradient(
-                        listOf(SurfaceOverlay.copy(0.95f), DeepPurple.copy(0.98f))
+                        listOf(SurfaceOverlay.copy(0.90f), DeepPurple.copy(0.95f))
                     )
                 )
         ) {
@@ -1491,7 +1491,7 @@ fun MiniPlayer(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Zone cliquable (pochette + infos)
@@ -1504,8 +1504,8 @@ fun MiniPlayer(
                     // Pochette
                     Box(
                         modifier = Modifier
-                            .size(46.dp)
-                            .border(1.5.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(SgRadius.sm))
+                            .size(44.dp)
+                            .border(1.dp, accentColor.copy(alpha = 0.24f), RoundedCornerShape(SgRadius.sm))
                             .clip(RoundedCornerShape(SgRadius.sm))
                             .background(SurfaceElevated),
                         contentAlignment = Alignment.Center
@@ -1664,7 +1664,7 @@ fun SongItem(
                     onLongClick?.invoke()
                 }
             ),
-        cornerRadius = 14.dp
+        cornerRadius = 10.dp
     ) {
         Row(
             modifier = Modifier
@@ -1675,12 +1675,12 @@ fun SongItem(
                     else
                         Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
                 )
-                .padding(10.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(46.dp)
+                    .size(44.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(DarkPurple),
                 contentAlignment = Alignment.Center
@@ -2279,10 +2279,10 @@ fun PlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp),
+                .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(52.dp))
+            Spacer(modifier = Modifier.height(40.dp))
 
             // Header — retour + titre + menu
             Row(
@@ -2407,14 +2407,15 @@ fun PlayerScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(36.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Pochette
             Box(
                 modifier = Modifier
                     .offset { androidx.compose.ui.unit.IntOffset(dragOffsetX.toInt(), 0) }
-                    .size(280.dp)
-                    .border(2.dp, accentColor.copy(alpha = 0.25f), RoundedCornerShape(SgRadius.xl))
+                    .fillMaxWidth(0.82f)
+                    .aspectRatio(1f)
+                    .border(1.dp, accentColor.copy(alpha = 0.14f), RoundedCornerShape(SgRadius.xl))
                     .clip(RoundedCornerShape(SgRadius.xl))
                     .background(SurfaceElevated)
                     .pointerInput(Unit) {
@@ -2455,19 +2456,19 @@ fun PlayerScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Titre + Favori
             GlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = 2.dp),
                 cornerRadius = 20.dp
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -2500,7 +2501,7 @@ fun PlayerScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Slider
             var isSeeking by remember { mutableStateOf(false) }
@@ -2538,19 +2539,19 @@ fun PlayerScreen(
                 Text(text = formatTime(duration), color = TextSecondary, fontSize = 12.sp)
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             // Contrôles
             GlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = 2.dp),
                 cornerRadius = 24.dp
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 16.dp),
+                        .padding(vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -2727,11 +2728,11 @@ fun ProfileTab(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Spacer(modifier = Modifier.height(52.dp))
+            Spacer(modifier = Modifier.height(40.dp))
             GlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2742,14 +2743,14 @@ fun ProfileTab(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            Brush.linearGradient(listOf(MediumPurple.copy(0.3f), Color.Transparent))
+                            Brush.linearGradient(listOf(accentColor.copy(0.18f), Color.Transparent))
                         )
-                        .padding(20.dp),
+                        .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(70.dp)
+                            .size(64.dp)
                             .background(
                                 Brush.radialGradient(listOf(accentColor, accentColor.copy(alpha = 0.5f))),
                                 CircleShape
@@ -3116,9 +3117,9 @@ fun LibraryTab(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp)
+                    .padding(horizontal = 8.dp)
         ) {
-            Spacer(modifier = Modifier.height(52.dp))
+            Spacer(modifier = Modifier.height(40.dp))
 
             Text(
                 text = "Ma Musique",
@@ -3127,7 +3128,7 @@ fun LibraryTab(
                 fontWeight = FontWeight.Bold
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             val tabIcons = listOf(
                 R.drawable.ic_songs,
@@ -3139,7 +3140,7 @@ fun LibraryTab(
             )
             androidx.compose.foundation.lazy.LazyRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(tabs.size) { index ->
                     val selected = selectedTab == index
@@ -3153,7 +3154,7 @@ fun LibraryTab(
                             )
                             .border(1.dp, if (selected) accentColor.copy(0.5f) else GlassBorder, RoundedCornerShape(SgRadius.pill))
                             .clickable { onSelectedTabChange(index) }
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -3492,11 +3493,11 @@ fun LibraryTab(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .background(
-                                                    CardSurface.copy(alpha = 0.5f),
+                                                    CardSurface.copy(alpha = 0.32f),
                                                     RoundedCornerShape(14.dp)
                                                 )
                                                 .clickable { selectedPlaylist = playlist }
-                                                .padding(12.dp),
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             // Cover playlist (ton code existant)
@@ -4147,7 +4148,7 @@ fun PlaylistDetailScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(320.dp)
+                        .height(300.dp)
                 ) {
                     // Image de fond
                     val coverSong = displaySongs.firstOrNull { it.albumArtUri != null }
@@ -4240,7 +4241,7 @@ fun PlaylistDetailScreen(
                     Column(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(horizontal = 20.dp, vertical = 20.dp)
+                            .padding(horizontal = 16.dp, vertical = 18.dp)
                     ) {
                         Text(
                             text = playlist.name,
@@ -4265,7 +4266,7 @@ fun PlaylistDetailScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     // Bouton Lire

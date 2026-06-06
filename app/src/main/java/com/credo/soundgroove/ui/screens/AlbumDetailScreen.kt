@@ -64,7 +64,7 @@ fun AlbumDetailScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(320.dp)
+                        .height(300.dp)
                 ) {
                     if (albumCover != null) {
                         AsyncImage(
@@ -124,7 +124,7 @@ fun AlbumDetailScreen(
                     Column(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(horizontal = 20.dp, vertical = 20.dp)
+                            .padding(horizontal = 16.dp, vertical = 18.dp)
                     ) {
                         Text(
                             text = albumName,
@@ -148,7 +148,7 @@ fun AlbumDetailScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Box(
@@ -190,7 +190,7 @@ fun AlbumDetailScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onPlaySong(song) }
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {

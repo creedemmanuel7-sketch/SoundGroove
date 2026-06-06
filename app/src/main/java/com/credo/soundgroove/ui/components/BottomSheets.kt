@@ -41,14 +41,14 @@ fun CreatePlaylistSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceOverlay,
+        containerColor = SurfaceOverlay.copy(alpha = 0.96f),
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 40.dp)
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp)
         ) {
             Text(
                 "Nouvelle Playlist",
@@ -59,7 +59,7 @@ fun CreatePlaylistSheet(
             Spacer(modifier = Modifier.height(6.dp))
             Text("Donne un nom à ta playlist", fontSize = 14.sp, color = TextSecondary)
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Text field
             OutlinedTextField(
@@ -117,7 +117,7 @@ fun CreatePlaylistSheet(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             // Create button
             Box(
@@ -167,14 +167,14 @@ fun SortBottomSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = CardSurface,
+        containerColor = SurfaceOverlay.copy(alpha = 0.96f),
         dragHandle = { BottomSheetDefaults.DragHandle(color = TextSecondary) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 32.dp)
+                .padding(horizontal = 14.dp)
+                .padding(bottom = 24.dp)
         ) {
             Text(
                 "Trier par",
@@ -235,14 +235,14 @@ fun AddToPlaylistSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceOverlay,
+        containerColor = SurfaceOverlay.copy(alpha = 0.96f),
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 36.dp)
+                .padding(horizontal = 18.dp)
+                .padding(bottom = 26.dp)
         ) {
             Text(
                 "Ajouter à une playlist",
@@ -260,7 +260,7 @@ fun AddToPlaylistSheet(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.primary.copy(0.12f))
-                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(0.3f), RoundedCornerShape(12.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(0.18f), RoundedCornerShape(12.dp))
                     .clickable { onCreateAndAdd(); onDismiss() }
                     .padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -365,13 +365,13 @@ fun SongContextMenuSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceOverlay,
+        containerColor = SurfaceOverlay.copy(alpha = 0.96f),
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 36.dp)
+                .padding(bottom = 26.dp)
         ) {
             // Song header
             Row(
@@ -464,14 +464,14 @@ fun SleepTimerBottomSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceOverlay,
+        containerColor = SurfaceOverlay.copy(alpha = 0.96f),
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 40.dp)
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp)
         ) {
             Text(
                 "Minuterie de sommeil",
@@ -525,8 +525,8 @@ private fun SleepTimerOption(
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .clickable { onClick() }
-            .background(GlassSurface)
-            .border(1.dp, GlassBorder, RoundedCornerShape(14.dp))
+            .background(GlassSurface.copy(alpha = 0.55f))
+            .border(1.dp, GlassBorder.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -557,14 +557,14 @@ fun SongInfoBottomSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceOverlay,
+        containerColor = SurfaceOverlay.copy(alpha = 0.96f),
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 36.dp)
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 26.dp)
         ) {
             Text(
                 "Informations",
@@ -672,8 +672,8 @@ private fun InfoActionChip(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(GlassSurface)
-            .border(1.dp, GlassBorder, RoundedCornerShape(14.dp))
+            .background(GlassSurface.copy(alpha = 0.5f))
+            .border(1.dp, GlassBorder.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
             .clickable { onClick() }
             .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -697,14 +697,14 @@ fun PlaybackSpeedBottomSheet(
     val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceOverlay,
+        containerColor = SurfaceOverlay.copy(alpha = 0.96f),
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 36.dp)
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 26.dp)
         ) {
             Text(
                 "Vitesse de lecture",

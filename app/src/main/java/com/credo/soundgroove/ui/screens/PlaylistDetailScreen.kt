@@ -71,7 +71,7 @@ fun PlaylistDetailScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(300.dp)
+                        .height(280.dp)
                 ) {
                     // Mosaic of 4 cover arts or gradient
                     val covers = playlist.songs.mapNotNull { it.albumArtUri }.take(4)
@@ -198,7 +198,7 @@ fun PlaylistDetailScreen(
                     Column(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(horizontal = 20.dp, vertical = 20.dp)
+                            .padding(horizontal = 16.dp, vertical = 18.dp)
                     ) {
                         Text(
                             text = playlist.name,
@@ -220,7 +220,7 @@ fun PlaylistDetailScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     // Play button
@@ -314,7 +314,7 @@ fun PlaylistDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onPlaySong(song) }
-                            .padding(horizontal = 20.dp, vertical = 10.dp),
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -394,8 +394,8 @@ fun PlaylistDetailScreen(
 
                     if (index < playlist.songs.size - 1) {
                         HorizontalDivider(
-                            modifier = Modifier.padding(start = 80.dp, end = 20.dp),
-                            color = GlassBorder.copy(alpha = 0.3f)
+                            modifier = Modifier.padding(start = 76.dp, end = 16.dp),
+                            color = GlassBorder.copy(alpha = 0.20f)
                         )
                     }
                 }
@@ -477,14 +477,14 @@ fun RenamePlaylistSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF150B2B),
+        containerColor = SurfaceOverlay.copy(alpha = 0.96f),
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 40.dp)
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp)
         ) {
             Text("Renommer la playlist", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
             Spacer(modifier = Modifier.height(16.dp))

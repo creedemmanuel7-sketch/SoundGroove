@@ -67,7 +67,7 @@ fun SearchScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm),
+                    .padding(horizontal = SgSpacing.sm, vertical = SgSpacing.xs),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SgIconButton(onClick = onBack, accentColor = accentColor) {
@@ -97,10 +97,10 @@ fun SearchScreen(
                     keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                     shape = RoundedCornerShape(SgRadius.pill),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = accentColor.copy(alpha = 0.6f),
-                        unfocusedBorderColor = BorderSubtle,
-                        focusedContainerColor = SurfaceElevated.copy(alpha = 0.8f),
-                        unfocusedContainerColor = SurfaceElevated.copy(alpha = 0.5f),
+                        focusedBorderColor = accentColor.copy(alpha = 0.42f),
+                        unfocusedBorderColor = BorderSubtle.copy(alpha = 0.45f),
+                        focusedContainerColor = SurfaceElevated.copy(alpha = 0.52f),
+                        unfocusedContainerColor = SurfaceElevated.copy(alpha = 0.32f),
                         focusedTextColor = TextPrimary,
                         unfocusedTextColor = TextPrimary,
                         cursorColor = accentColor
@@ -123,14 +123,14 @@ fun SearchScreen(
                     text = "RECHERCHES RÉCENTES",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary,
-                    modifier = Modifier.padding(horizontal = SgSpacing.xl, vertical = SgSpacing.lg)
+                    modifier = Modifier.padding(horizontal = SgSpacing.lg, vertical = SgSpacing.md)
                 )
                 recentSearches.forEach { term ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { searchQuery = term }
-                            .padding(horizontal = SgSpacing.xl, vertical = SgSpacing.md),
+                            .padding(horizontal = SgSpacing.lg, vertical = SgSpacing.sm),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Default.History, null, tint = TextTertiary, modifier = Modifier.size(18.dp))
@@ -143,10 +143,10 @@ fun SearchScreen(
                     text = "${filteredSongs.size} résultat(s)",
                     style = MaterialTheme.typography.labelMedium,
                     color = accentColor,
-                    modifier = Modifier.padding(horizontal = SgSpacing.xl, vertical = SgSpacing.sm)
+                    modifier = Modifier.padding(horizontal = SgSpacing.lg, vertical = SgSpacing.sm)
                 )
                 LazyColumn(
-                    contentPadding = PaddingValues(horizontal = SgSpacing.lg, vertical = SgSpacing.sm)
+                    contentPadding = PaddingValues(horizontal = SgSpacing.sm, vertical = SgSpacing.xs)
                 ) {
                     items(filteredSongs, key = { it.id }) { song ->
                         SongListItem(

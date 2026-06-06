@@ -113,10 +113,10 @@ fun SgIconButton(
 ) {
     Box(
         modifier = modifier
-            .size(42.dp)
+            .size(38.dp)
             .clip(CircleShape)
-            .background(SurfaceElevated.copy(alpha = 0.85f))
-            .border(1.dp, accentColor.copy(alpha = 0.15f), CircleShape)
+            .background(SurfaceElevated.copy(alpha = 0.46f))
+            .border(1.dp, accentColor.copy(alpha = 0.08f), CircleShape)
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
         content = content
@@ -135,15 +135,15 @@ fun SgChip(
         modifier = modifier
             .clip(RoundedCornerShape(SgRadius.pill))
             .background(
-                if (selected) accentColor.copy(alpha = 0.22f) else SurfaceElevated.copy(alpha = 0.6f)
+                if (selected) accentColor.copy(alpha = 0.24f) else SurfaceElevated.copy(alpha = 0.28f)
             )
             .border(
                 width = 1.dp,
-                color = if (selected) accentColor.copy(alpha = 0.5f) else BorderSubtle,
+                color = if (selected) accentColor.copy(alpha = 0.42f) else BorderSubtle.copy(alpha = 0.35f),
                 shape = RoundedCornerShape(SgRadius.pill)
             )
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
