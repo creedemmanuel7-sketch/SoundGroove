@@ -94,36 +94,35 @@ data class Playlist(
 )
 
 class MainActivity : ComponentActivity() {
-    private lateinit var controllerFuture: ListenableFuture<MediaController>
-    private var mediaController: MediaController? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            val viewModel: com.credo.soundgroove.viewmodel.SoundGrooveViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+            val currentTheme by viewModel.currentTheme.collectAsState()
+            val showThemeSelection by viewModel.showThemeSelection.collectAsState()
 
-        // On se connecte au service au lieu de crÃ©er un player local
-        val sessionToken = SessionToken(
-            this,
-            ComponentName(this, PlaybackService::class.java)
-        )
-        controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
-
-        controllerFuture.addListener({
-            mediaController = controllerFuture.get()
-            // Le controller est prÃªt â€” on lance l'UI
-            enableEdgeToEdge()
-            setContent {
-                SoundGrooveTheme {
-                    mediaController?.let { controller ->
-                        MainScreen(controller)
+            SoundGrooveTheme(appTheme = currentTheme) {
+                if (showThemeSelection) {
+                    com.credo.soundgroove.ui.screens.ThemeSelectionScreen(
+                        onThemeSelected = { theme ->
+                            viewModel.completeThemeSelection(theme)
+                        }
+                    )
+                } else {
+                    val accentColor = when (currentTheme) {
+                        AppTheme.CLASSIC_DARK -> ClassicAccent
+                        AppTheme.ORIGINAL_PURPLE -> LightPurple
+                        AppTheme.CORAL_VIBRANT -> CoralAccent
                     }
+                    com.credo.soundgroove.ui.navigation.AppNavigation(
+                        viewModel = viewModel,
+                        accentColor = accentColor
+                    )
                 }
             }
-        }, MoreExecutors.directExecutor())
-    }
-
-    override fun onDestroy() {
-        MediaController.releaseFuture(controllerFuture)
-        super.onDestroy()
+        }
     }
 }
 
@@ -131,6 +130,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(
     player: MediaController, 
+    accentColor: Color,
     onNavigateToPlaylist: (Long) -> Unit = {}, 
     onNavigateToSearch: () -> Unit = {},
     onNavigateToAlbum: (String) -> Unit = {},
@@ -326,7 +326,7 @@ fun MainScreen(
                         },
                         onOpenPlayer = { showPlayer = true },
                         onNavigateToSearch = onNavigateToSearch,
-                        accentColor = LightPurple
+                        accentColor = accentColor
                     )
 
                     1 -> LibraryTab(
@@ -407,7 +407,7 @@ fun MainScreen(
                         },
                         onNavigateToAlbum = onNavigateToAlbum,
                         onNavigateToArtist = onNavigateToArtist,
-                        accentColor = LightPurple
+                        accentColor = accentColor
                     )
 
                     2 -> SearchTab(
@@ -450,6 +450,7 @@ fun MainScreen(
                     MiniPlayer(
                         song = song,
                         isPlaying = isPlaying,
+                        accentColor = accentColor,
                         onPlayPause = {
                             if (isPlaying) player.pause() else player.play()
                             isPlaying = !isPlaying
@@ -465,6 +466,7 @@ fun MainScreen(
 
                 BottomNavBar(
                     selectedTab = selectedTab,
+                    accentColor = accentColor,
                     onTabSelected = { selectedTab = it }
                 )
             }
@@ -788,7 +790,7 @@ fun MainScreen(
 
 
 @Composable
-fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
+fun BottomNavBar(selectedTab: Int, accentColor: Color, onTabSelected: (Int) -> Unit) {
     data class NavItem(
         val label: String,
         val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -826,13 +828,13 @@ fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                     Icon(
                         imageVector = if (selectedTab == index) item.selectedIcon else item.unselectedIcon,
                         contentDescription = item.label,
-                        tint = if (selectedTab == index) LightPurple else TextSecondary,
+                        tint = if (selectedTab == index) accentColor else TextSecondary,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = item.label,
-                        color = if (selectedTab == index) LightPurple else TextSecondary,
+                        color = if (selectedTab == index) accentColor else TextSecondary,
                         fontSize = 10.sp,
                         fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
                     )
@@ -841,7 +843,7 @@ fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                         Box(
                             modifier = Modifier
                                 .size(4.dp)
-                                .background(LightPurple, CircleShape)
+                                .background(accentColor, CircleShape)
                         )
                     }
                 }
@@ -1188,6 +1190,7 @@ fun PlaceholderTab(icon: String, title: String, subtitle: String) {
 fun MiniPlayer(
     song: Song,
     isPlaying: Boolean,
+    accentColor: Color,
     onPlayPause: () -> Unit,
     onOpen: () -> Unit,
     onSwipeNext: () -> Unit = {},
@@ -1233,7 +1236,7 @@ fun MiniPlayer(
                 .fillMaxWidth()
                 .background(
                     Brush.linearGradient(
-                        listOf(MediumPurple.copy(0.5f), DarkPurple.copy(0.8f))
+                        listOf(accentColor.copy(alpha = 0.3f), DarkPurple.copy(alpha = 0.8f))
                     )
                 )
         ) {
@@ -1250,7 +1253,7 @@ fun MiniPlayer(
                         .fillMaxHeight()
                         .background(
                             Brush.horizontalGradient(
-                                listOf(LightPurple, CyanAccent)
+                                listOf(accentColor, CyanAccent)
                             )
                         )
                 )
@@ -1292,7 +1295,7 @@ fun MiniPlayer(
                             Icon(
                                 imageVector = Icons.Filled.MusicNote,
                                 contentDescription = null,
-                                tint = LightPurple,
+                                tint = accentColor,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -1312,7 +1315,7 @@ fun MiniPlayer(
                         )
                         Text(
                             text = song.artist,
-                            color = LightPurple,
+                            color = accentColor,
                             fontSize = 11.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -1349,7 +1352,7 @@ fun MiniPlayer(
                     Box(
                         modifier = Modifier
                             .size(40.dp)
-                            .background(LightPurple, CircleShape)
+                            .background(accentColor, CircleShape)
                             .clickable(
                                 indication = null,
                                 interactionSource = remember { MutableInteractionSource() }

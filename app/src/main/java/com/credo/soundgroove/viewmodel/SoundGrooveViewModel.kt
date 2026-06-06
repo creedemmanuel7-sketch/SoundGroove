@@ -22,8 +22,33 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.credo.soundgroove.ui.theme.AppTheme
 
 class SoundGrooveViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val prefs = application.getSharedPreferences("soundgroove_prefs", android.content.Context.MODE_PRIVATE)
+
+    private val _currentTheme = MutableStateFlow(
+        try {
+            AppTheme.valueOf(prefs.getString("selected_theme", AppTheme.CLASSIC_DARK.name) ?: AppTheme.CLASSIC_DARK.name)
+        } catch (e: Exception) {
+            AppTheme.CLASSIC_DARK
+        }
+    )
+    val currentTheme: StateFlow<AppTheme> = _currentTheme.asStateFlow()
+
+    private val _showThemeSelection = MutableStateFlow(!prefs.contains("selected_theme"))
+    val showThemeSelection: StateFlow<Boolean> = _showThemeSelection.asStateFlow()
+
+    fun setTheme(theme: AppTheme) {
+        _currentTheme.value = theme
+        prefs.edit().putString("selected_theme", theme.name).apply()
+    }
+
+    fun completeThemeSelection(theme: AppTheme) {
+        setTheme(theme)
+        _showThemeSelection.value = false
+    }
 
     private val db = SoundGrooveDatabase.getInstance(application)
     private val dbRepository = DatabaseRepository(

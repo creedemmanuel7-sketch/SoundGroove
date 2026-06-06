@@ -30,6 +30,7 @@ fun LegacyMainHost(
         // remove it from MainScreen and drive it from the ViewModel here.
         com.credo.soundgroove.MainScreen(
             player = controller!!,
+            accentColor = accentColor,
             onNavigateToPlaylist = onNavigateToPlaylist,
             onNavigateToSearch = onNavigateToSearch,
             onNavigateToAlbum = onNavigateToAlbum,
