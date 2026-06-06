@@ -23,6 +23,8 @@ fun LegacyMainHost(
     val currentTheme by viewModel.currentTheme.collectAsState()
     val sleepTimerRemainingSeconds by viewModel.sleepTimerRemainingSeconds.collectAsState()
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
+    val vmSongs by viewModel.songs.collectAsState()
+    val totalListeningSeconds by viewModel.totalListeningSeconds.collectAsState()
 
     if (controller != null) {
         com.credo.soundgroove.MainScreen(
@@ -39,7 +41,11 @@ fun LegacyMainHost(
             onNavigateToPlaylist = onNavigateToPlaylist,
             onNavigateToSearch = onNavigateToSearch,
             onNavigateToAlbum = onNavigateToAlbum,
-            onNavigateToArtist = onNavigateToArtist
+            onNavigateToArtist = onNavigateToArtist,
+            vmSongs = vmSongs,
+            onSyncSongs = { viewModel.syncSongs(it) },
+            onReloadMusic = { viewModel.reloadMusic() },
+            listeningTimeLabel = viewModel.formatListeningTime(totalListeningSeconds)
         )
     }
 }

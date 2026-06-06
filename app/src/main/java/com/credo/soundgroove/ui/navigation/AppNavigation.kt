@@ -120,23 +120,25 @@ fun AppNavigation(
             val albumName = Uri.decode(encodedName)
             val albumSongs = songs.filter { it.albumName == albumName }
 
-            if (albumSongs.isNotEmpty()) {
-                AlbumDetailScreen(
-                    albumName = albumName,
-                    songs = albumSongs,
-                    currentSong = currentSong,
-                    isPlaying = isPlaying,
-                    favoriteSongs = favoriteSongs,
-                    accentColor = accentColor,
-                    onBack = { navController.popBackStack() },
-                    onPlaySong = { song -> viewModel.playSong(song) },
-                    onShufflePlay = { viewModel.playPlaylist(Playlist(name = albumName, songs = albumSongs.shuffled())) },
-                    onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
-                    onPlayNext = { song -> viewModel.playNext(song) },
-                    onAddToQueue = { song -> viewModel.addToQueue(song) },
-                    onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
-                )
-            }
+            AlbumDetailScreen(
+                albumName = albumName,
+                songs = albumSongs,
+                currentSong = currentSong,
+                isPlaying = isPlaying,
+                favoriteSongs = favoriteSongs,
+                accentColor = accentColor,
+                onBack = { navController.popBackStack() },
+                onPlaySong = { song -> viewModel.playSong(song) },
+                onShufflePlay = {
+                    if (albumSongs.isNotEmpty()) {
+                        viewModel.playPlaylist(Playlist(name = albumName, songs = albumSongs.shuffled()))
+                    }
+                },
+                onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
+                onPlayNext = { song -> viewModel.playNext(song) },
+                onAddToQueue = { song -> viewModel.addToQueue(song) },
+                onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
+            )
         }
 
         composable(Routes.ARTIST_DETAIL) { backStackEntry ->
@@ -144,23 +146,25 @@ fun AppNavigation(
             val artistName = Uri.decode(encodedName)
             val artistSongs = songs.filter { it.artist == artistName }
 
-            if (artistSongs.isNotEmpty()) {
-                ArtistDetailScreen(
-                    artistName = artistName,
-                    songs = artistSongs,
-                    currentSong = currentSong,
-                    isPlaying = isPlaying,
-                    favoriteSongs = favoriteSongs,
-                    accentColor = accentColor,
-                    onBack = { navController.popBackStack() },
-                    onPlaySong = { song -> viewModel.playSong(song) },
-                    onShufflePlay = { viewModel.playPlaylist(Playlist(name = artistName, songs = artistSongs.shuffled())) },
-                    onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
-                    onPlayNext = { song -> viewModel.playNext(song) },
-                    onAddToQueue = { song -> viewModel.addToQueue(song) },
-                    onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
-                )
-            }
+            ArtistDetailScreen(
+                artistName = artistName,
+                songs = artistSongs,
+                currentSong = currentSong,
+                isPlaying = isPlaying,
+                favoriteSongs = favoriteSongs,
+                accentColor = accentColor,
+                onBack = { navController.popBackStack() },
+                onPlaySong = { song -> viewModel.playSong(song) },
+                onShufflePlay = {
+                    if (artistSongs.isNotEmpty()) {
+                        viewModel.playPlaylist(Playlist(name = artistName, songs = artistSongs.shuffled()))
+                    }
+                },
+                onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
+                onPlayNext = { song -> viewModel.playNext(song) },
+                onAddToQueue = { song -> viewModel.addToQueue(song) },
+                onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
+            )
         }
     }
 }

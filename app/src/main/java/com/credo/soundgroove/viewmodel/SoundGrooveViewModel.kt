@@ -100,10 +100,33 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     private val _sortMode = MutableStateFlow(0)
     val sortMode: StateFlow<Int> = _sortMode.asStateFlow()
 
+    private val _totalListeningSeconds = MutableStateFlow(prefs.getLong("total_listening_seconds", 0L))
+    val totalListeningSeconds: StateFlow<Long> = _totalListeningSeconds.asStateFlow()
+
     init {
         initMediaController()
         loadMusic()
         observeDatabase()
+    }
+
+    fun formatListeningTime(seconds: Long = _totalListeningSeconds.value): String {
+        val hours = seconds / 3600
+        val minutes = (seconds % 3600) / 60
+        return when {
+            hours > 0 -> "${hours} h ${minutes.toString().padStart(2, '0')} min"
+            minutes > 0 -> "$minutes min"
+            else -> "< 1 min"
+        }
+    }
+
+    fun syncSongs(songs: List<Song>) {
+        if (songs.isNotEmpty()) {
+            _songs.value = songs
+        }
+    }
+
+    fun reloadMusic() {
+        loadMusic()
     }
 
     private fun initMediaController() {
@@ -136,6 +159,9 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
             while (true) {
                 if (_isPlaying.value) {
                     _playbackPosition.value = _mediaController.value?.currentPosition ?: 0L
+                    val updated = _totalListeningSeconds.value + 1
+                    _totalListeningSeconds.value = updated
+                    prefs.edit().putLong("total_listening_seconds", updated).apply()
                 }
                 delay(1000L)
             }

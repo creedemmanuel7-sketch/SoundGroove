@@ -19,8 +19,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.credo.soundgroove.R
 import com.credo.soundgroove.ui.theme.*
 
 fun formatSleepTimerDisplay(seconds: Int?): String? {
@@ -39,6 +41,7 @@ fun SettingsScreen(
     songCount: Int,
     favoriteCount: Int,
     playlistCount: Int,
+    listeningTimeLabel: String = "0 min",
     sleepTimerRemainingSeconds: Int?,
     playbackSpeed: Float,
     onBack: () -> Unit,
@@ -75,7 +78,7 @@ fun SettingsScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        painter = painterResource(R.drawable.ic_back),
                         contentDescription = "Retour",
                         tint = TextPrimary,
                         modifier = Modifier.size(22.dp)
@@ -242,11 +245,13 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             SettingsSection(title = "Statistiques") {
-                StatRow(Icons.Filled.MusicNote, "Morceaux", "$songCount")
+                StatRowIcon(R.drawable.ic_songs, "Morceaux", "$songCount")
                 Spacer(modifier = Modifier.height(10.dp))
-                StatRow(Icons.Filled.Favorite, "Favoris", "$favoriteCount")
+                StatRowIcon(R.drawable.ic_favorite_filled, "Favoris", "$favoriteCount")
                 Spacer(modifier = Modifier.height(10.dp))
-                StatRow(Icons.Filled.PlaylistPlay, "Playlists", "$playlistCount")
+                StatRowIcon(R.drawable.ic_playlists, "Playlists", "$playlistCount")
+                Spacer(modifier = Modifier.height(10.dp))
+                StatRowIcon(R.drawable.ic_play, "Heures d'écoute", listeningTimeLabel)
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -361,6 +366,28 @@ private fun StatRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(label, color = TextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+        Text(value, color = TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun StatRowIcon(
+    iconRes: Int,
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            tint = TextSecondary,
+            modifier = Modifier.size(18.dp)
+        )
         Spacer(modifier = Modifier.width(12.dp))
         Text(label, color = TextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
         Text(value, color = TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium)

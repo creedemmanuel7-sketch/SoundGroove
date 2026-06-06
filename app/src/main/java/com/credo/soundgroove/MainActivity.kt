@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -140,7 +141,11 @@ fun MainScreen(
     onNavigateToAlbum: (String) -> Unit = {},
     onNavigateToArtist: (String) -> Unit = {},
     playbackSpeed: Float = 1f,
-    onPlaybackSpeedChange: (Float) -> Unit = {}
+    onPlaybackSpeedChange: (Float) -> Unit = {},
+    vmSongs: List<Song> = emptyList(),
+    onSyncSongs: (List<Song>) -> Unit = {},
+    onReloadMusic: () -> Unit = {},
+    listeningTimeLabel: String = "0 min"
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     val context = LocalContext.current
@@ -213,8 +218,20 @@ fun MainScreen(
     ) { granted -> hasPermission = granted }
 
     LaunchedEffect(hasPermission) {
-        if (hasPermission) songs = loadSongs(context)
-        else permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
+        if (hasPermission) {
+            songs = loadSongs(context)
+            onReloadMusic()
+        } else {
+            permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
+        }
+    }
+
+    LaunchedEffect(vmSongs) {
+        if (vmSongs.isNotEmpty()) songs = vmSongs
+    }
+
+    LaunchedEffect(songs) {
+        if (songs.isNotEmpty()) onSyncSongs(songs)
     }
 
     LaunchedEffect(player) {
@@ -228,9 +245,26 @@ fun MainScreen(
         }
     }
 
+    fun songToMediaItem(song: Song): MediaItem =
+        MediaItem.Builder()
+            .setUri(song.uri)
+            .setMediaId(song.uri.toString())
+            .build()
+
+    fun resolveSongFromMediaItem(item: MediaItem): Song? {
+        val mediaId = item.mediaId
+        return songs.find { it.uri.toString() == mediaId }
+            ?: item.localConfiguration?.uri?.let { uri -> songs.find { it.uri == uri } }
+    }
+
+    fun rebuildPlaylistFromPlayer(): List<Song> =
+        (0 until player.mediaItemCount).mapNotNull { i ->
+            resolveSongFromMediaItem(player.getMediaItemAt(i))
+        }
+
     fun playSong(song: Song, playlist: List<Song>) {
         currentPlaylist = playlist
-        val mediaItems = playlist.map { s -> MediaItem.fromUri(s.uri) }
+        val mediaItems = playlist.map { s -> songToMediaItem(s) }
         val index = playlist.indexOf(song)
         player.setMediaItems(mediaItems, index, 0L)
         player.prepare()
@@ -238,7 +272,7 @@ fun MainScreen(
     }
 
     fun insertPlayNext(song: Song) {
-        val mediaItem = MediaItem.fromUri(song.uri)
+        val mediaItem = songToMediaItem(song)
         if (player.mediaItemCount == 0) {
             currentPlaylist = listOf(song)
             player.setMediaItems(listOf(mediaItem))
@@ -253,7 +287,7 @@ fun MainScreen(
     }
 
     fun addToQueueEnd(song: Song) {
-        val mediaItem = MediaItem.fromUri(song.uri)
+        val mediaItem = songToMediaItem(song)
         if (player.mediaItemCount == 0) {
             currentPlaylist = listOf(song)
             player.setMediaItems(listOf(mediaItem))
@@ -301,7 +335,7 @@ fun MainScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        imageVector = Icons.Filled.AudioFile,
+                        painter = painterResource(R.drawable.ic_songs),
                         contentDescription = null,
                         tint = accentColor,
                         modifier = Modifier.size(64.dp)
@@ -452,6 +486,16 @@ fun MainScreen(
                         },
                         onNavigateToAlbum = onNavigateToAlbum,
                         onNavigateToArtist = onNavigateToArtist,
+                        onPlayNext = { song -> insertPlayNext(song) },
+                        onAddToQueue = { song -> addToQueueEnd(song) },
+                        onShowSongInfo = { song ->
+                            overlayedSong = song
+                            showSongInfo = true
+                        },
+                        onShowPlaylistPicker = { song ->
+                            overlayedSong = song
+                            showPlaylistPicker = true
+                        },
                         accentColor = accentColor
                     )
 
@@ -594,6 +638,7 @@ fun MainScreen(
             songCount = songs.size,
             favoriteCount = favoriteSongs.size,
             playlistCount = playlists.size,
+            listeningTimeLabel = listeningTimeLabel,
             sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
             onBack = { showSettings = false },
             onThemeSelected = onThemeSelected,
@@ -678,7 +723,7 @@ fun MainScreen(
                                     modifier = Modifier.fillMaxSize()
                                 )
                             } else {
-                                Icon(Icons.Filled.MusicNote, null, tint = accentColor, modifier = Modifier.size(32.dp))
+                                Icon(painter = painterResource(R.drawable.ic_songs), contentDescription = null, tint = accentColor, modifier = Modifier.size(32.dp))
                             }
                         }
                         Spacer(modifier = Modifier.width(16.dp))
@@ -691,14 +736,14 @@ fun MainScreen(
                     Spacer(modifier = Modifier.height(20.dp))
                     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(GlassBorder))
                     Spacer(modifier = Modifier.height(16.dp))
-                    InfoRow(Icons.Filled.Person, "Artiste", song.artist, accentColor)
-                    InfoRow(Icons.Filled.MusicNote, "Titre", song.title, accentColor)
-                    InfoRow(Icons.Filled.Album, "Album", song.albumName, accentColor)
-                    InfoRow(Icons.Filled.Timer, "Durée", formatDuration(song.duration), accentColor)
+                    InfoRow(R.drawable.ic_profile, "Artiste", song.artist, accentColor)
+                    InfoRow(R.drawable.ic_songs, "Titre", song.title, accentColor)
+                    InfoRow(R.drawable.ic_playlists, "Album", song.albumName, accentColor)
+                    InfoRow(R.drawable.ic_play, "Durée", formatDuration(song.duration), accentColor)
                     if (song.folderPath.isNotBlank()) {
-                        InfoRow(Icons.Filled.Folder, "Dossier", song.folderPath, accentColor)
+                        InfoRow(R.drawable.ic_queue, "Dossier", song.folderPath, accentColor)
                     } else {
-                        InfoRow(Icons.Filled.AudioFile, "Fichier", song.uri.lastPathSegment ?: "—", accentColor)
+                        InfoRow(R.drawable.ic_songs, "Fichier", song.uri.lastPathSegment ?: "—", accentColor)
                     }
                     Spacer(modifier = Modifier.height(20.dp))
                     Row(
@@ -733,8 +778,12 @@ fun MainScreen(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    if (favoriteSongs.any { it.id == song.id }) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                    null, tint = Color(0xFFFF6B9D), modifier = Modifier.size(18.dp)
+                                    painter = painterResource(
+                                        if (favoriteSongs.any { it.id == song.id }) R.drawable.ic_favorite_filled else R.drawable.ic_favorite_outline
+                                    ),
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF6B9D),
+                                    modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
@@ -834,14 +883,14 @@ fun MainScreen(
                                         ),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Filled.MusicNote, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                    Icon(painter = painterResource(R.drawable.ic_songs), contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(playlist.name, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                                     Text("${playlist.songs.size} chanson(s)", color = TextSecondary, fontSize = 12.sp)
                                 }
-                                Icon(Icons.Filled.Add, null, tint = LightPurple, modifier = Modifier.size(20.dp))
+                                Icon(painter = painterResource(R.drawable.ic_add), contentDescription = null, tint = LightPurple, modifier = Modifier.size(20.dp))
                             }
                             Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(GlassBorder))
                         }
@@ -864,13 +913,17 @@ fun MainScreen(
         }
     }
 
-    LaunchedEffect(showQueue, player.mediaItemCount) {
-        if (showQueue && player.mediaItemCount > 0) {
-            currentPlaylist = (0 until player.mediaItemCount).mapNotNull { i ->
-                val mediaId = player.getMediaItemAt(i).mediaId
-                songs.find { it.uri.toString() == mediaId }
-            }
+    LaunchedEffect(showQueue, player.mediaItemCount, songs) {
+        if (showQueue) {
+            val rebuilt = rebuildPlaylistFromPlayer()
+            if (rebuilt.isNotEmpty()) currentPlaylist = rebuilt
         }
+    }
+
+    val queueBaseIndex = player.currentMediaItemIndex.coerceIn(0, (currentPlaylist.size - 1).coerceAtLeast(0))
+    val queueDisplayList = remember(currentPlaylist, queueBaseIndex) {
+        if (currentPlaylist.isEmpty()) emptyList()
+        else currentPlaylist.drop(queueBaseIndex) + currentPlaylist.take(queueBaseIndex)
     }
 
     AnimatedVisibility(
@@ -879,26 +932,32 @@ fun MainScreen(
         exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
     ) {
         QueueScreen(
-            playlist = currentPlaylist,
-            currentIndex = player.currentMediaItemIndex,
+            playlist = queueDisplayList,
+            currentIndex = 0,
             accentColor = accentColor,
             onClose = { showQueue = false },
-            onPlaySong = { index ->
-                player.seekToDefaultPosition(index)
+            onPlaySong = { displayIndex ->
+                val actualIndex = (queueBaseIndex + displayIndex) % currentPlaylist.size.coerceAtLeast(1)
+                player.seekToDefaultPosition(actualIndex)
                 player.play()
                 isPlaying = true
             },
-            onRemoveSong = { index ->
-                player.removeMediaItem(index)
+            onRemoveSong = { displayIndex ->
+                if (currentPlaylist.isEmpty()) return@QueueScreen
+                val actualIndex = (queueBaseIndex + displayIndex) % currentPlaylist.size
+                player.removeMediaItem(actualIndex)
                 val newList = currentPlaylist.toMutableList()
-                newList.removeAt(index)
+                newList.removeAt(actualIndex)
                 currentPlaylist = newList
             },
             onMoveSong = { from, to ->
-                player.moveMediaItem(from, to)
+                if (currentPlaylist.isEmpty()) return@QueueScreen
+                val actualFrom = (queueBaseIndex + from) % currentPlaylist.size
+                val actualTo = (queueBaseIndex + to) % currentPlaylist.size
+                player.moveMediaItem(actualFrom, actualTo)
                 val newList = currentPlaylist.toMutableList()
-                val item = newList.removeAt(from)
-                newList.add(to, item)
+                val item = newList.removeAt(actualFrom)
+                newList.add(actualTo, item)
                 currentPlaylist = newList
             }
         )
@@ -909,17 +968,13 @@ fun MainScreen(
 
 @Composable
 fun BottomNavBar(selectedTab: Int, accentColor: Color, onTabSelected: (Int) -> Unit) {
-    data class NavItem(
-        val label: String,
-        val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
-        val unselectedIcon: androidx.compose.ui.graphics.vector.ImageVector
-    )
+    data class NavItem(val label: String, val iconRes: Int)
 
     val tabs = listOf(
-        NavItem("Accueil", Icons.Filled.Home, Icons.Outlined.Home),
-        NavItem("Bibliothèque", Icons.Filled.LibraryMusic, Icons.Outlined.LibraryMusic),
-        NavItem("Recherche", Icons.Filled.Search, Icons.Outlined.Search),
-        NavItem("Profil", Icons.Filled.Person, Icons.Outlined.Person)
+        NavItem("Accueil", R.drawable.ic_home),
+        NavItem("Bibliothèque", R.drawable.ic_playlists),
+        NavItem("Recherche", R.drawable.ic_search),
+        NavItem("Profil", R.drawable.ic_profile)
     )
 
     Box(
@@ -954,7 +1009,7 @@ fun BottomNavBar(selectedTab: Int, accentColor: Color, onTabSelected: (Int) -> U
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
-                                imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
+                                painter = androidx.compose.ui.res.painterResource(item.iconRes),
                                 contentDescription = item.label,
                                 tint = if (selected) accentColor else TextTertiary,
                                 modifier = Modifier.size(22.dp)
@@ -1038,7 +1093,7 @@ fun HomeTab(
                     )
                 }
                 Icon(
-                    imageVector = Icons.Filled.Settings,
+                    painter = painterResource(R.drawable.ic_settings),
                     contentDescription = "Paramètres",
                     tint = TextPrimary,
                     modifier = Modifier
@@ -1059,7 +1114,7 @@ fun HomeTab(
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(imageVector = Icons.Filled.Search, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
+                    Icon(painter = painterResource(R.drawable.ic_search), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(10.dp))
                     androidx.compose.material3.TextField(
                         value = searchQuery,
@@ -1145,7 +1200,7 @@ fun HomeTab(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Icon(
-                                    imageVector = if (isPlaying) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                                    painter = painterResource(if (isPlaying) R.drawable.ic_play else R.drawable.ic_pause),
                                     contentDescription = null,
                                     tint = accentColor,
                                     modifier = Modifier.size(14.dp)
@@ -1179,7 +1234,7 @@ fun HomeTab(
                                 )
                             } else {
                                 Icon(
-                                    imageVector = Icons.Filled.MusicNote,
+                                    painter = painterResource(R.drawable.ic_songs),
                                     contentDescription = null,
                                     tint = TextSecondary,
                                     modifier = Modifier.size(40.dp)
@@ -1436,7 +1491,7 @@ fun MiniPlayer(
                             )
                         } else {
                             Icon(
-                                imageVector = Icons.Filled.MusicNote,
+                                painter = painterResource(R.drawable.ic_songs),
                                 contentDescription = null,
                                 tint = accentColor,
                                 modifier = Modifier.size(20.dp)
@@ -1497,7 +1552,7 @@ fun MiniPlayer(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.SkipPrevious,
+                            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_previous),
                             contentDescription = "Précédent",
                             tint = TextPrimary,
                             modifier = Modifier.size(22.dp)
@@ -1516,8 +1571,9 @@ fun MiniPlayer(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = if (isPlaying) Icons.Filled.Pause
-                            else Icons.Filled.PlayArrow,
+                            painter = androidx.compose.ui.res.painterResource(
+                                if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
+                            ),
                             contentDescription = null,
                             tint = Color.White,
                             modifier = Modifier.size(22.dp)
@@ -1535,7 +1591,7 @@ fun MiniPlayer(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.SkipNext,
+                            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_next),
                             contentDescription = "Suivant",
                             tint = TextPrimary,
                             modifier = Modifier.size(22.dp)
@@ -1610,7 +1666,7 @@ fun SongItem(
                     )
                 } else {
                     Icon(
-                        imageVector = Icons.Filled.MusicNote,
+                        painter = painterResource(R.drawable.ic_songs),
                         contentDescription = null,
                         tint = TextSecondary,
                         modifier = Modifier.size(20.dp)
@@ -1647,7 +1703,7 @@ fun SongItem(
 
             if (isPlaying) {
                 Icon(
-                    imageVector = Icons.Filled.MusicNote,
+                    painter = painterResource(R.drawable.ic_songs),
                     contentDescription = null,
                     tint = CyanAccent,
                     modifier = Modifier.size(18.dp)
@@ -1658,7 +1714,7 @@ fun SongItem(
             if (showMenu) {
                 Box {
                     Icon(
-                        imageVector = Icons.Filled.MoreVert,
+                        painter = painterResource(R.drawable.ic_options),
                         contentDescription = "Options",
                         tint = TextSecondary,
                         modifier = Modifier
@@ -1681,7 +1737,7 @@ fun SongItem(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.PlayArrow, null, tint = accentColor, modifier = Modifier.size(18.dp))
+                                    Icon(painter = painterResource(R.drawable.ic_play), contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text("Lire maintenant", color = TextPrimary, fontSize = 14.sp)
                                 }
@@ -1691,7 +1747,7 @@ fun SongItem(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = accentColor, modifier = Modifier.size(18.dp))
+                                    Icon(painter = painterResource(R.drawable.ic_queue), contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text("Jouer ensuite", color = TextPrimary, fontSize = 14.sp)
                                 }
@@ -1701,7 +1757,7 @@ fun SongItem(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.PlaylistAdd, null, tint = accentColor, modifier = Modifier.size(18.dp))
+                                    Icon(painter = painterResource(R.drawable.ic_playlists), contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text("Ajouter à la file", color = TextPrimary, fontSize = 14.sp)
                                 }
@@ -1712,8 +1768,8 @@ fun SongItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                        null,
+                                        painter = painterResource(if (isFavorite) R.drawable.ic_favorite_filled else R.drawable.ic_favorite_outline),
+                                        contentDescription = null,
                                         tint = Color(0xFFFF6B9D),
                                         modifier = Modifier.size(18.dp)
                                     )
@@ -1730,7 +1786,7 @@ fun SongItem(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.PlaylistAdd, null, tint = CyanAccent, modifier = Modifier.size(18.dp))
+                                    Icon(painter = painterResource(R.drawable.ic_add), contentDescription = null, tint = CyanAccent, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text("Ajouter à une playlist", color = TextPrimary, fontSize = 14.sp)
                                 }
@@ -1740,7 +1796,7 @@ fun SongItem(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.Info, null, tint = TextSecondary, modifier = Modifier.size(18.dp))
+                                    Icon(painter = painterResource(R.drawable.ic_songs), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text("Infos de la chanson", color = TextPrimary, fontSize = 14.sp)
                                 }
@@ -1756,7 +1812,7 @@ fun SongItem(
 
 @Composable
 fun InfoRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconRes: Int,
     label: String,
     value: String,
     accentColor: Color = LightPurple
@@ -1768,7 +1824,7 @@ fun InfoRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            imageVector = icon,
+            painter = painterResource(iconRes),
             contentDescription = null,
             tint = accentColor,
             modifier = Modifier.size(16.dp)
@@ -1831,7 +1887,7 @@ fun RecentlyPlayedScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.ArrowBack,
+                        painter = painterResource(R.drawable.ic_back),
                         contentDescription = "Retour",
                         tint = TextPrimary,
                         modifier = Modifier.size(22.dp)
@@ -1867,7 +1923,7 @@ fun RecentlyPlayedScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Filled.PlayArrow,
+                    painter = painterResource(R.drawable.ic_play),
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(18.dp)
@@ -1946,7 +2002,7 @@ fun SearchTab(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Search,
+                    painter = painterResource(R.drawable.ic_search),
                     contentDescription = null,
                     tint = TextSecondary,
                     modifier = Modifier.size(20.dp)
@@ -2025,7 +2081,7 @@ fun SearchTab(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Search,
+                            painter = painterResource(R.drawable.ic_search),
                             contentDescription = null,
                             tint = TextSecondary,
                             modifier = Modifier.size(36.dp)
@@ -2212,7 +2268,7 @@ fun PlayerScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_close_down),
                         contentDescription = "Fermer",
                         tint = TextPrimary,
                         modifier = Modifier.size(28.dp)
@@ -2236,7 +2292,7 @@ fun PlayerScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.MoreVert,
+                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_options),
                         contentDescription = "Options",
                         tint = TextPrimary,
                         modifier = Modifier.size(24.dp)
@@ -2249,7 +2305,12 @@ fun PlayerScreen(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.Queue, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+                                    Icon(
+                                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_queue),
+                                        contentDescription = null,
+                                        tint = TextPrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("File d'attente", color = TextPrimary)
                                 }
@@ -2262,7 +2323,7 @@ fun PlayerScreen(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.Info, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+                                    Icon(painter = painterResource(R.drawable.ic_songs), contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("Infos de la chanson", color = TextPrimary)
                                 }
@@ -2275,7 +2336,7 @@ fun PlayerScreen(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.Share, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+                                    Icon(painter = painterResource(R.drawable.ic_options), contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("Partager", color = TextPrimary)
                                 }
@@ -2288,7 +2349,7 @@ fun PlayerScreen(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.Notifications, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+                                    Icon(painter = painterResource(R.drawable.ic_settings), contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("Définir comme sonnerie", color = TextPrimary)
                                 }
@@ -2301,7 +2362,7 @@ fun PlayerScreen(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.Speed, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+                                    Icon(painter = painterResource(R.drawable.ic_settings), contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("Vitesse (${if (playbackSpeed == playbackSpeed.toLong().toFloat()) "${playbackSpeed.toLong()}x" else "${playbackSpeed}x"})", color = TextPrimary)
                                 }
@@ -2355,7 +2416,7 @@ fun PlayerScreen(
                     )
                 } else {
                     Icon(
-                        imageVector = Icons.Filled.MusicNote,
+                        painter = painterResource(R.drawable.ic_songs),
                         contentDescription = null,
                         tint = TextSecondary,
                         modifier = Modifier.size(80.dp)
@@ -2398,7 +2459,7 @@ fun PlayerScreen(
                         )
                     }
                     Icon(
-                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        painter = painterResource(if (isFavorite) R.drawable.ic_favorite_filled else R.drawable.ic_favorite_outline),
                         contentDescription = "Favori",
                         tint = if (isFavorite) Color(0xFFFF6B9D) else TextSecondary,
                         modifier = Modifier
@@ -2474,7 +2535,7 @@ fun PlayerScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Shuffle,
+                            painter = painterResource(R.drawable.ic_shuffle),
                             contentDescription = "Shuffle",
                             tint = if (isShuffled) Color.White else TextSecondary,
                             modifier = Modifier.size(22.dp)
@@ -2490,7 +2551,7 @@ fun PlayerScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.SkipPrevious,
+                            painter = painterResource(R.drawable.ic_previous),
                             contentDescription = "Précédent",
                             tint = TextPrimary,
                             modifier = Modifier.size(28.dp)
@@ -2508,7 +2569,7 @@ fun PlayerScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
                             contentDescription = if (isPlaying) "Pause" else "Lecture",
                             tint = Color.White,
                             modifier = Modifier.size(36.dp)
@@ -2524,7 +2585,7 @@ fun PlayerScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.SkipNext,
+                            painter = painterResource(R.drawable.ic_next),
                             contentDescription = "Suivant",
                             tint = TextPrimary,
                             modifier = Modifier.size(28.dp)
@@ -2550,7 +2611,7 @@ fun PlayerScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = if (repeatMode == 2) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                            painter = painterResource(if (repeatMode == 2) R.drawable.ic_repeat_one else R.drawable.ic_repeat),
                             contentDescription = "Répéter",
                             tint = if (repeatMode > 0) Color.White else TextSecondary,
                             modifier = Modifier.size(22.dp)
@@ -2699,7 +2760,7 @@ fun ProfileTab(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.LibraryMusic,
+                                painter = painterResource(R.drawable.ic_playlists),
                                 contentDescription = null,
                                 tint = accentColor,
                                 modifier = Modifier.size(22.dp)
@@ -2724,7 +2785,7 @@ fun ProfileTab(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Favorite,
+                                painter = painterResource(R.drawable.ic_favorite_filled),
                                 contentDescription = null,
                                 tint = FavoritePink,
                                 modifier = Modifier.size(22.dp)
@@ -2987,6 +3048,10 @@ fun LibraryTab(
     onRemoveSongFromPlaylist: (Playlist, Long) -> Unit = { _, _ -> },
     onNavigateToAlbum: (String) -> Unit = {},
     onNavigateToArtist: (String) -> Unit = {},
+    onPlayNext: (Song) -> Unit = {},
+    onAddToQueue: (Song) -> Unit = {},
+    onShowSongInfo: (Song) -> Unit = {},
+    onShowPlaylistPicker: (Song) -> Unit = {},
     accentColor: Color
 ) {
     var selectedTab by remember { mutableStateOf(0) }
@@ -3026,33 +3091,45 @@ fun LibraryTab(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Onglets
-            Row(
+            val tabIcons = listOf(
+                R.drawable.ic_songs,
+                R.drawable.ic_playlists,
+                R.drawable.ic_profile,
+                R.drawable.ic_queue,
+                R.drawable.ic_favorite_outline
+            )
+            androidx.compose.foundation.lazy.LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                tabs.forEachIndexed { index, tab ->
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                items(tabs.size) { index ->
+                    val selected = selectedTab == index
+                    val iconRes = if (index == 4 && selected) R.drawable.ic_favorite_filled else tabIcons.getOrElse(index) { R.drawable.ic_songs }
+                    Row(
                         modifier = Modifier
-                            .clickable { selectedTab = index }
-                            .padding(horizontal = 4.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = tab,
-                            color = if (selectedTab == index) accentColor else TextSecondary,
-                            fontSize = 13.sp,
-                            fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        if (selectedTab == index) {
-                            Box(
-                                modifier = Modifier
-                                    .width(24.dp)
-                                    .height(2.dp)
-                                    .background(accentColor, RoundedCornerShape(1.dp))
+                            .clip(RoundedCornerShape(SgRadius.pill))
+                            .background(
+                                if (selected) Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor)))
+                                else Brush.horizontalGradient(listOf(GlassSurface, GlassSurface))
                             )
-                        }
+                            .border(1.dp, if (selected) accentColor.copy(0.5f) else GlassBorder, RoundedCornerShape(SgRadius.pill))
+                            .clickable { selectedTab = index }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            painter = androidx.compose.ui.res.painterResource(iconRes),
+                            contentDescription = null,
+                            tint = if (selected) Color.White else TextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = tabs[index],
+                            color = if (selected) Color.White else TextSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                        )
                     }
                 }
             }
@@ -3076,144 +3153,98 @@ fun LibraryTab(
             ) { page ->
                 when (page) {
                     0 -> {
-                        // État du tri
                         var sortMode by remember { mutableStateOf(0) }
-                        val sortLabels = listOf("A-Z", "Z-A", "Artiste", "Récent")
+                        var showSortSheet by remember { mutableStateOf(false) }
+                        var menuSong by remember { mutableStateOf<Song?>(null) }
+                        val sortLabels = listOf("Nom (A → Z)", "Nom (Z → A)", "Artiste", "Récent")
 
-                    // Chansons triées selon le mode choisi
-                    val sortedSongs = remember(sortMode, songs) {
-                        when (sortMode) {
-                            0 -> songs.sortedBy { it.title.lowercase() }
-                            1 -> songs.sortedByDescending { it.title.lowercase() }
-                            2 -> songs.sortedBy { it.artist.lowercase() }
-                            3 -> songs.reversed() // MediaStore renvoie déjà par date d'ajout
-                            else -> songs
-                        }
-                    }
-
-                    // Barre de tri
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Sort,
-                            contentDescription = null,
-                            tint = TextSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        sortLabels.forEachIndexed { index, label ->
-                            Box(
-                                modifier = Modifier
-                                    .background(
-                                        if (sortMode == index) accentColor.copy(alpha = 0.2f) else GlassSurface,
-                                        RoundedCornerShape(SgRadius.pill)
-                                    )
-                                    .border(
-                                        1.dp,
-                                        if (sortMode == index) accentColor.copy(alpha = 0.5f) else GlassBorder,
-                                        RoundedCornerShape(SgRadius.pill)
-                                    )
-                                    .clickable { sortMode = index }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = label,
-                                    color = if (sortMode == index) Color.White else TextSecondary,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (sortMode == index) FontWeight.Bold else FontWeight.Normal
-                                )
+                        val sortedSongs = remember(sortMode, songs) {
+                            when (sortMode) {
+                                0 -> songs.sortedBy { it.title.lowercase() }
+                                1 -> songs.sortedByDescending { it.title.lowercase() }
+                                2 -> songs.sortedBy { it.artist.lowercase() }
+                                3 -> songs.sortedByDescending { it.dateAdded }
+                                else -> songs
                             }
                         }
-                    }
 
-                    // Liste triée
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(sortedSongs, key = { it.id }) { song ->
-                            val isFav = favoriteSongs.any { it.id == song.id }
-                            GlassCard(
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onPlayPlaylist(song, sortedSongs) },
-                                cornerRadius = 14.dp
+                                    .padding(bottom = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
+                                Text(
+                                    text = "${songs.size} titre(s)",
+                                    color = TextSecondary,
+                                    fontSize = 13.sp
+                                )
                                 Row(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(
-                                            if (isFav) Brush.linearGradient(
-                                                listOf(
-                                                    Color(0xFFFF6B9D).copy(0.1f),
-                                                    Color.Transparent
-                                                )
-                                            )
-                                            else Brush.linearGradient(
-                                                listOf(Color.Transparent, Color.Transparent)
-                                            )
-                                        )
-                                        .padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .clip(RoundedCornerShape(SgRadius.pill))
+                                        .background(GlassSurface)
+                                        .border(1.dp, GlassBorder, RoundedCornerShape(SgRadius.pill))
+                                        .clickable { showSortSheet = true }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(46.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(DarkPurple),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (song.albumArtUri != null) {
-                                            AsyncImage(
-                                                model = ImageRequest.Builder(LocalContext.current)
-                                                    .data(song.albumArtUri)
-                                                    .crossfade(true)
-                                                    .build(),
-                                                contentDescription = null,
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier.fillMaxSize()
-                                            )
-                                        } else {
-                                            Icon(
-                                                imageVector = Icons.Filled.MusicNote,
-                                                contentDescription = null,
-                                                tint = TextSecondary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = song.title,
-                                            color = TextPrimary,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = song.artist,
-                                            color = TextSecondary,
-                                            fontSize = 12.sp,
-                                            maxLines = 1
-                                        )
-                                    }
                                     Icon(
-                                        imageVector = if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                        contentDescription = "Favori",
-                                        tint = if (isFav) Color(0xFFFF6B9D) else TextSecondary,
-                                        modifier = Modifier
-                                            .size(22.dp)
-                                            .clickable { onToggleFavorite(song) }
+                                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_sort),
+                                        contentDescription = "Trier",
+                                        tint = accentColor,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = sortLabels[sortMode],
+                                        color = accentColor,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
                                     )
                                 }
                             }
+
+                            LazyColumn(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                items(sortedSongs, key = { it.id }) { song ->
+                                    com.credo.soundgroove.ui.components.SongListItem(
+                                        song = song,
+                                        isFavorite = favoriteSongs.any { it.id == song.id },
+                                        isCurrentSong = currentSong?.id == song.id,
+                                        accentColor = accentColor,
+                                        onClick = { onPlayPlaylist(song, sortedSongs) },
+                                        onMenuClick = { menuSong = song }
+                                    )
+                                }
+                                item { Spacer(modifier = Modifier.height(16.dp)) }
+                            }
                         }
-                        item { Spacer(modifier = Modifier.height(16.dp)) }
+
+                        if (showSortSheet) {
+                            com.credo.soundgroove.ui.components.SortBottomSheet(
+                                currentMode = sortMode,
+                                onModeSelected = { sortMode = it },
+                                onDismiss = { showSortSheet = false }
+                            )
+                        }
+
+                        menuSong?.let { song ->
+                            com.credo.soundgroove.ui.components.SongContextMenuSheet(
+                                song = song,
+                                isFavorite = favoriteSongs.any { it.id == song.id },
+                                onToggleFavorite = { onToggleFavorite(song) },
+                                onPlayNext = { onPlayNext(song); menuSong = null },
+                                onAddToQueue = { onAddToQueue(song); menuSong = null },
+                                onAddToPlaylist = { onShowPlaylistPicker(song); menuSong = null },
+                                onViewInfo = { onShowSongInfo(song); menuSong = null },
+                                onDismiss = { menuSong = null }
+                            )
+                        }
                     }
-                }
 
                 1 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     val rows = albums.chunked(2)
@@ -3410,7 +3441,7 @@ fun LibraryTab(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Icon(imageVector = Icons.Filled.QueueMusic, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(48.dp))
+                                        Icon(painter = painterResource(R.drawable.ic_queue), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(48.dp))
                                         Spacer(modifier = Modifier.height(12.dp))
                                         Text(
                                             text = "Aucune playlist",
@@ -3468,7 +3499,7 @@ fun LibraryTab(
                                                     )
                                                 } else {
                                                     Icon(
-                                                        imageVector = Icons.Filled.MusicNote,
+                                                        painter = painterResource(R.drawable.ic_songs),
                                                         contentDescription = null,
                                                         tint = Color.White,
                                                         modifier = Modifier.size(24.dp)
@@ -3497,7 +3528,7 @@ fun LibraryTab(
                                             // Bouton ⋮ avec menu
                                             Box {
                                                 Icon(
-                                                    imageVector = Icons.Filled.MoreVert,
+                                                    painter = painterResource(R.drawable.ic_options),
                                                     contentDescription = "Options",
                                                     tint = TextSecondary,
                                                     modifier = Modifier
@@ -3513,7 +3544,7 @@ fun LibraryTab(
                                                         text = {
                                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                                 Icon(
-                                                                    Icons.Filled.Edit,
+                                                                    painter = painterResource(R.drawable.ic_options),
                                                                     contentDescription = null,
                                                                     tint = TextPrimary,
                                                                     modifier = Modifier.size(18.dp)
@@ -3534,7 +3565,7 @@ fun LibraryTab(
                                                         text = {
                                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                                 Icon(
-                                                                    Icons.Filled.Delete,
+                                                                    painter = painterResource(R.drawable.ic_trash),
                                                                     contentDescription = null,
                                                                     tint = Color(0xFFFF6B6B),
                                                                     modifier = Modifier.size(18.dp)
@@ -3775,7 +3806,7 @@ fun LibraryTab(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(imageVector = Icons.Outlined.FavoriteBorder, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(48.dp))
+                                Icon(painter = painterResource(R.drawable.ic_favorite_outline), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(48.dp))
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
                                     text = "Aucun favori encore",
@@ -3832,7 +3863,7 @@ fun LibraryTab(
                                                     modifier = Modifier.fillMaxSize()
                                                 )
                                             } else {
-                                                Icon(imageVector = Icons.Filled.MusicNote, contentDescription = null, tint = LightPurple, modifier = Modifier.size(18.dp))
+                                                Icon(painter = painterResource(R.drawable.ic_songs), contentDescription = null, tint = LightPurple, modifier = Modifier.size(18.dp))
                                             }
                                         }
                                         Spacer(modifier = Modifier.width(12.dp))
@@ -3853,7 +3884,7 @@ fun LibraryTab(
                                             )
                                         }
                                         Icon(
-                                            imageVector = Icons.Filled.Favorite,
+                                            painter = painterResource(R.drawable.ic_favorite_filled),
                                             contentDescription = "Retirer des favoris",
                                             tint = Color(0xFFFF6B9D),
                                             modifier = Modifier
@@ -3913,7 +3944,7 @@ fun PlaylistScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.ArrowBack,
+                        painter = painterResource(R.drawable.ic_back),
                         contentDescription = "Retour",
                         tint = TextPrimary,
                         modifier = Modifier.size(22.dp)
@@ -3949,7 +3980,7 @@ fun PlaylistScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Filled.PlayArrow,
+                    painter = painterResource(R.drawable.ic_play),
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(18.dp)
@@ -4055,7 +4086,7 @@ fun PlaylistDetailScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.MusicNote,
+                                painter = painterResource(R.drawable.ic_songs),
                                 contentDescription = null,
                                 tint = LightPurple.copy(alpha = 0.5f),
                                 modifier = Modifier.size(80.dp)
@@ -4090,7 +4121,7 @@ fun PlaylistDetailScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            painter = painterResource(R.drawable.ic_back),
                             contentDescription = "Retour",
                             tint = Color.White,
                             modifier = Modifier.size(22.dp)
@@ -4111,7 +4142,7 @@ fun PlaylistDetailScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.MoreVert,
+                            painter = painterResource(R.drawable.ic_options),
                             contentDescription = "Options",
                             tint = Color.White,
                             modifier = Modifier.size(24.dp)
@@ -4166,7 +4197,7 @@ fun PlaylistDetailScreen(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.PlayArrow,
+                                painter = painterResource(R.drawable.ic_play),
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(20.dp)
@@ -4200,7 +4231,7 @@ fun PlaylistDetailScreen(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Shuffle,
+                                painter = painterResource(R.drawable.ic_shuffle),
                                 contentDescription = null,
                                 tint = LightPurple,
                                 modifier = Modifier.size(20.dp)
@@ -4228,7 +4259,7 @@ fun PlaylistDetailScreen(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
-                                imageVector = Icons.Filled.MusicNote,
+                                painter = painterResource(R.drawable.ic_songs),
                                 contentDescription = null,
                                 tint = TextSecondary,
                                 modifier = Modifier.size(48.dp)
@@ -4315,7 +4346,7 @@ fun PlaylistDetailScreen(
                                     .background(LightPurple.copy(alpha = 0.15f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Filled.PlaylistAdd, null, tint = LightPurple, modifier = Modifier.size(22.dp))
+                                Icon(painter = painterResource(R.drawable.ic_playlists), contentDescription = null, tint = LightPurple, modifier = Modifier.size(22.dp))
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Text("Ajouter des chansons", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
@@ -4340,7 +4371,7 @@ fun PlaylistDetailScreen(
                                     .background(CyanAccent.copy(alpha = 0.15f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Filled.Tune, null, tint = CyanAccent, modifier = Modifier.size(22.dp))
+                                Icon(painter = painterResource(R.drawable.ic_sort), contentDescription = null, tint = CyanAccent, modifier = Modifier.size(22.dp))
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Text("Gérer", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
@@ -4365,7 +4396,7 @@ fun PlaylistDetailScreen(
                                     .background(Color(0xFFFF6B6B).copy(alpha = 0.15f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Filled.Delete, null, tint = Color(0xFFFF6B6B), modifier = Modifier.size(22.dp))
+                                Icon(painter = painterResource(R.drawable.ic_trash), contentDescription = null, tint = Color(0xFFFF6B6B), modifier = Modifier.size(22.dp))
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Text("Supprimer la playlist", color = Color(0xFFFF6B6B), fontSize = 15.sp, fontWeight = FontWeight.Medium)
@@ -4420,7 +4451,7 @@ fun PlaylistDetailScreen(
                                 .clickable { showManage = false },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Filled.ArrowBack, null, tint = TextPrimary, modifier = Modifier.size(22.dp))
+                            Icon(painter = painterResource(R.drawable.ic_back), contentDescription = null, tint = TextPrimary, modifier = Modifier.size(22.dp))
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(
@@ -4444,7 +4475,7 @@ fun PlaylistDetailScreen(
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Filled.Search, null, tint = TextSecondary, modifier = Modifier.size(20.dp))
+                            Icon(painter = painterResource(R.drawable.ic_search), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(10.dp))
                             androidx.compose.material3.TextField(
                                 value = searchQuery,
@@ -4558,7 +4589,7 @@ fun PlaylistDetailScreen(
                                             modifier = Modifier.fillMaxSize()
                                         )
                                     } else {
-                                        Icon(Icons.Filled.MusicNote, null, tint = TextSecondary, modifier = Modifier.size(22.dp))
+                                        Icon(painter = painterResource(R.drawable.ic_songs), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(22.dp))
                                     }
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
@@ -4606,7 +4637,7 @@ fun PlaylistDetailScreen(
                                     showManage = false
                                 }
                             ) {
-                                Icon(Icons.Filled.RemoveCircleOutline, null, tint = Color(0xFFFF6B6B), modifier = Modifier.size(24.dp))
+                                Icon(painter = painterResource(R.drawable.ic_trash), contentDescription = null, tint = Color(0xFFFF6B6B), modifier = Modifier.size(24.dp))
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text("Enlever", color = Color(0xFFFF6B6B), fontSize = 11.sp)
                             }
@@ -4657,7 +4688,7 @@ fun PlaylistDetailScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.ArrowBack,
+                                painter = painterResource(R.drawable.ic_back),
                                 contentDescription = "Retour",
                                 tint = TextPrimary,
                                 modifier = Modifier.size(22.dp)
@@ -4692,7 +4723,7 @@ fun PlaylistDetailScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Search,
+                                painter = painterResource(R.drawable.ic_search),
                                 contentDescription = null,
                                 tint = TextSecondary,
                                 modifier = Modifier.size(20.dp)
@@ -4766,7 +4797,7 @@ fun PlaylistDetailScreen(
                                             )
                                         } else {
                                             Icon(
-                                                imageVector = Icons.Filled.MusicNote,
+                                                painter = painterResource(R.drawable.ic_songs),
                                                 contentDescription = null,
                                                 tint = TextSecondary,
                                                 modifier = Modifier.size(22.dp)
@@ -4803,7 +4834,7 @@ fun PlaylistDetailScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            imageVector = if (alreadyAdded) Icons.Filled.Check else Icons.Filled.Add,
+                                            painter = painterResource(if (alreadyAdded) R.drawable.ic_favorite_filled else R.drawable.ic_add),
                                             contentDescription = null,
                                             tint = if (alreadyAdded) Color.White else TextSecondary,
                                             modifier = Modifier.size(18.dp)
@@ -4835,6 +4866,14 @@ fun QueueScreen(
     onMoveSong: (Int, Int) -> Unit
 ) {
     var verticalDragOffset by remember { mutableStateOf(0f) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val safeCurrentIndex = currentIndex.coerceIn(0, (playlist.size - 1).coerceAtLeast(0))
+
+    LaunchedEffect(playlist.size, safeCurrentIndex) {
+        if (playlist.isNotEmpty()) {
+            listState.scrollToItem(safeCurrentIndex)
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -4895,7 +4934,7 @@ fun QueueScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_close_down),
                         contentDescription = "Fermer",
                         tint = TextPrimary,
                         modifier = Modifier.size(28.dp)
@@ -4920,13 +4959,31 @@ fun QueueScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
+            if (playlist.isEmpty()) {
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_queue),
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Aucune chanson en file", color = TextSecondary, fontSize = 14.sp)
+                    }
+                }
+            } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(bottom = 80.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 itemsIndexed(playlist, key = { _, song -> song.id }) { index, song ->
-                    val isCurrent = index == currentIndex
+                    val isCurrent = index == safeCurrentIndex
                     val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
                         confirmValueChange = { value ->
                             if (value != androidx.compose.material3.SwipeToDismissBoxValue.Settled && !isCurrent) {
@@ -4960,7 +5017,7 @@ fun QueueScreen(
                                 contentAlignment = alignment
                             ) {
                                 Icon(
-                                    Icons.Filled.Delete,
+                                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_trash),
                                     contentDescription = "Supprimer",
                                     tint = Color.White,
                                     modifier = Modifier.size(24.dp)
@@ -5003,8 +5060,9 @@ fun QueueScreen(
                                         )
                                     } else {
                                         Icon(
-                                            Icons.Filled.MusicNote, null,
-                                            tint = LightPurple,
+                                            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_songs),
+                                            contentDescription = null,
+                                            tint = accentColor,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
@@ -5016,8 +5074,9 @@ fun QueueScreen(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
-                                                Icons.Filled.VolumeUp, null,
-                                                tint = PurpleAccent,
+                                                painter = androidx.compose.ui.res.painterResource(R.drawable.ic_play),
+                                                contentDescription = null,
+                                                tint = accentColor,
                                                 modifier = Modifier.size(18.dp)
                                             )
                                         }
@@ -5030,7 +5089,7 @@ fun QueueScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = song.title,
-                                        color = if (isCurrent) PurpleAccent else TextPrimary,
+                                        color = if (isCurrent) accentColor else TextPrimary,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
                                         maxLines = 1,
@@ -5038,7 +5097,7 @@ fun QueueScreen(
                                     )
                                     Text(
                                         text = song.artist,
-                                        color = LightPurple,
+                                        color = TextSecondary,
                                         fontSize = 12.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -5047,9 +5106,8 @@ fun QueueScreen(
 
                                 Spacer(modifier = Modifier.width(8.dp))
 
-                                // Icône Drag Handle (compact — remplace les grosses flèches)
                                 Icon(
-                                    imageVector = Icons.Filled.DragHandle,
+                                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_drag),
                                     contentDescription = "Déplacer",
                                     tint = TextSecondary.copy(alpha = 0.6f),
                                     modifier = Modifier.size(20.dp)
@@ -5058,6 +5116,7 @@ fun QueueScreen(
                         }
                     }
                 }
+            }
             }
         }
     }
