@@ -40,10 +40,12 @@ fun SettingsScreen(
     favoriteCount: Int,
     playlistCount: Int,
     sleepTimerRemainingSeconds: Int?,
+    playbackSpeed: Float,
     onBack: () -> Unit,
     onThemeSelected: (AppTheme) -> Unit,
     onOpenSleepTimer: () -> Unit,
-    onCancelSleepTimer: () -> Unit
+    onCancelSleepTimer: () -> Unit,
+    onOpenPlaybackSpeed: () -> Unit
 ) {
     val backgroundBrush = themeBackgroundBrush(currentTheme)
 
@@ -183,6 +185,57 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("Annuler la minuterie", color = accentColor)
                     }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = GlassBorder.copy(alpha = 0.4f))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenPlaybackSpeed() }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(accentColor.copy(alpha = 0.2f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Speed,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Vitesse de lecture",
+                            color = TextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        val speedLabel = if (playbackSpeed == playbackSpeed.toLong().toFloat()) {
+                            "${playbackSpeed.toLong()}x"
+                        } else {
+                            "${playbackSpeed}x"
+                        }
+                        Text(
+                            text = "Actuelle : $speedLabel",
+                            color = accentColor,
+                            fontSize = 12.sp
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Filled.ChevronRight,
+                        contentDescription = null,
+                        tint = TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
 

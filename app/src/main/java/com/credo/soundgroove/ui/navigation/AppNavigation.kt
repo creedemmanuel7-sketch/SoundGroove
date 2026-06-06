@@ -107,7 +107,10 @@ fun AppNavigation(
                     onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
                     onRemoveSongFromPlaylist = { songId -> viewModel.removeSongFromPlaylist(it.id, songId) },
                     onDeletePlaylist = { viewModel.deletePlaylist(it.id) },
-                    onRenamePlaylist = { newName -> viewModel.renamePlaylist(it.id, newName) }
+                    onRenamePlaylist = { newName -> viewModel.renamePlaylist(it.id, newName) },
+                    onPlayNext = { song -> viewModel.playNext(song) },
+                    onAddToQueue = { song -> viewModel.addToQueue(song) },
+                    onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
                 )
             }
         }
@@ -128,7 +131,10 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() },
                     onPlaySong = { song -> viewModel.playSong(song) },
                     onShufflePlay = { viewModel.playPlaylist(Playlist(name = albumName, songs = albumSongs.shuffled())) },
-                    onToggleFavorite = { song -> viewModel.toggleFavorite(song) }
+                    onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
+                    onPlayNext = { song -> viewModel.playNext(song) },
+                    onAddToQueue = { song -> viewModel.addToQueue(song) },
+                    onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
                 )
             }
         }
@@ -149,7 +155,10 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() },
                     onPlaySong = { song -> viewModel.playSong(song) },
                     onShufflePlay = { viewModel.playPlaylist(Playlist(name = artistName, songs = artistSongs.shuffled())) },
-                    onToggleFavorite = { song -> viewModel.toggleFavorite(song) }
+                    onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
+                    onPlayNext = { song -> viewModel.playNext(song) },
+                    onAddToQueue = { song -> viewModel.addToQueue(song) },
+                    onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
                 )
             }
         }

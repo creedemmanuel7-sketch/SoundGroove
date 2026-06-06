@@ -138,7 +138,9 @@ fun MainScreen(
     onNavigateToPlaylist: (Long) -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
     onNavigateToAlbum: (String) -> Unit = {},
-    onNavigateToArtist: (String) -> Unit = {}
+    onNavigateToArtist: (String) -> Unit = {},
+    playbackSpeed: Float = 1f,
+    onPlaybackSpeedChange: (Float) -> Unit = {}
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     val context = LocalContext.current
@@ -234,6 +236,37 @@ fun MainScreen(
         player.prepare()
         player.play()
     }
+
+    fun insertPlayNext(song: Song) {
+        val mediaItem = MediaItem.fromUri(song.uri)
+        if (player.mediaItemCount == 0) {
+            currentPlaylist = listOf(song)
+            player.setMediaItems(listOf(mediaItem))
+            player.prepare()
+        } else {
+            val insertAt = (player.currentMediaItemIndex + 1).coerceAtMost(player.mediaItemCount)
+            player.addMediaItem(insertAt, mediaItem)
+            val newList = currentPlaylist.toMutableList()
+            newList.add(insertAt.coerceIn(0, newList.size), song)
+            currentPlaylist = newList
+        }
+    }
+
+    fun addToQueueEnd(song: Song) {
+        val mediaItem = MediaItem.fromUri(song.uri)
+        if (player.mediaItemCount == 0) {
+            currentPlaylist = listOf(song)
+            player.setMediaItems(listOf(mediaItem))
+            player.prepare()
+        } else {
+            player.addMediaItem(mediaItem)
+            currentPlaylist = currentPlaylist + song
+        }
+    }
+
+    LaunchedEffect(playbackSpeed) {
+        player.setPlaybackSpeed(playbackSpeed)
+    }
     BackHandler(enabled = selectedTab != 0) { selectedTab = 0 }
     BackHandler(enabled = showSongInfo) { showSongInfo = false }
     BackHandler(enabled = showPlaylistPicker) { showPlaylistPicker = false }
@@ -244,6 +277,7 @@ fun MainScreen(
     var showSettings by remember { mutableStateOf(false) }
     BackHandler(enabled = showSettings) { showSettings = false }
     var showSleepTimerSheet by remember { mutableStateOf(false) }
+    var showPlaybackSpeedSheet by remember { mutableStateOf(false) }
     val secondaryAccent = themeSecondaryAccent(accentColor)
     val appVersion = remember {
         try {
@@ -331,6 +365,8 @@ fun MainScreen(
                             overlayedSong = song
                             showPlaylistPicker = true
                         },
+                        onPlayNext = { song -> insertPlayNext(song) },
+                        onAddToQueue = { song -> addToQueueEnd(song) },
                         onOpenPlayer = { showPlayer = true },
                         onNavigateToSearch = onNavigateToSearch,
                         onOpenSettings = { showSettings = true },
@@ -529,7 +565,19 @@ fun MainScreen(
                     }
                 }
             },
-            onOpenQueue = { showQueue = true }
+            onOpenQueue = { showQueue = true },
+            onShowInfo = {
+                overlayedSong = currentSong
+                showSongInfo = true
+            },
+            onShare = {
+                currentSong?.let { com.credo.soundgroove.util.PlayerActions.shareSong(context, it) }
+            },
+            onSetRingtone = {
+                currentSong?.let { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, it) }
+            },
+            playbackSpeed = playbackSpeed,
+            onOpenPlaybackSpeed = { showPlaybackSpeedSheet = true }
         )
     }
 
@@ -549,7 +597,9 @@ fun MainScreen(
             onBack = { showSettings = false },
             onThemeSelected = onThemeSelected,
             onOpenSleepTimer = { showSleepTimerSheet = true },
-            onCancelSleepTimer = onCancelSleepTimer
+            onCancelSleepTimer = onCancelSleepTimer,
+            playbackSpeed = playbackSpeed,
+            onOpenPlaybackSpeed = { showPlaybackSpeedSheet = true }
         )
     }
 
@@ -560,6 +610,15 @@ fun MainScreen(
             onSelectMinutes = onSetSleepTimer,
             onSelectEndOfTrack = onSetSleepTimerEndOfTrack,
             onCancel = onCancelSleepTimer
+        )
+    }
+
+    if (showPlaybackSpeedSheet) {
+        com.credo.soundgroove.ui.components.PlaybackSpeedBottomSheet(
+            currentSpeed = playbackSpeed,
+            accentColor = accentColor,
+            onSpeedSelected = onPlaybackSpeedChange,
+            onDismiss = { showPlaybackSpeedSheet = false }
         )
     }
 
@@ -618,22 +677,28 @@ fun MainScreen(
                                     modifier = Modifier.fillMaxSize()
                                 )
                             } else {
-                                Icon(Icons.Filled.MusicNote, null, tint = LightPurple, modifier = Modifier.size(32.dp))
+                                Icon(Icons.Filled.MusicNote, null, tint = accentColor, modifier = Modifier.size(32.dp))
                             }
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(song.title, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(song.artist, color = LightPurple, fontSize = 14.sp)
+                            Text(song.artist, color = accentColor, fontSize = 14.sp)
                         }
                     }
                     Spacer(modifier = Modifier.height(20.dp))
                     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(GlassBorder))
                     Spacer(modifier = Modifier.height(16.dp))
-                    InfoRow(Icons.Filled.Person, "Artiste", song.artist)
-                    InfoRow(Icons.Filled.MusicNote, "Titre", song.title)
-                    InfoRow(Icons.Filled.AudioFile, "Fichier", song.uri.lastPathSegment ?: "—")
+                    InfoRow(Icons.Filled.Person, "Artiste", song.artist, accentColor)
+                    InfoRow(Icons.Filled.MusicNote, "Titre", song.title, accentColor)
+                    InfoRow(Icons.Filled.Album, "Album", song.albumName, accentColor)
+                    InfoRow(Icons.Filled.Timer, "Durée", formatDuration(song.duration), accentColor)
+                    if (song.folderPath.isNotBlank()) {
+                        InfoRow(Icons.Filled.Folder, "Dossier", song.folderPath, accentColor)
+                    } else {
+                        InfoRow(Icons.Filled.AudioFile, "Fichier", song.uri.lastPathSegment ?: "—", accentColor)
+                    }
                     Spacer(modifier = Modifier.height(20.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -680,7 +745,7 @@ fun MainScreen(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .background(LightPurple, RoundedCornerShape(14.dp))
+                                .background(accentColor, RoundedCornerShape(14.dp))
                                 .clickable { showSongInfo = false }
                                 .padding(vertical = 12.dp),
                             contentAlignment = Alignment.Center
@@ -798,6 +863,15 @@ fun MainScreen(
         }
     }
 
+    LaunchedEffect(showQueue, player.mediaItemCount) {
+        if (showQueue && player.mediaItemCount > 0) {
+            currentPlaylist = (0 until player.mediaItemCount).mapNotNull { i ->
+                val mediaId = player.getMediaItemAt(i).mediaId
+                songs.find { it.uri.toString() == mediaId }
+            }
+        }
+    }
+
     AnimatedVisibility(
         visible = showQueue,
         enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
@@ -806,6 +880,7 @@ fun MainScreen(
         QueueScreen(
             playlist = currentPlaylist,
             currentIndex = player.currentMediaItemIndex,
+            accentColor = accentColor,
             onClose = { showQueue = false },
             onPlaySong = { index ->
                 player.seekToDefaultPosition(index)
@@ -907,6 +982,8 @@ fun HomeTab(
     onToggleFavorite: (Song) -> Unit,  // ← nouveau
     onShowSongInfo: (Song) -> Unit,
     onShowPlaylistPicker: (Song) -> Unit,
+    onPlayNext: (Song) -> Unit = {},
+    onAddToQueue: (Song) -> Unit = {},
     onOpenPlayer: () -> Unit,
     onNavigateToSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
@@ -1213,10 +1290,13 @@ fun HomeTab(
                 onClick = { onSongClick(song) },
                 showMenu = true,
                 isFavorite = favoriteSongs.any { it.id == song.id },
+                accentColor = accentColor,
                 onToggleFavorite = { onToggleFavorite(song) },
                 onShowInfo = { onShowSongInfo(song) },
                 onShowPlaylistPicker = { onShowPlaylistPicker(song) },
-                onPlayNow = { onSongClick(song) }
+                onPlayNow = { onSongClick(song) },
+                onPlayNext = { onPlayNext(song) },
+                onAddToQueue = { onAddToQueue(song) }
             )
         }
 
@@ -1470,10 +1550,13 @@ fun SongItem(
     onLongClick: (() -> Unit)? = null,
     showMenu: Boolean = false,
     isFavorite: Boolean = false,
+    accentColor: Color = LightPurple,
     onToggleFavorite: (() -> Unit)? = null,
     onShowInfo: (() -> Unit)? = null,
     onShowPlaylistPicker: (() -> Unit)? = null,
-    onPlayNow: (() -> Unit)? = null
+    onPlayNow: (() -> Unit)? = null,
+    onPlayNext: (() -> Unit)? = null,
+    onAddToQueue: (() -> Unit)? = null
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -1494,7 +1577,7 @@ fun SongItem(
                 .fillMaxWidth()
                 .background(
                     if (isPlaying)
-                        Brush.linearGradient(listOf(LightPurple.copy(0.15f), MediumPurple.copy(0.1f)))
+                        Brush.linearGradient(listOf(accentColor.copy(0.15f), themeSecondaryAccent(accentColor).copy(0.1f)))
                     else
                         Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
                 )
@@ -1533,7 +1616,7 @@ fun SongItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = song.title,
-                    color = if (isPlaying) LightPurple else TextPrimary,
+                    color = if (isPlaying) accentColor else TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Normal,
                     maxLines = 1,
@@ -1591,12 +1674,32 @@ fun SongItem(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.PlayArrow, null, tint = LightPurple, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Filled.PlayArrow, null, tint = accentColor, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text("Lire maintenant", color = TextPrimary, fontSize = 14.sp)
                                 }
                             },
                             onClick = { menuExpanded = false; onPlayNow?.invoke() }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = accentColor, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text("Jouer ensuite", color = TextPrimary, fontSize = 14.sp)
+                                }
+                            },
+                            onClick = { menuExpanded = false; onPlayNext?.invoke() }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.PlaylistAdd, null, tint = accentColor, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text("Ajouter à la file", color = TextPrimary, fontSize = 14.sp)
+                                }
+                            },
+                            onClick = { menuExpanded = false; onAddToQueue?.invoke() }
                         )
                         DropdownMenuItem(
                             text = {
@@ -1648,7 +1751,8 @@ fun SongItem(
 fun InfoRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
-    value: String
+    value: String,
+    accentColor: Color = LightPurple
 ) {
     Row(
         modifier = Modifier
@@ -1659,7 +1763,7 @@ fun InfoRow(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = LightPurple,
+            tint = accentColor,
             modifier = Modifier.size(16.dp)
         )
         Spacer(modifier = Modifier.width(10.dp))
@@ -1993,7 +2097,12 @@ fun PlayerScreen(
     onSwipeUp: () -> Unit = {},
     onToggleFavorite: () -> Unit,
     onOpenQueue: () -> Unit,
-    player: androidx.media3.common.Player
+    player: androidx.media3.common.Player,
+    onShowInfo: () -> Unit = {},
+    onShare: () -> Unit = {},
+    onSetRingtone: () -> Unit = {},
+    playbackSpeed: Float = 1f,
+    onOpenPlaybackSpeed: () -> Unit = {}
 ) {
     val secondaryAccent = themeSecondaryAccent(accentColor)
     var progress by remember { mutableStateOf(0f) }
@@ -2151,7 +2260,10 @@ fun PlayerScreen(
                                     Text("Infos de la chanson", color = TextPrimary)
                                 }
                             },
-                            onClick = { showOptionsMenu = false }
+                            onClick = {
+                                showOptionsMenu = false
+                                onShowInfo()
+                            }
                         )
                         DropdownMenuItem(
                             text = {
@@ -2161,7 +2273,36 @@ fun PlayerScreen(
                                     Text("Partager", color = TextPrimary)
                                 }
                             },
-                            onClick = { showOptionsMenu = false }
+                            onClick = {
+                                showOptionsMenu = false
+                                onShare()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Notifications, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Définir comme sonnerie", color = TextPrimary)
+                                }
+                            },
+                            onClick = {
+                                showOptionsMenu = false
+                                onSetRingtone()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Speed, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Vitesse (${if (playbackSpeed == playbackSpeed.toLong().toFloat()) "${playbackSpeed.toLong()}x" else "${playbackSpeed}x"})", color = TextPrimary)
+                                }
+                            },
+                            onClick = {
+                                showOptionsMenu = false
+                                onOpenPlaybackSpeed()
+                            }
                         )
                     }
                 }
@@ -2419,7 +2560,11 @@ fun loadSongs(context: android.content.Context): List<Song> {
         MediaStore.Audio.Media._ID,
         MediaStore.Audio.Media.TITLE,
         MediaStore.Audio.Media.ARTIST,
-        MediaStore.Audio.Media.ALBUM_ID
+        MediaStore.Audio.Media.ALBUM_ID,
+        MediaStore.Audio.Media.ALBUM,
+        MediaStore.Audio.Media.DATA,
+        MediaStore.Audio.Media.DURATION,
+        MediaStore.Audio.Media.DATE_ADDED
     )
     val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
     val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
@@ -2432,19 +2577,28 @@ fun loadSongs(context: android.content.Context): List<Song> {
         val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
         val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
         val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+        val albumNameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+        val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+        val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+        val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
 
         while (cursor.moveToNext()) {
             val id = cursor.getLong(idCol)
-            val title = cursor.getString(titleCol)
-            val artist = cursor.getString(artistCol)
+            val title = cursor.getString(titleCol) ?: "Inconnu"
+            val artist = cursor.getString(artistCol) ?: "Inconnu"
             val albumId = cursor.getLong(albumIdCol)
+            val albumName = cursor.getString(albumNameCol) ?: "Inconnu"
+            val dataPath = cursor.getString(dataCol) ?: ""
+            val duration = cursor.getLong(durationCol)
+            val dateAdded = cursor.getLong(dateAddedCol)
+            val folderPath = dataPath.substringBeforeLast("/", "")
             val uri = ContentUris.withAppendedId(
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
             )
             val albumArtUri = ContentUris.withAppendedId(
                 Uri.parse("content://media/external/audio/albumart"), albumId
             )
-            songs.add(Song(id, title, artist, uri, albumArtUri))
+            songs.add(Song(id, title, artist, uri, albumArtUri, albumName, folderPath, duration, dateAdded))
         }
     }
     return songs
@@ -2877,7 +3031,7 @@ fun LibraryTab(
                     ) {
                         Text(
                             text = tab,
-                            color = if (selectedTab == index) LightPurple else TextSecondary,
+                            color = if (selectedTab == index) accentColor else TextSecondary,
                             fontSize = 13.sp,
                             fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
                         )
@@ -2887,7 +3041,7 @@ fun LibraryTab(
                                 modifier = Modifier
                                     .width(24.dp)
                                     .height(2.dp)
-                                    .background(LightPurple, RoundedCornerShape(1.dp))
+                                    .background(accentColor, RoundedCornerShape(1.dp))
                             )
                         }
                     }
@@ -4665,6 +4819,7 @@ fun PlaylistDetailScreen(
 fun QueueScreen(
     playlist: List<Song>,
     currentIndex: Int,
+    accentColor: Color = LightPurple,
     onClose: () -> Unit,
     onPlaySong: (Int) -> Unit,
     onRemoveSong: (Int) -> Unit,
@@ -4747,7 +4902,7 @@ fun QueueScreen(
                     )
                     Text(
                         text = "${playlist.size} chanson(s)",
-                        color = LightPurple,
+                        color = accentColor,
                         fontSize = 12.sp
                     )
                 }

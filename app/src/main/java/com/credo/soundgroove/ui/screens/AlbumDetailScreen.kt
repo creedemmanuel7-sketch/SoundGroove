@@ -26,6 +26,7 @@ import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.SongContextMenuSheet
+import com.credo.soundgroove.ui.components.SongInfoBottomSheet
 import com.credo.soundgroove.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,9 +41,14 @@ fun AlbumDetailScreen(
     onBack: () -> Unit,
     onPlaySong: (Song) -> Unit,
     onShufflePlay: () -> Unit,
-    onToggleFavorite: (Song) -> Unit
+    onToggleFavorite: (Song) -> Unit,
+    onPlayNext: (Song) -> Unit = {},
+    onAddToQueue: (Song) -> Unit = {},
+    onAddToPlaylist: (Song) -> Unit = {}
 ) {
     var songMenuTarget by remember { mutableStateOf<Song?>(null) }
+    var infoSong by remember { mutableStateOf<Song?>(null) }
+    val context = LocalContext.current
     val albumCover = songs.firstOrNull { it.albumArtUri != null }?.albumArtUri
     val artistName = songs.firstOrNull()?.artist ?: "Inconnu"
 
@@ -73,7 +79,7 @@ fun AlbumDetailScreen(
                             Icon(
                                 painter = painterResource(R.drawable.ic_songs),
                                 contentDescription = null,
-                                tint = LightPurple.copy(alpha = 0.5f),
+                                tint = accentColor.copy(alpha = 0.5f),
                                 modifier = Modifier.size(80.dp)
                             )
                         }
@@ -145,7 +151,7 @@ fun AlbumDetailScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
-                            .background(Brush.horizontalGradient(listOf(LightPurple, MediumPurple)), RoundedCornerShape(14.dp))
+                            .background(Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor))), RoundedCornerShape(14.dp))
                             .clickable { songs.firstOrNull()?.let { onPlaySong(it) } },
                         contentAlignment = Alignment.Center
                     ) {
@@ -216,10 +222,23 @@ fun AlbumDetailScreen(
                 song = song,
                 isFavorite = favoriteSongs.any { it.id == song.id },
                 onToggleFavorite = { onToggleFavorite(song) },
-                onPlayNext = { /* TODO: insert next in queue */ },
-                onAddToPlaylist = { /* handled in parent */ },
-                onViewInfo = {},
+                onPlayNext = { onPlayNext(song) },
+                onAddToQueue = { onAddToQueue(song) },
+                onAddToPlaylist = { onAddToPlaylist(song) },
+                onViewInfo = { infoSong = song },
                 onDismiss = { songMenuTarget = null }
+            )
+        }
+
+        infoSong?.let { song ->
+            SongInfoBottomSheet(
+                song = song,
+                accentColor = accentColor,
+                isFavorite = favoriteSongs.any { it.id == song.id },
+                onToggleFavorite = { onToggleFavorite(song) },
+                onShare = { com.credo.soundgroove.util.PlayerActions.shareSong(context, song) },
+                onSetRingtone = { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, song) },
+                onDismiss = { infoSong = null }
             )
         }
     }

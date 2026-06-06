@@ -30,6 +30,7 @@ import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.SongContextMenuSheet
+import com.credo.soundgroove.ui.components.SongInfoBottomSheet
 import com.credo.soundgroove.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,12 +47,17 @@ fun PlaylistDetailScreen(
     onToggleFavorite: (Song) -> Unit,
     onRemoveSongFromPlaylist: (Long) -> Unit,
     onDeletePlaylist: () -> Unit,
-    onRenamePlaylist: (String) -> Unit
+    onRenamePlaylist: (String) -> Unit,
+    onPlayNext: (Song) -> Unit = {},
+    onAddToQueue: (Song) -> Unit = {},
+    onAddToPlaylist: (Song) -> Unit = {}
 ) {
     var showRenameSheet by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showOptionsMenu by remember { mutableStateOf(false) }
     var songMenuTarget by remember { mutableStateOf<Song?>(null) }
+    var infoSong by remember { mutableStateOf<Song?>(null) }
+    val context = LocalContext.current
 
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0D0517))) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -108,7 +114,7 @@ fun PlaylistDetailScreen(
                             Icon(
                                 painter = painterResource(R.drawable.ic_playlists),
                                 contentDescription = null,
-                                tint = LightPurple.copy(alpha = 0.5f),
+                                tint = accentColor.copy(alpha = 0.5f),
                                 modifier = Modifier.size(80.dp)
                             )
                         }
@@ -219,7 +225,7 @@ fun PlaylistDetailScreen(
                             .weight(1f)
                             .height(48.dp)
                             .background(
-                                Brush.horizontalGradient(listOf(LightPurple, MediumPurple)),
+                                Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor))),
                                 RoundedCornerShape(14.dp)
                             )
                             .clickable { playlist.songs.firstOrNull()?.let { onPlaySong(it) } },
@@ -401,10 +407,23 @@ fun PlaylistDetailScreen(
                 song = song,
                 isFavorite = favoriteSongs.any { it.id == song.id },
                 onToggleFavorite = { onToggleFavorite(song) },
-                onPlayNext = { /* TODO: insert next in queue */ },
-                onAddToPlaylist = { /* handled in parent */ },
-                onViewInfo = {},
+                onPlayNext = { onPlayNext(song) },
+                onAddToQueue = { onAddToQueue(song) },
+                onAddToPlaylist = { onAddToPlaylist(song) },
+                onViewInfo = { infoSong = song },
                 onDismiss = { songMenuTarget = null }
+            )
+        }
+
+        infoSong?.let { song ->
+            SongInfoBottomSheet(
+                song = song,
+                accentColor = accentColor,
+                isFavorite = favoriteSongs.any { it.id == song.id },
+                onToggleFavorite = { onToggleFavorite(song) },
+                onShare = { com.credo.soundgroove.util.PlayerActions.shareSong(context, song) },
+                onSetRingtone = { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, song) },
+                onDismiss = { infoSong = null }
             )
         }
 
@@ -412,6 +431,7 @@ fun PlaylistDetailScreen(
         if (showRenameSheet) {
             RenamePlaylistSheet(
                 currentName = playlist.name,
+                accentColor = accentColor,
                 onRename = { newName -> onRenamePlaylist(newName) },
                 onDismiss = { showRenameSheet = false }
             )
@@ -445,6 +465,7 @@ fun PlaylistDetailScreen(
 @Composable
 fun RenamePlaylistSheet(
     currentName: String,
+    accentColor: Color,
     onRename: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -470,11 +491,11 @@ fun RenamePlaylistSheet(
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = LightPurple,
+                    focusedBorderColor = accentColor,
                     unfocusedBorderColor = GlassBorder,
                     focusedTextColor = TextPrimary,
                     unfocusedTextColor = TextPrimary,
-                    cursorColor = LightPurple,
+                    cursorColor = accentColor,
                     focusedContainerColor = GlassSurface,
                     unfocusedContainerColor = GlassSurface
                 ),

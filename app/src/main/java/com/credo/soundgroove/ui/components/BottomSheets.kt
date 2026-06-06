@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
@@ -356,6 +358,7 @@ fun SongContextMenuSheet(
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     onPlayNext: () -> Unit,
+    onAddToQueue: () -> Unit = {},
     onAddToPlaylist: () -> Unit,
     onViewInfo: () -> Unit,
     onDismiss: () -> Unit
@@ -417,6 +420,7 @@ fun SongContextMenuSheet(
                     onToggleFavorite
                 ),
                 Triple("Jouer ensuite", R.drawable.ic_play, onPlayNext),
+                Triple("Ajouter à la file", R.drawable.ic_queue, onAddToQueue),
                 Triple("Ajouter à une playlist", R.drawable.ic_add, onAddToPlaylist),
                 Triple("Infos sur la chanson", R.drawable.ic_songs, onViewInfo)
             )
@@ -536,4 +540,212 @@ private fun SleepTimerOption(
         Text(label, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
     }
     Spacer(modifier = Modifier.height(8.dp))
+}
+
+// ─── Song Info Sheet ────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SongInfoBottomSheet(
+    song: Song,
+    accentColor: Color,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    onShare: () -> Unit,
+    onSetRingtone: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF150B2B),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 36.dp)
+        ) {
+            Text(
+                "Informations",
+                color = TextPrimary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(DarkPurple),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (song.albumArtUri != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(song.albumArtUri).crossfade(true).build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Icon(Icons.Filled.MusicNote, null, tint = accentColor, modifier = Modifier.size(32.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(song.title, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(song.artist, color = accentColor, fontSize = 14.sp, maxLines = 1)
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = GlassBorder.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(8.dp))
+            SongInfoRow(Icons.Filled.Person, "Artiste", song.artist, accentColor)
+            SongInfoRow(Icons.Filled.MusicNote, "Titre", song.title, accentColor)
+            SongInfoRow(Icons.Filled.Album, "Album", song.albumName, accentColor)
+            SongInfoRow(Icons.Filled.Timer, "Durée", formatDuration(song.duration), accentColor)
+            if (song.folderPath.isNotBlank()) {
+                SongInfoRow(Icons.Filled.Folder, "Dossier", song.folderPath, accentColor)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                InfoActionChip(
+                    label = if (isFavorite) "Favori" else "Favoris",
+                    icon = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    tint = Color(0xFFFF6B9D),
+                    modifier = Modifier.weight(1f),
+                    onClick = onToggleFavorite
+                )
+                InfoActionChip(
+                    label = "Partager",
+                    icon = Icons.Filled.Share,
+                    tint = accentColor,
+                    modifier = Modifier.weight(1f),
+                    onClick = onShare
+                )
+                InfoActionChip(
+                    label = "Sonnerie",
+                    icon = Icons.Filled.Notifications,
+                    tint = accentColor,
+                    modifier = Modifier.weight(1f),
+                    onClick = onSetRingtone
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SongInfoRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    accentColor: Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, tint = accentColor, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(label, color = TextSecondary, fontSize = 13.sp, modifier = Modifier.width(72.dp))
+        Text(value, color = TextPrimary, fontSize = 13.sp, maxLines = 2, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun InfoActionChip(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(GlassSurface)
+            .border(1.dp, GlassBorder, RoundedCornerShape(14.dp))
+            .clickable { onClick() }
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(label, color = TextPrimary, fontSize = 11.sp)
+    }
+}
+
+// ─── Playback Speed Sheet ───────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlaybackSpeedBottomSheet(
+    currentSpeed: Float,
+    accentColor: Color,
+    onSpeedSelected: (Float) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF150B2B),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 36.dp)
+        ) {
+            Text(
+                "Vitesse de lecture",
+                color = TextPrimary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Vitesse actuelle : ${formatSpeedLabel(currentSpeed)}",
+                color = TextSecondary,
+                fontSize = 13.sp
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            speeds.forEach { speed ->
+                val isSelected = kotlin.math.abs(speed - currentSpeed) < 0.01f
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isSelected) accentColor.copy(alpha = 0.12f) else Color.Transparent)
+                        .clickable { onSpeedSelected(speed); onDismiss() }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        formatSpeedLabel(speed),
+                        color = if (isSelected) accentColor else TextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                    )
+                    if (isSelected) {
+                        Icon(Icons.Filled.Check, null, tint = accentColor, modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatSpeedLabel(speed: Float): String {
+    return if (speed == speed.toLong().toFloat()) "${speed.toLong()}x" else "${speed}x"
 }

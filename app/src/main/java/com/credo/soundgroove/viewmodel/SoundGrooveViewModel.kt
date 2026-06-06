@@ -93,6 +93,9 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     private val _sleepTimerRemainingSeconds = MutableStateFlow<Int?>(null)
     val sleepTimerRemainingSeconds: StateFlow<Int?> = _sleepTimerRemainingSeconds.asStateFlow()
     private var sleepTimerJob: Job? = null
+
+    private val _playbackSpeed = MutableStateFlow(prefs.getFloat("playback_speed", 1.0f))
+    val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
     
     private val _sortMode = MutableStateFlow(0)
     val sortMode: StateFlow<Int> = _sortMode.asStateFlow()
@@ -109,6 +112,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         controllerFuture?.addListener({
             val controller = controllerFuture?.get()
             _mediaController.value = controller
+            controller?.setPlaybackSpeed(_playbackSpeed.value)
             controller?.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     _isPlaying.value = isPlaying
@@ -192,6 +196,36 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     fun skipNext() = _mediaController.value?.seekToNext()
     fun skipPrevious() = _mediaController.value?.seekToPrevious()
     fun seekTo(position: Long) = _mediaController.value?.seekTo(position)
+
+    fun setPlaybackSpeed(speed: Float) {
+        val clamped = speed.coerceIn(0.5f, 2.0f)
+        _playbackSpeed.value = clamped
+        prefs.edit().putFloat("playback_speed", clamped).apply()
+        _mediaController.value?.setPlaybackSpeed(clamped)
+    }
+
+    fun playNext(song: Song) {
+        val controller = _mediaController.value ?: return
+        val item = MediaItem.Builder().setMediaId(song.uri.toString()).setUri(song.uri).build()
+        if (controller.mediaItemCount == 0) {
+            controller.setMediaItems(listOf(item))
+            controller.prepare()
+        } else {
+            val insertAt = (controller.currentMediaItemIndex + 1).coerceAtMost(controller.mediaItemCount)
+            controller.addMediaItem(insertAt, item)
+        }
+    }
+
+    fun addToQueue(song: Song) {
+        val controller = _mediaController.value ?: return
+        val item = MediaItem.Builder().setMediaId(song.uri.toString()).setUri(song.uri).build()
+        if (controller.mediaItemCount == 0) {
+            controller.setMediaItems(listOf(item))
+            controller.prepare()
+        } else {
+            controller.addMediaItem(item)
+        }
+    }
 
     // --- Database Actions ---
     fun toggleFavorite(song: Song) {

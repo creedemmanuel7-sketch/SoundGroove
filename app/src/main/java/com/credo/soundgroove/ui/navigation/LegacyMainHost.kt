@@ -22,6 +22,7 @@ fun LegacyMainHost(
     val controller by viewModel.mediaController.collectAsState()
     val currentTheme by viewModel.currentTheme.collectAsState()
     val sleepTimerRemainingSeconds by viewModel.sleepTimerRemainingSeconds.collectAsState()
+    val playbackSpeed by viewModel.playbackSpeed.collectAsState()
 
     if (controller != null) {
         com.credo.soundgroove.MainScreen(
@@ -33,6 +34,8 @@ fun LegacyMainHost(
             onSetSleepTimer = { viewModel.setSleepTimer(it) },
             onSetSleepTimerEndOfTrack = { viewModel.setSleepTimerEndOfTrack() },
             onCancelSleepTimer = { viewModel.cancelSleepTimer() },
+            playbackSpeed = playbackSpeed,
+            onPlaybackSpeedChange = { viewModel.setPlaybackSpeed(it) },
             onNavigateToPlaylist = onNavigateToPlaylist,
             onNavigateToSearch = onNavigateToSearch,
             onNavigateToAlbum = onNavigateToAlbum,
