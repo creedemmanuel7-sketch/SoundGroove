@@ -20,9 +20,13 @@ import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.credo.soundgroove.notifications.SmartNotificationManager
 import com.credo.soundgroove.ui.theme.AppTheme
 
 class SoundGrooveViewModel(application: Application) : AndroidViewModel(application) {
@@ -110,6 +114,14 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     private val _sortMode = MutableStateFlow(0)
     val sortMode: StateFlow<Int> = _sortMode.asStateFlow()
 
+    val sortedSongs: StateFlow<List<Song>> = combine(_songs, _sortMode) { songs, mode ->
+        sortSongs(songs, mode)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private var resumeReminderJob: Job? = null
+    private var continuousPlaySeconds = 0
+    private var sessionSummaryShown = false
+
     private val _mainSelectedTab = MutableStateFlow(0)
     val mainSelectedTab: StateFlow<Int> = _mainSelectedTab.asStateFlow()
 
@@ -156,6 +168,14 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
             controller?.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     _isPlaying.value = isPlaying
+                    if (isPlaying) {
+                        resumeReminderJob?.cancel()
+                        continuousPlaySeconds = 0
+                        sessionSummaryShown = false
+                    } else {
+                        maybeShowSessionSummaryIfEnabled()
+                        scheduleResumeReminderIfEnabled()
+                    }
                 }
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                     updateCurrentSongFromMediaItem(mediaItem)
@@ -170,16 +190,60 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     private fun startProgressUpdate() {
         viewModelScope.launch {
             while (true) {
-                if (_isPlaying.value) {
-                    _playbackPosition.value = _mediaController.value?.currentPosition ?: 0L
+                val controller = _mediaController.value
+                _playbackPosition.value = controller?.currentPosition ?: 0L
+                if (controller?.isPlaying == true) {
                     val updated = _totalListeningSeconds.value + 1
                     _totalListeningSeconds.value = updated
                     prefs.edit().putLong("total_listening_seconds", updated).apply()
+                    continuousPlaySeconds++
+                    if (_smartNotificationsEnabled.value &&
+                        !sessionSummaryShown &&
+                        continuousPlaySeconds >= SESSION_SUMMARY_THRESHOLD_SECONDS
+                    ) {
+                        sessionSummaryShown = true
+                        SmartNotificationManager.showSessionSummary(
+                            getApplication(),
+                            continuousPlaySeconds / 60
+                        )
+                    }
                 }
                 delay(1000L)
             }
         }
     }
+
+    private fun scheduleResumeReminderIfEnabled() {
+        if (!_smartNotificationsEnabled.value) return
+        resumeReminderJob?.cancel()
+        val song = _currentSong.value ?: return
+        resumeReminderJob = viewModelScope.launch {
+            delay(RESUME_REMINDER_DELAY_MS)
+            if (!_isPlaying.value && _currentSong.value?.id == song.id) {
+                SmartNotificationManager.showResumeReminder(getApplication(), song)
+            }
+        }
+    }
+
+    private fun maybeShowSessionSummaryIfEnabled() {
+        if (!_smartNotificationsEnabled.value || sessionSummaryShown) return
+        if (continuousPlaySeconds >= SESSION_SUMMARY_THRESHOLD_SECONDS) {
+            sessionSummaryShown = true
+            SmartNotificationManager.showSessionSummary(
+                getApplication(),
+                continuousPlaySeconds / 60
+            )
+        }
+    }
+
+    private fun sortSongs(songs: List<Song>, mode: Int): List<Song> =
+        when (mode) {
+            0 -> songs.sortedBy { it.title.lowercase() }
+            1 -> songs.sortedByDescending { it.title.lowercase() }
+            2 -> songs.sortedBy { it.artist.lowercase() }
+            3 -> songs.sortedByDescending { it.dateAdded }
+            else -> songs
+        }
 
     private fun loadMusic() {
         viewModelScope.launch {
@@ -287,6 +351,12 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     fun setSmartNotificationsEnabled(enabled: Boolean) {
         _smartNotificationsEnabled.value = enabled
         prefs.edit().putBoolean("smart_notifications_enabled", enabled).apply()
+        if (!enabled) {
+            resumeReminderJob?.cancel()
+            SmartNotificationManager.cancelAll(getApplication())
+        } else if (!_isPlaying.value) {
+            scheduleResumeReminderIfEnabled()
+        }
     }
 
     fun setPersistentMiniPlayerEnabled(enabled: Boolean) {
@@ -431,6 +501,12 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     override fun onCleared() {
         super.onCleared()
+        resumeReminderJob?.cancel()
         controllerFuture?.let { MediaController.releaseFuture(it) }
+    }
+
+    companion object {
+        private const val RESUME_REMINDER_DELAY_MS = 15 * 60 * 1000L
+        private const val SESSION_SUMMARY_THRESHOLD_SECONDS = 20 * 60
     }
 }

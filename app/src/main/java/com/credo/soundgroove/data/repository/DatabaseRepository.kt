@@ -12,6 +12,8 @@ import com.credo.soundgroove.toRecentlyPlayedEntity
 import com.credo.soundgroove.toSong
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 class DatabaseRepository(
@@ -51,10 +53,33 @@ class DatabaseRepository(
 
     // --- Playlists ---
     fun getAllPlaylists(): Flow<List<Playlist>> {
-        return playlistDao.getAllPlaylists().map { entities ->
-            entities.map { Playlist(id = it.id, name = it.name) }
+        return playlistDao.getAllPlaylists().flatMapLatest { entities ->
+            if (entities.isEmpty()) {
+                flowOf(emptyList())
+            } else {
+                combine(
+                    entities.map { entity ->
+                        playlistDao.getSongsForPlaylist(entity.id).map { playlistSongs ->
+                            Playlist(
+                                id = entity.id,
+                                name = entity.name,
+                                songs = playlistSongs.map { it.toSong() }
+                            )
+                        }
+                    }
+                ) { playlists -> playlists.toList() }
+            }
         }
     }
+
+    private fun PlaylistSongEntity.toSong(): Song =
+        Song(
+            id = songId,
+            title = title,
+            artist = artist,
+            uri = android.net.Uri.parse(uri),
+            albumArtUri = albumArtUri?.let { android.net.Uri.parse(it) }
+        )
 
     fun getPlaylistWithSongs(playlistId: Long, name: String): Flow<Playlist> {
         return playlistDao.getSongsForPlaylist(playlistId).map { playlistSongs ->

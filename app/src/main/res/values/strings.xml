@@ -1,4 +1,16 @@
 <resources>
     <string name="app_name">SoundGroove</string>
     <string name="soundgroove_logo_description">SoundGroove Logo</string>
+    <string name="notification_channel_media">Lecture en cours</string>
+    <string name="notification_channel_media_desc">Contrôles de lecture, pochette et métadonnées</string>
+    <string name="notification_channel_smart">Notifications intelligentes</string>
+    <string name="notification_channel_smart_desc">Rappels discrets et résumés d\'écoute</string>
+    <string name="smart_notification_resume_title">Reprendre l\'écoute ?</string>
+    <string name="smart_notification_resume_body">%1$s — %2$s est en pause</string>
+    <string name="smart_notification_summary_title">Belle session d\'écoute</string>
+    <string name="smart_notification_summary_body">Vous avez écouté %1$d min sans interruption. Bravo !</string>
+    <string name="widget_description">Contrôles rapides SoundGroove</string>
+    <string name="widget_no_track">Aucun morceau</string>
+    <string name="widget_album_art">Pochette album</string>
+    <string name="widget_play_pause">Lecture / Pause</string>
 </resources>

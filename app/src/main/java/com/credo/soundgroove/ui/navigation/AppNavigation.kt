@@ -1,29 +1,35 @@
 package com.credo.soundgroove.ui.navigation
 
+import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.credo.soundgroove.ui.screens.PlaylistDetailScreen
+import com.credo.soundgroove.PlayerScreen
+import com.credo.soundgroove.QueueScreen
+import com.credo.soundgroove.data.model.Playlist
+import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.MiniPlayer
+import com.credo.soundgroove.ui.components.PlaybackSpeedBottomSheet
+import com.credo.soundgroove.ui.components.SongInfoBottomSheet
 import com.credo.soundgroove.ui.screens.AlbumDetailScreen
 import com.credo.soundgroove.ui.screens.ArtistDetailScreen
-import com.credo.soundgroove.PlayerScreen
-import android.net.Uri
-import com.credo.soundgroove.data.model.Playlist
-import com.credo.soundgroove.ui.components.MiniPlayer
+import com.credo.soundgroove.ui.screens.PlaylistDetailScreen
 import com.credo.soundgroove.viewmodel.SoundGrooveViewModel
 
 object Routes {
@@ -38,6 +44,17 @@ object Routes {
     fun albumDetail(albumName: String) = "album/${Uri.encode(albumName)}"
     fun artistDetail(artistName: String) = "artist/${Uri.encode(artistName)}"
 }
+
+private fun resolveSongFromMediaItem(item: MediaItem, songs: List<Song>): Song? {
+    val mediaId = item.mediaId
+    return songs.find { it.uri.toString() == mediaId }
+        ?: item.localConfiguration?.uri?.let { uri -> songs.find { it.uri == uri } }
+}
+
+private fun rebuildPlaylistFromPlayer(player: Player, songs: List<Song>): List<Song> =
+    (0 until player.mediaItemCount).mapNotNull { index ->
+        resolveSongFromMediaItem(player.getMediaItemAt(index), songs)
+    }
 
 @Composable
 fun AppNavigation(
@@ -57,6 +74,25 @@ fun AppNavigation(
     val currentRoute = backStackEntry?.destination?.route
     val context = LocalContext.current
 
+    var showQueue by remember { mutableStateOf(false) }
+    var showSongInfo by remember { mutableStateOf(false) }
+    var showPlaybackSpeedSheet by remember { mutableStateOf(false) }
+    var currentPlaylist by remember { mutableStateOf<List<Song>>(emptyList()) }
+
+    LaunchedEffect(showQueue, controller?.mediaItemCount, songs) {
+        if (showQueue) {
+            controller?.let { player ->
+                val rebuilt = rebuildPlaylistFromPlayer(player, songs)
+                if (rebuilt.isNotEmpty()) currentPlaylist = rebuilt
+            }
+        }
+    }
+
+    val queueCurrentIndex = controller?.currentMediaItemIndex?.coerceIn(
+        0,
+        (currentPlaylist.size - 1).coerceAtLeast(0)
+    ) ?: 0
+
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
@@ -67,26 +103,23 @@ fun AppNavigation(
             popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) + fadeOut(tween(150)) }
         ) {
             composable(Routes.HOME) {
-            // The legacy MainScreen still handles the tabbed home experience
-            // It is wired to the ViewModel via state collection
-            // This will be refactored progressively
-            LegacyMainHost(
-                viewModel = viewModel,
-                accentColor = accentColor,
-                onNavigateToPlaylist = { playlistId ->
-                    navController.navigate(Routes.playlistDetail(playlistId))
-                },
-                onNavigateToSearch = {
-                    navController.navigate(Routes.SEARCH)
-                },
-                onNavigateToAlbum = { albumName ->
-                    navController.navigate(Routes.albumDetail(albumName))
-                },
-                onNavigateToArtist = { artistName ->
-                    navController.navigate(Routes.artistDetail(artistName))
-                }
-            )
-        }
+                LegacyMainHost(
+                    viewModel = viewModel,
+                    accentColor = accentColor,
+                    onNavigateToPlaylist = { playlistId ->
+                        navController.navigate(Routes.playlistDetail(playlistId))
+                    },
+                    onNavigateToSearch = {
+                        navController.navigate(Routes.SEARCH)
+                    },
+                    onNavigateToAlbum = { albumName ->
+                        navController.navigate(Routes.albumDetail(albumName))
+                    },
+                    onNavigateToArtist = { artistName ->
+                        navController.navigate(Routes.artistDetail(artistName))
+                    }
+                )
+            }
 
             composable(
                 route = Routes.SEARCH,
@@ -106,7 +139,7 @@ fun AppNavigation(
                     onAlbumClick = { albumName -> navController.navigate(Routes.albumDetail(albumName)) },
                     onArtistClick = { artistName -> navController.navigate(Routes.artistDetail(artistName)) },
                     onPlaylistClick = { playlistId -> navController.navigate(Routes.playlistDetail(playlistId)) },
-                    onMenuClick = { /* TODO: show bottom sheet from search */ }
+                    onMenuClick = { /* menu contextuel depuis la recherche : à brancher */ }
                 )
             }
 
@@ -128,15 +161,15 @@ fun AppNavigation(
                         onPlayPause = { viewModel.togglePlayPause() },
                         onClose = { navController.popBackStack() },
                         onSwipeDown = { navController.popBackStack() },
-                        onSwipeUp = { },
+                        onSwipeUp = { showQueue = true },
                         onToggleFavorite = { viewModel.toggleFavorite(song) },
-                        onOpenQueue = { },
+                        onOpenQueue = { showQueue = true },
                         player = player,
-                        onShowInfo = { },
+                        onShowInfo = { showSongInfo = true },
                         onShare = { com.credo.soundgroove.util.PlayerActions.shareSong(context, song) },
                         onSetRingtone = { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, song) },
                         playbackSpeed = playbackSpeed,
-                        onOpenPlaybackSpeed = { }
+                        onOpenPlaybackSpeed = { showPlaybackSpeedSheet = true }
                     )
                 } else {
                     LaunchedEffect(Unit) { navController.popBackStack() }
@@ -162,11 +195,14 @@ fun AppNavigation(
                         },
                         onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
                         onRemoveSongFromPlaylist = { songId -> viewModel.removeSongFromPlaylist(it.id, songId) },
-                        onDeletePlaylist = { viewModel.deletePlaylist(it.id) },
+                        onDeletePlaylist = {
+                            viewModel.deletePlaylist(it.id)
+                            navController.popBackStack()
+                        },
                         onRenamePlaylist = { newName -> viewModel.renamePlaylist(it.id, newName) },
                         onPlayNext = { song -> viewModel.playNext(song) },
                         onAddToQueue = { song -> viewModel.addToQueue(song) },
-                        onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
+                        onAddToPlaylist = { /* sélecteur de playlist non disponible depuis le détail */ }
                     )
                 }
             }
@@ -193,7 +229,7 @@ fun AppNavigation(
                     onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
                     onPlayNext = { song -> viewModel.playNext(song) },
                     onAddToQueue = { song -> viewModel.addToQueue(song) },
-                    onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
+                    onAddToPlaylist = { /* sélecteur de playlist non disponible depuis le détail */ }
                 )
             }
 
@@ -219,7 +255,7 @@ fun AppNavigation(
                     onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
                     onPlayNext = { song -> viewModel.playNext(song) },
                     onAddToQueue = { song -> viewModel.addToQueue(song) },
-                    onAddToPlaylist = { /* playlist picker non disponible depuis le détail */ }
+                    onAddToPlaylist = { /* sélecteur de playlist non disponible depuis le détail */ }
                 )
             }
         }
@@ -241,6 +277,69 @@ fun AppNavigation(
                         .padding(bottom = 8.dp)
                 )
             }
+        }
+
+        if (showQueue && currentRoute == Routes.PLAYER) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.22f))
+                    .pointerInput(Unit) { detectTapGestures { showQueue = false } },
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                QueueScreen(
+                    playlist = currentPlaylist,
+                    currentIndex = queueCurrentIndex,
+                    accentColor = accentColor,
+                    onClose = { showQueue = false },
+                    onPlaySong = { index ->
+                        val player = controller ?: return@QueueScreen
+                        if (currentPlaylist.isEmpty()) return@QueueScreen
+                        player.seekToDefaultPosition(index)
+                        player.play()
+                    },
+                    onRemoveSong = { index ->
+                        val player = controller ?: return@QueueScreen
+                        if (currentPlaylist.isEmpty() || index !in currentPlaylist.indices) return@QueueScreen
+                        player.removeMediaItem(index)
+                        currentPlaylist = currentPlaylist.toMutableList().also { it.removeAt(index) }
+                    },
+                    onMoveSong = { from, to ->
+                        val player = controller ?: return@QueueScreen
+                        if (currentPlaylist.isEmpty() || from !in currentPlaylist.indices || to !in currentPlaylist.indices || from == to) {
+                            return@QueueScreen
+                        }
+                        player.moveMediaItem(from, to)
+                        currentPlaylist = currentPlaylist.toMutableList().also { list ->
+                            val item = list.removeAt(from)
+                            list.add(to, item)
+                        }
+                    }
+                )
+            }
+        }
+
+        currentSong?.let { song ->
+            if (showSongInfo && currentRoute == Routes.PLAYER) {
+                SongInfoBottomSheet(
+                    song = song,
+                    accentColor = accentColor,
+                    isFavorite = favoriteSongs.any { it.id == song.id },
+                    onToggleFavorite = { viewModel.toggleFavorite(song) },
+                    onShare = { com.credo.soundgroove.util.PlayerActions.shareSong(context, song) },
+                    onSetRingtone = { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, song) },
+                    onDismiss = { showSongInfo = false }
+                )
+            }
+        }
+
+        if (showPlaybackSpeedSheet && currentRoute == Routes.PLAYER) {
+            PlaybackSpeedBottomSheet(
+                currentSpeed = playbackSpeed,
+                accentColor = accentColor,
+                onSpeedSelected = { viewModel.setPlaybackSpeed(it) },
+                onDismiss = { showPlaybackSpeedSheet = false }
+            )
         }
     }
 }

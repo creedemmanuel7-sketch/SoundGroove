@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    id("kotlin-kapt")
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -63,9 +63,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.3")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-    implementation("androidx.room:room-runtime:2.8.4")
-    implementation("androidx.room:room-ktx:2.8.4")
-    kapt("androidx.room:room-compiler:2.8.4")
+    implementation("androidx.room:room-runtime:${libs.versions.room.get()}")
+    implementation("androidx.room:room-ktx:${libs.versions.room.get()}")
+    ksp("androidx.room:room-compiler:${libs.versions.room.get()}")
     implementation("androidx.media3:media3-session:1.3.1")
     implementation("com.google.guava:guava:32.1.2-android")
     implementation("androidx.palette:palette-ktx:1.0.0")

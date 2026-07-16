@@ -7,7 +7,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -520,12 +524,20 @@ private fun SleepTimerOption(
     accentColor: Color,
     onClick: () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val bgAlpha by animateFloatAsState(
+        targetValue = if (pressed) 0.75f else 0.55f,
+        animationSpec = SgMotion.tweenFast(),
+        label = "sleepOptionBg"
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .sgPressScale(interactionSource, pressedScale = 0.98f)
             .clip(RoundedCornerShape(14.dp))
-            .clickable { onClick() }
-            .background(GlassSurface.copy(alpha = 0.55f))
+            .clickable(interactionSource = interactionSource, indication = null) { onClick() }
+            .background(GlassSurface.copy(alpha = bgAlpha))
             .border(1.dp, GlassBorder.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically

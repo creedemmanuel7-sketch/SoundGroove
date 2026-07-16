@@ -1,5 +1,7 @@
 package com.credo.soundgroove.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,6 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,13 +51,19 @@ fun SongListItem(
     onMenuClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val rowBg = if (isCurrentSong) {
-        Brush.horizontalGradient(
-            listOf(accentColor.copy(alpha = 0.10f), Color.Transparent)
-        )
-    } else {
-        Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
-    }
+    val rowBgAlpha by animateFloatAsState(
+        targetValue = if (isCurrentSong) 1f else 0f,
+        animationSpec = SgMotion.tweenFast(),
+        label = "rowHighlight"
+    )
+    val titleColor by animateColorAsState(
+        targetValue = if (isCurrentSong) accentColor else TextPrimary,
+        animationSpec = SgMotion.tweenFastOf(),
+        label = "titleColor"
+    )
+    val rowBg = Brush.horizontalGradient(
+        listOf(accentColor.copy(alpha = 0.10f * rowBgAlpha), Color.Transparent)
+    )
 
     Row(
         modifier = modifier
@@ -117,7 +126,7 @@ fun SongListItem(
             Text(
                 text = song.title,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (isCurrentSong) accentColor else TextPrimary,
+                color = titleColor,
                 fontWeight = if (isCurrentSong) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

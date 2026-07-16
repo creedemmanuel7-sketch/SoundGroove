@@ -1,14 +1,20 @@
 package com.credo.soundgroove.ui.theme
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +49,11 @@ fun SgScreenBackground(
     content: @Composable BoxScope.() -> Unit
 ) {
     val accent = accentColorForTheme(appTheme)
+    val haloAlpha by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = tween(SgMotion.SlowMs, easing = SgMotion.EaseOut),
+        label = "haloAlpha"
+    )
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -54,7 +65,7 @@ fun SgScreenBackground(
                 .offset(x = (-60).dp, y = 80.dp)
                 .background(
                     Brush.radialGradient(
-                        listOf(accent.copy(alpha = 0.18f), Color.Transparent)
+                        listOf(accent.copy(alpha = 0.18f * haloAlpha), Color.Transparent)
                     ),
                     CircleShape
                 )
@@ -66,7 +77,7 @@ fun SgScreenBackground(
                 .offset(x = 40.dp, y = 200.dp)
                 .background(
                     Brush.radialGradient(
-                        listOf(accent.copy(alpha = 0.10f), Color.Transparent)
+                        listOf(accent.copy(alpha = 0.10f * haloAlpha), Color.Transparent)
                     ),
                     CircleShape
                 )
@@ -131,25 +142,28 @@ fun SgChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val (bgColor, borderColor) = animateChipColors(selected, accentColor)
+    val textColor by animateColorAsState(
+        targetValue = if (selected) accentColor else TextSecondary,
+        animationSpec = SgMotion.tweenFastOf(),
+        label = "chipText"
+    )
+    val interactionSource = remember { MutableInteractionSource() }
+
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(SgRadius.pill))
-            .background(
-                if (selected) accentColor.copy(alpha = 0.24f) else SurfaceElevated.copy(alpha = 0.28f)
-            )
-            .border(
-                width = 1.dp,
-                color = if (selected) accentColor.copy(alpha = 0.42f) else BorderSubtle.copy(alpha = 0.35f),
-                shape = RoundedCornerShape(SgRadius.pill)
-            )
-            .clickable { onClick() }
+            .background(bgColor)
+            .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(SgRadius.pill))
+            .sgPressScale(interactionSource)
+            .clickable(interactionSource = interactionSource, indication = null) { onClick() }
             .padding(horizontal = 14.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelLarge,
-            color = if (selected) accentColor else TextSecondary,
+            color = textColor,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
         )
     }
