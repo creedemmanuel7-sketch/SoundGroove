@@ -43,7 +43,8 @@ fun MiniPlayer(
     onPlayPause: () -> Unit,
     onSkipNext: () -> Unit,
     onOpen: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    albumArtModifier: Modifier = Modifier
 ) {
     val albumAccent = rememberAlbumArtAccentColor(song.albumArtUri, accentColor)
     val displayAccent = blendWithAlbumArt(accentColor, albumAccent, weight = 0.3f)
@@ -68,7 +69,7 @@ fun MiniPlayer(
             .clip(RoundedCornerShape(SgRadius.xl))
             .background(
                 Brush.verticalGradient(
-                    listOf(SurfaceOverlay.copy(0.97f), DeepPurple.copy(0.99f))
+                    listOf(SurfaceOverlay.copy(0.97f), GraphiteAbyss.copy(0.99f))
                 )
             )
             .border(1.dp, displayAccent.copy(alpha = 0.08f), RoundedCornerShape(SgRadius.xl))
@@ -94,6 +95,7 @@ fun MiniPlayer(
             Box(
                 modifier = Modifier
                     .size(44.dp)
+                    .then(albumArtModifier)
                     .border(1.dp, displayAccent.copy(0.24f), RoundedCornerShape(SgRadius.sm))
                     .clip(RoundedCornerShape(SgRadius.sm))
                     .background(SurfaceElevated),

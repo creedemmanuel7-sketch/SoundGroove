@@ -52,6 +52,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.ui.components.formatDuration
+import com.credo.soundgroove.util.PlayerGuards
 import com.credo.soundgroove.util.blendWithAlbumArt
 import com.credo.soundgroove.util.rememberAlbumArtAccentColor
 import com.google.common.util.concurrent.ListenableFuture
@@ -136,7 +137,7 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(
     player: MediaController,
     accentColor: Color,
-    currentTheme: AppTheme = AppTheme.ORIGINAL_PURPLE,
+    currentTheme: AppTheme = AppTheme.NOIR_ABSOLU,
     onThemeSelected: (AppTheme) -> Unit = {},
     sleepTimerRemainingSeconds: Int? = null,
     onSetSleepTimer: (Int) -> Unit = {},
@@ -171,6 +172,12 @@ fun MainScreen(
     performanceModeEnabled: Boolean = false,
     onPerformanceModeChange: (Boolean) -> Unit = {},
     onClearRecentlyPlayed: () -> Unit = {},
+    onClearSearchHistory: () -> Unit = {},
+    onExportBackup: () -> Unit = {},
+    onImportBackup: () -> Unit = {},
+    hiddenFolders: Set<String> = emptySet(),
+    onHideFolder: (String) -> Unit = {},
+    onUnhideFolder: (String) -> Unit = {},
     onToggleFavorite: (Song) -> Unit = {},
     onCreatePlaylist: (String) -> Unit = {},
     onPlaylistAddSong: (Playlist, Song) -> Unit = { _, _ -> },
@@ -223,17 +230,19 @@ fun MainScreen(
 
     LaunchedEffect(player, songs) {
         while (true) {
-            val index = player.currentMediaItemIndex
-            val resolvedSong = currentPlaylist.getOrNull(index)
-                ?: player.currentMediaItem?.let { item ->
-                    val mediaId = item.mediaId
-                    songs.find { it.uri.toString() == mediaId }
-                        ?: item.localConfiguration?.uri?.let { uri -> songs.find { it.uri == uri } }
+            try {
+                val index = player.currentMediaItemIndex
+                val resolvedSong = currentPlaylist.getOrNull(index)
+                    ?: player.currentMediaItem?.let { item ->
+                        PlayerGuards.resolveSongFromMediaItem(item, songs)
+                    }
+                if (resolvedSong != null) {
+                    localCurrentSong = resolvedSong
                 }
-            if (resolvedSong != null) {
-                localCurrentSong = resolvedSong
+                localIsPlaying = player.isPlaying
+            } catch (_: Exception) {
+                break
             }
-            localIsPlaying = player.isPlaying
             kotlinx.coroutines.delay(500)
         }
     }
@@ -449,6 +458,9 @@ fun MainScreen(
                         },
                         selectedTab = librarySelectedTab,
                         onSelectedTabChange = onLibrarySelectedTabChange,
+                        hiddenFolders = hiddenFolders,
+                        onHideFolder = onHideFolder,
+                        onUnhideFolder = onUnhideFolder,
                         accentColor = accentColor
                     )
 
@@ -487,7 +499,7 @@ fun MainScreen(
                             if (activeIsPlaying) player.pause() else player.play()
                             localIsPlaying = !activeIsPlaying
                         },
-                        onSkipNext = { player.seekToNextMediaItem() },
+                        onSkipNext = { PlayerGuards.safeSeekToNext(player) },
                         onOpen = { showPlayer = true }
                     )
                 }
@@ -585,7 +597,10 @@ fun MainScreen(
             performanceModeEnabled = performanceModeEnabled,
             onPerformanceModeChange = onPerformanceModeChange,
             onReloadMusic = onReloadMusic,
-            onClearRecentlyPlayed = onClearRecentlyPlayed
+            onClearRecentlyPlayed = onClearRecentlyPlayed,
+            onClearSearchHistory = onClearSearchHistory,
+            onExportBackup = onExportBackup,
+            onImportBackup = onImportBackup
         )
     }
 
@@ -651,7 +666,7 @@ fun MainScreen(
                             modifier = Modifier
                                 .size(72.dp)
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(DarkPurple),
+                                .background(GraphiteCard),
                             contentAlignment = Alignment.Center
                         ) {
                             if (song.albumArtUri != null) {
@@ -801,7 +816,7 @@ fun MainScreen(
                                     modifier = Modifier
                                         .size(44.dp)
                                         .background(
-                                            Brush.radialGradient(listOf(LightPurple, MediumPurple)),
+                                            Brush.radialGradient(listOf(SilverAccent, GraphiteMid)),
                                             RoundedCornerShape(10.dp)
                                         ),
                                     contentAlignment = Alignment.Center
@@ -813,7 +828,7 @@ fun MainScreen(
                                     Text(playlist.name, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                                     Text("${playlist.songs.size} chanson(s)", color = TextSecondary, fontSize = 12.sp)
                                 }
-                                Icon(painter = painterResource(R.drawable.ic_add), contentDescription = null, tint = LightPurple, modifier = Modifier.size(20.dp))
+                                Icon(painter = painterResource(R.drawable.ic_add), contentDescription = null, tint = SilverAccent, modifier = Modifier.size(20.dp))
                             }
                             Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(GlassBorder))
                         }
@@ -838,12 +853,11 @@ fun MainScreen(
 
     LaunchedEffect(showQueue, player.mediaItemCount, songs) {
         if (showQueue) {
-            val rebuilt = rebuildPlaylistFromPlayer()
-            if (rebuilt.isNotEmpty()) currentPlaylist = rebuilt
+            currentPlaylist = PlayerGuards.rebuildPlaylistFromPlayer(player, songs)
         }
     }
 
-    val queueCurrentIndex = player.currentMediaItemIndex.coerceIn(0, (currentPlaylist.size - 1).coerceAtLeast(0))
+    val queueCurrentIndex = PlayerGuards.safeCurrentIndex(player)
 
     AnimatedVisibility(
         visible = showQueue,
@@ -863,21 +877,20 @@ fun MainScreen(
                 accentColor = accentColor,
                 onClose = { showQueue = false },
                 onPlaySong = { index ->
-                    if (currentPlaylist.isEmpty()) return@QueueScreen
-                    player.seekToDefaultPosition(index)
+                    if (!PlayerGuards.safeSeekToIndex(player, index)) return@QueueScreen
                     player.play()
                     localIsPlaying = true
                 },
                 onRemoveSong = { index ->
-                    if (currentPlaylist.isEmpty() || index !in currentPlaylist.indices) return@QueueScreen
-                    player.removeMediaItem(index)
+                    if (index !in currentPlaylist.indices) return@QueueScreen
+                    if (!PlayerGuards.safeRemoveMediaItem(player, index)) return@QueueScreen
                     val newList = currentPlaylist.toMutableList()
                     newList.removeAt(index)
                     currentPlaylist = newList
                 },
                 onMoveSong = { from, to ->
-                    if (currentPlaylist.isEmpty() || from !in currentPlaylist.indices || to !in currentPlaylist.indices || from == to) return@QueueScreen
-                    player.moveMediaItem(from, to)
+                    if (from !in currentPlaylist.indices || to !in currentPlaylist.indices || from == to) return@QueueScreen
+                    if (!PlayerGuards.safeMoveMediaItem(player, from, to)) return@QueueScreen
                     val newList = currentPlaylist.toMutableList()
                     val item = newList.removeAt(from)
                     newList.add(to, item)
@@ -1419,7 +1432,7 @@ fun SongItem(
     onLongClick: (() -> Unit)? = null,
     showMenu: Boolean = false,
     isFavorite: Boolean = false,
-    accentColor: Color = LightPurple,
+    accentColor: Color = SilverAccent,
     onToggleFavorite: (() -> Unit)? = null,
     onShowInfo: (() -> Unit)? = null,
     onShowPlaylistPicker: (() -> Unit)? = null,
@@ -1457,7 +1470,7 @@ fun SongItem(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(DarkPurple),
+                    .background(GraphiteCard),
                 contentAlignment = Alignment.Center
             ) {
                 if (song.albumArtUri != null) {
@@ -1511,7 +1524,7 @@ fun SongItem(
                 Icon(
                     painter = painterResource(R.drawable.ic_songs),
                     contentDescription = null,
-                    tint = CyanAccent,
+                    tint = IceAccent,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
@@ -1592,7 +1605,7 @@ fun SongItem(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(painter = painterResource(R.drawable.ic_add), contentDescription = null, tint = CyanAccent, modifier = Modifier.size(18.dp))
+                                    Icon(painter = painterResource(R.drawable.ic_add), contentDescription = null, tint = IceAccent, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text("Ajouter à une playlist", color = TextPrimary, fontSize = 14.sp)
                                 }
@@ -1621,7 +1634,7 @@ fun InfoRow(
     iconRes: Int,
     label: String,
     value: String,
-    accentColor: Color = LightPurple
+    accentColor: Color = SilverAccent
 ) {
     Row(
         modifier = Modifier
@@ -1720,7 +1733,7 @@ fun RecentlyPlayedScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(LightPurple, RoundedCornerShape(12.dp))
+                    .background(SilverAccent, RoundedCornerShape(12.dp))
                     .clickable {
                         if (songs.isNotEmpty()) onSongClick(songs.first())
                     }
@@ -1793,13 +1806,17 @@ fun PlayerScreen(
     var showOptionsMenu by remember { mutableStateOf(false) }
     val swipeThreshold = 100.dp
     val density = androidx.compose.ui.platform.LocalDensity.current
+    val scope = rememberCoroutineScope()
 
-
-    LaunchedEffect(Unit) {
+    LaunchedEffect(player) {
         while (true) {
-            currentPosition = player.currentPosition
-            duration = player.duration.coerceAtLeast(1L)
-            progress = currentPosition.toFloat() / duration.toFloat()
+            try {
+                currentPosition = player.currentPosition
+                duration = player.duration.coerceAtLeast(1L)
+                progress = currentPosition.toFloat() / duration.toFloat()
+            } catch (_: Exception) {
+                break
+            }
             kotlinx.coroutines.delay(500)
         }
     }
@@ -2002,15 +2019,18 @@ fun PlayerScreen(
                     .border(1.dp, displayAccent.copy(alpha = 0.22f), RoundedCornerShape(SgRadius.xl))
                     .clip(RoundedCornerShape(SgRadius.xl))
                     .background(SurfaceElevated)
-                    .pointerInput(Unit) {
+                    .pointerInput(player.mediaItemCount) {
                         detectHorizontalDragGestures(
                             onDragEnd = {
                                 val thresholdPx = with(density) { swipeThreshold.toPx() }
-                                when {
-                                    dragOffsetX < -thresholdPx -> player.seekToNextMediaItem()
-                                    dragOffsetX > thresholdPx -> player.seekToPreviousMediaItem()
+                                val offset = dragOffsetX
+                                scope.launch {
+                                    when {
+                                        offset < -thresholdPx -> PlayerGuards.safeSeekToNext(player)
+                                        offset > thresholdPx -> PlayerGuards.safeSeekToPrevious(player)
+                                    }
+                                    dragOffsetX = 0f
                                 }
-                                dragOffsetX = 0f
                             },
                             onDragCancel = { dragOffsetX = 0f },
                             onHorizontalDrag = { _, dragAmount ->
@@ -2153,7 +2173,7 @@ fun PlayerScreen(
                 Box(
                     modifier = Modifier
                         .size(52.dp)
-                        .clickable { player.seekToPreviousMediaItem() },
+                        .clickable { PlayerGuards.safeSeekToPrevious(player) },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -2185,7 +2205,7 @@ fun PlayerScreen(
                 Box(
                     modifier = Modifier
                         .size(52.dp)
-                        .clickable { player.seekToNextMediaItem() },
+                        .clickable { PlayerGuards.safeSeekToNext(player) },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -2578,7 +2598,7 @@ fun ProfileTab(
                                     modifier = Modifier
                                         .size(72.dp)
                                         .background(
-                                            Brush.radialGradient(listOf(MediumPurple, DarkPurple)),
+                                            Brush.radialGradient(listOf(GraphiteMid, GraphiteCard)),
                                             CircleShape
                                         )
                                         .border(2.dp, rankColors[index], CircleShape),
@@ -2660,7 +2680,7 @@ fun ProfileTab(
                                 modifier = Modifier
                                     .size(36.dp)
                                     .background(
-                                        Brush.radialGradient(listOf(MediumPurple, DarkPurple)),
+                                        Brush.radialGradient(listOf(GraphiteMid, GraphiteCard)),
                                         CircleShape
                                     ),
                                 contentAlignment = Alignment.Center
@@ -2815,12 +2835,12 @@ fun ProfileTab(
                     onValueChange = { tempName = it },
                     label = { Text("Nom", color = TextSecondary) },
                     colors = androidx.compose.material3.TextFieldDefaults.colors(
-                        focusedContainerColor = DarkPurple,
-                        unfocusedContainerColor = DarkPurple,
+                        focusedContainerColor = GraphiteCard,
+                        unfocusedContainerColor = GraphiteCard,
                         focusedTextColor = TextPrimary,
                         unfocusedTextColor = TextPrimary,
-                        cursorColor = LightPurple,
-                        focusedIndicatorColor = LightPurple,
+                        cursorColor = SilverAccent,
+                        focusedIndicatorColor = SilverAccent,
                         unfocusedIndicatorColor = TextSecondary
                     ),
                     modifier = Modifier.fillMaxWidth()
@@ -2840,7 +2860,7 @@ fun ProfileTab(
                     Spacer(modifier = Modifier.width(8.dp))
                     Box(
                         modifier = Modifier
-                            .background(LightPurple, RoundedCornerShape(12.dp))
+                            .background(SilverAccent, RoundedCornerShape(12.dp))
                             .clickable {
                                 userName = tempName.ifBlank { "Credson" }
                                 prefs.edit().putString("profile_name", userName).apply()
@@ -2972,11 +2992,16 @@ fun LibraryTab(
     onShowPlaylistPicker: (Song) -> Unit = {},
     selectedTab: Int = 0,
     onSelectedTabChange: (Int) -> Unit = {},
+    hiddenFolders: Set<String> = emptySet(),
+    onHideFolder: (String) -> Unit = {},
+    onUnhideFolder: (String) -> Unit = {},
     accentColor: Color
 ) {
     var selectedAlbum by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     var selectedArtist by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     var selectedFolder by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
+    var folderMenuTarget by remember { mutableStateOf<String?>(null) }
+    var showHideFolderConfirm by remember { mutableStateOf(false) }
     
     BackHandler(enabled = selectedAlbum != null) { selectedAlbum = null }
     BackHandler(enabled = selectedArtist != null) { selectedArtist = null }
@@ -3285,7 +3310,7 @@ fun LibraryTab(
                                     modifier = Modifier
                                         .size(46.dp)
                                         .clip(CircleShape)
-                                        .background(DarkPurple),
+                                        .background(GraphiteCard),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     val coverSong =
@@ -3417,8 +3442,8 @@ fun LibraryTab(
                                                     .background(
                                                         Brush.radialGradient(
                                                             listOf(
-                                                                LightPurple,
-                                                                MediumPurple
+                                                                SilverAccent,
+                                                                GraphiteMid
                                                             )
                                                         )
                                                     ),
@@ -3559,12 +3584,12 @@ fun LibraryTab(
                                                             )
                                                         },
                                                         colors = androidx.compose.material3.TextFieldDefaults.colors(
-                                                            focusedContainerColor = DarkPurple,
-                                                            unfocusedContainerColor = DarkPurple,
+                                                            focusedContainerColor = GraphiteCard,
+                                                            unfocusedContainerColor = GraphiteCard,
                                                             focusedTextColor = TextPrimary,
                                                             unfocusedTextColor = TextPrimary,
-                                                            cursorColor = LightPurple,
-                                                            focusedIndicatorColor = LightPurple,
+                                                            cursorColor = SilverAccent,
+                                                            focusedIndicatorColor = SilverAccent,
                                                             unfocusedIndicatorColor = TextSecondary
                                                         ),
                                                         modifier = Modifier.fillMaxWidth(),
@@ -3591,7 +3616,7 @@ fun LibraryTab(
                                                         Box(
                                                             modifier = Modifier
                                                                 .background(
-                                                                    if (newName.isNotBlank()) LightPurple else TextSecondary,
+                                                                    if (newName.isNotBlank()) SilverAccent else TextSecondary,
                                                                     RoundedCornerShape(12.dp)
                                                                 )
                                                                 .clickable {
@@ -3766,15 +3791,62 @@ fun LibraryTab(
                         }
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (hiddenFolders.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        text = "DOSSIERS MASQUÉS",
+                                        color = TextTertiary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+                                    )
+                                }
+                                items(hiddenFolders.toList(), key = { "hidden_$it" }) { hiddenPath ->
+                                    val hiddenLabel = hiddenPath.substringAfterLast('/').ifBlank { hiddenPath }
+                                    GlassCard(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onUnhideFolder(hiddenPath) },
+                                        cornerRadius = 14.dp
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.VisibilityOff,
+                                                contentDescription = null,
+                                                tint = TextSecondary,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(hiddenLabel, color = TextSecondary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                Text("Appuyer pour réafficher", color = accentColor, fontSize = 11.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                                item { Spacer(modifier = Modifier.height(8.dp)) }
+                            }
                             items(folders, key = { it.first }) { (folderName, folderSongs) ->
                                 val folderLabel = folderName.substringAfterLast('/').ifBlank { "Dossier inconnu" }
                                 val parentPath = folderName.substringBeforeLast('/', "").takeIf { it.isNotBlank() }
-                                GlassCard(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { selectedFolder = folderName to folderSongs },
-                                    cornerRadius = 14.dp
-                                ) {
+                                Box {
+                                    GlassCard(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .combinedClickable(
+                                                onClick = { selectedFolder = folderName to folderSongs },
+                                                onLongClick = {
+                                                    folderMenuTarget = folderName
+                                                    showHideFolderConfirm = true
+                                                }
+                                            ),
+                                        cornerRadius = 14.dp
+                                    ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -3804,6 +3876,7 @@ fun LibraryTab(
                                         }
                                         Icon(painter = painterResource(R.drawable.ic_back), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
                                     }
+                                }
                                 }
                             }
                             item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -3851,7 +3924,7 @@ fun LibraryTab(
                                             modifier = Modifier
                                                 .size(46.dp)
                                                 .clip(RoundedCornerShape(10.dp))
-                                                .background(DarkPurple),
+                                                .background(GraphiteCard),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             if (song.albumArtUri != null) {
@@ -3865,7 +3938,7 @@ fun LibraryTab(
                                                     modifier = Modifier.fillMaxSize()
                                                 )
                                             } else {
-                                                Icon(painter = painterResource(R.drawable.ic_songs), contentDescription = null, tint = LightPurple, modifier = Modifier.size(18.dp))
+                                                Icon(painter = painterResource(R.drawable.ic_songs), contentDescription = null, tint = SilverAccent, modifier = Modifier.size(18.dp))
                                             }
                                         }
                                         Spacer(modifier = Modifier.width(12.dp))
@@ -3903,6 +3976,49 @@ fun LibraryTab(
                 }
             }
         }
+    }
+
+    if (showHideFolderConfirm && folderMenuTarget != null) {
+        val target = folderMenuTarget!!
+        val targetLabel = target.substringAfterLast('/').ifBlank { target }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {
+                showHideFolderConfirm = false
+                folderMenuTarget = null
+            },
+            title = { Text("Masquer ce dossier ?", color = TextPrimary) },
+            text = {
+                Text(
+                    "« $targetLabel » sera exclu de la bibliothèque et du scan affiché. Les fichiers restent sur l'appareil.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        onHideFolder(target)
+                        if (selectedFolder?.first == target) selectedFolder = null
+                        showHideFolderConfirm = false
+                        folderMenuTarget = null
+                    }
+                ) {
+                    Text("Masquer", color = accentColor, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showHideFolderConfirm = false
+                        folderMenuTarget = null
+                    }
+                ) {
+                    Text("Annuler", color = TextSecondary)
+                }
+            },
+            containerColor = CardSurface,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary
+        )
     }
 }
 
@@ -4091,7 +4207,7 @@ fun PlaylistScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(LightPurple, RoundedCornerShape(12.dp))
+                    .background(SilverAccent, RoundedCornerShape(12.dp))
                     .clickable { onPlayAll() }
                     .padding(vertical = 12.dp),
                 horizontalArrangement = Arrangement.Center,
@@ -4137,7 +4253,7 @@ fun PlaylistScreen(
 fun QueueScreen(
     playlist: List<Song>,
     currentIndex: Int,
-    accentColor: Color = LightPurple,
+    accentColor: Color = SilverAccent,
     onClose: () -> Unit,
     onPlaySong: (Int) -> Unit,
     onRemoveSong: (Int) -> Unit,
@@ -4147,11 +4263,16 @@ fun QueueScreen(
     var draggingIndex by remember { mutableStateOf<Int?>(null) }
     var itemDragOffset by remember { mutableStateOf(0f) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = rememberCoroutineScope()
     val safeCurrentIndex = currentIndex.coerceIn(0, (playlist.size - 1).coerceAtLeast(0))
 
     LaunchedEffect(playlist.size, safeCurrentIndex) {
-        if (playlist.isNotEmpty()) {
-            listState.scrollToItem(safeCurrentIndex)
+        if (playlist.isNotEmpty() && safeCurrentIndex in playlist.indices) {
+            try {
+                listState.scrollToItem(safeCurrentIndex)
+            } catch (_: Exception) {
+                // Liste pas encore prête — ignorer
+            }
         }
     }
 
@@ -4164,7 +4285,7 @@ fun QueueScreen(
                 Brush.verticalGradient(
                     colors = listOf(
                         SurfaceOverlay,
-                        DeepPurple,
+                        GraphiteAbyss,
                         Color(0xFF06030C)
                     )
                 )
@@ -4264,15 +4385,20 @@ fun QueueScreen(
                 contentPadding = PaddingValues(bottom = 80.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                itemsIndexed(playlist, key = { _, song -> song.id }) { index, song ->
+                itemsIndexed(
+                    playlist,
+                    key = { index, song -> "${song.id}:$index" }
+                ) { index, song ->
                     val isCurrent = index == safeCurrentIndex
                     val isDragging = draggingIndex == index
                     val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
                         confirmValueChange = { value ->
                             if (value != androidx.compose.material3.SwipeToDismissBoxValue.Settled && !isCurrent) {
-                                onRemoveSong(index)
+                                scope.launch { onRemoveSong(index) }
                                 true
-                            } else false
+                            } else {
+                                false
+                            }
                         }
                     )
 
@@ -4324,7 +4450,7 @@ fun QueueScreen(
                                     .fillMaxWidth()
                                     .background(
                                         if (isCurrent)
-                                            Brush.linearGradient(listOf(LightPurple.copy(0.18f), Color.Transparent))
+                                            Brush.linearGradient(listOf(SilverAccent.copy(0.18f), Color.Transparent))
                                         else
                                             Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
                                     )
@@ -4337,7 +4463,7 @@ fun QueueScreen(
                                     modifier = Modifier
                                         .size(46.dp)
                                         .clip(RoundedCornerShape(10.dp))
-                                        .background(DarkPurple),
+                                        .background(GraphiteCard),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (song.albumArtUri != null) {
@@ -4402,34 +4528,31 @@ fun QueueScreen(
                                         .pointerInput(index, playlist.size) {
                                             detectVerticalDragGestures(
                                                 onDragStart = {
-                                                    draggingIndex = index
-                                                    itemDragOffset = 0f
+                                                    scope.launch {
+                                                        draggingIndex = index
+                                                        itemDragOffset = 0f
+                                                    }
                                                 },
                                                 onVerticalDrag = { change, dragAmount ->
                                                     change.consume()
-                                                    val currentDraggingIndex = draggingIndex ?: index
                                                     itemDragOffset += dragAmount
-                                                    val rowHeightPx = 68f
-                                                    when {
-                                                        itemDragOffset > rowHeightPx && currentDraggingIndex < playlist.lastIndex -> {
-                                                            onMoveSong(currentDraggingIndex, currentDraggingIndex + 1)
-                                                            draggingIndex = currentDraggingIndex + 1
-                                                            itemDragOffset -= rowHeightPx
-                                                        }
-                                                        itemDragOffset < -rowHeightPx && currentDraggingIndex > 0 -> {
-                                                            onMoveSong(currentDraggingIndex, currentDraggingIndex - 1)
-                                                            draggingIndex = currentDraggingIndex - 1
-                                                            itemDragOffset += rowHeightPx
-                                                        }
-                                                    }
                                                 },
                                                 onDragEnd = {
-                                                    draggingIndex = null
-                                                    itemDragOffset = 0f
+                                                    val rowHeightPx = 68f
+                                                    val steps = (itemDragOffset / rowHeightPx).toInt()
+                                                    val from = index
+                                                    val to = (index + steps).coerceIn(0, playlist.lastIndex)
+                                                    scope.launch {
+                                                        if (from != to) onMoveSong(from, to)
+                                                        draggingIndex = null
+                                                        itemDragOffset = 0f
+                                                    }
                                                 },
                                                 onDragCancel = {
-                                                    draggingIndex = null
-                                                    itemDragOffset = 0f
+                                                    scope.launch {
+                                                        draggingIndex = null
+                                                        itemDragOffset = 0f
+                                                    }
                                                 }
                                             )
                                         },

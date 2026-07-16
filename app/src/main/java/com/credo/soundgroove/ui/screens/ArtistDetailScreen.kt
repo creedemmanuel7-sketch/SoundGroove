@@ -55,7 +55,7 @@ fun ArtistDetailScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(SurfaceOverlay, DeepPurple)))
+            .background(Brush.verticalGradient(listOf(SurfaceOverlay, GraphiteAbyss)))
     ) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
 
@@ -70,7 +70,7 @@ fun ArtistDetailScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Brush.verticalGradient(listOf(DarkPurple, Color(0xFF0D0517))))
+                            .background(Brush.verticalGradient(listOf(GraphiteCard, Color(0xFF0A0A0C))))
                     )
 
                     // Back Button
@@ -183,7 +183,7 @@ fun ArtistDetailScreen(
                 ) {
                     // Cover
                     Box(
-                        modifier = Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)).background(DarkPurple),
+                        modifier = Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)).background(GraphiteCard),
                         contentAlignment = Alignment.Center
                     ) {
                         if (song.albumArtUri != null) {

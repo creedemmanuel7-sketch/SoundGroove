@@ -1,7 +1,12 @@
 package com.credo.soundgroove.ui.navigation
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
+import com.credo.soundgroove.data.backup.BackupManager
 import com.credo.soundgroove.viewmodel.SoundGrooveViewModel
 
 /**
@@ -38,9 +43,33 @@ fun LegacyMainHost(
     val smartNotificationsEnabled by viewModel.smartNotificationsEnabled.collectAsState()
     val persistentMiniPlayerEnabled by viewModel.persistentMiniPlayerEnabled.collectAsState()
     val performanceModeEnabled by viewModel.performanceModeEnabled.collectAsState()
+    val hiddenFolders by viewModel.hiddenFolders.collectAsState()
+    val backupMessage by viewModel.backupMessage.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(backupMessage) {
+        backupMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearBackupMessage()
+        }
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument(BackupManager.BACKUP_MIME)
+    ) { uri ->
+        uri?.let { viewModel.exportBackup(it) }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { viewModel.importBackup(it) }
+    }
 
     if (controller != null) {
-        com.credo.soundgroove.MainScreen(
+        androidx.compose.foundation.layout.Box {
+            com.credo.soundgroove.MainScreen(
             player = controller!!,
             accentColor = accentColor,
             currentTheme = currentTheme,
@@ -78,6 +107,16 @@ fun LegacyMainHost(
             performanceModeEnabled = performanceModeEnabled,
             onPerformanceModeChange = { viewModel.setPerformanceModeEnabled(it) },
             onClearRecentlyPlayed = { viewModel.clearRecentlyPlayed() },
+            onClearSearchHistory = { viewModel.clearSearchHistory() },
+            onExportBackup = {
+                exportLauncher.launch(BackupManager.BACKUP_FILENAME)
+            },
+            onImportBackup = {
+                importLauncher.launch(arrayOf(BackupManager.BACKUP_MIME, "application/json", "text/json"))
+            },
+            hiddenFolders = hiddenFolders,
+            onHideFolder = { viewModel.hideFolder(it) },
+            onUnhideFolder = { viewModel.unhideFolder(it) },
             onToggleFavorite = { viewModel.toggleFavorite(it) },
             onCreatePlaylist = { viewModel.createPlaylist(it) },
             onPlaylistAddSong = { playlist, song ->
@@ -88,6 +127,11 @@ fun LegacyMainHost(
             onRemoveSongFromPlaylist = { playlist, songId ->
                 viewModel.removeSongFromPlaylist(playlist.id, songId)
             }
-        )
+            )
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter)
+            )
+        }
     }
 }

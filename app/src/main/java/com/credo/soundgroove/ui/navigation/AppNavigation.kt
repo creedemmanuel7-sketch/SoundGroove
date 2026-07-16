@@ -2,7 +2,6 @@ package com.credo.soundgroove.ui.navigation
 
 import android.net.Uri
 import androidx.compose.animation.*
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -14,8 +13,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -30,6 +27,8 @@ import com.credo.soundgroove.ui.components.SongInfoBottomSheet
 import com.credo.soundgroove.ui.screens.AlbumDetailScreen
 import com.credo.soundgroove.ui.screens.ArtistDetailScreen
 import com.credo.soundgroove.ui.screens.PlaylistDetailScreen
+import com.credo.soundgroove.ui.theme.SgMotion
+import com.credo.soundgroove.util.PlayerGuards
 import com.credo.soundgroove.viewmodel.SoundGrooveViewModel
 
 object Routes {
@@ -45,16 +44,6 @@ object Routes {
     fun artistDetail(artistName: String) = "artist/${Uri.encode(artistName)}"
 }
 
-private fun resolveSongFromMediaItem(item: MediaItem, songs: List<Song>): Song? {
-    val mediaId = item.mediaId
-    return songs.find { it.uri.toString() == mediaId }
-        ?: item.localConfiguration?.uri?.let { uri -> songs.find { it.uri == uri } }
-}
-
-private fun rebuildPlaylistFromPlayer(player: Player, songs: List<Song>): List<Song> =
-    (0 until player.mediaItemCount).mapNotNull { index ->
-        resolveSongFromMediaItem(player.getMediaItemAt(index), songs)
-    }
 
 @Composable
 fun AppNavigation(
@@ -68,6 +57,7 @@ fun AppNavigation(
     val isPlaying by viewModel.isPlaying.collectAsState()
     val playbackPosition by viewModel.playbackPosition.collectAsState()
     val favoriteSongs by viewModel.favoriteSongs.collectAsState()
+    val recentSearches by viewModel.recentSearches.collectAsState()
     val controller by viewModel.mediaController.collectAsState()
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -82,25 +72,21 @@ fun AppNavigation(
     LaunchedEffect(showQueue, controller?.mediaItemCount, songs) {
         if (showQueue) {
             controller?.let { player ->
-                val rebuilt = rebuildPlaylistFromPlayer(player, songs)
-                if (rebuilt.isNotEmpty()) currentPlaylist = rebuilt
+                currentPlaylist = PlayerGuards.rebuildPlaylistFromPlayer(player, songs)
             }
         }
     }
 
-    val queueCurrentIndex = controller?.currentMediaItemIndex?.coerceIn(
-        0,
-        (currentPlaylist.size - 1).coerceAtLeast(0)
-    ) ?: 0
+    val queueCurrentIndex = controller?.let(PlayerGuards::safeCurrentIndex) ?: 0
 
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
             startDestination = Routes.HOME,
-            enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) + fadeIn(tween(300)) },
-            exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeOut(tween(150)) },
-            popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeIn(tween(300)) },
-            popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) + fadeOut(tween(150)) }
+            enterTransition = { SgMotion.navForwardEnter() },
+            exitTransition = { SgMotion.navForwardExit() },
+            popEnterTransition = { SgMotion.navPopEnter() },
+            popExitTransition = { SgMotion.navPopExit() }
         ) {
             composable(Routes.HOME) {
                 LegacyMainHost(
@@ -123,10 +109,10 @@ fun AppNavigation(
 
             composable(
                 route = Routes.SEARCH,
-                enterTransition = { fadeIn(tween(200)) },
-                exitTransition = { fadeOut(tween(200)) },
-                popEnterTransition = { fadeIn(tween(200)) },
-                popExitTransition = { fadeOut(tween(200)) }
+                enterTransition = { SgMotion.fadeEnter() },
+                exitTransition = { SgMotion.fadeExit() },
+                popEnterTransition = { SgMotion.fadeEnter() },
+                popExitTransition = { SgMotion.fadeExit() }
             ) {
                 com.credo.soundgroove.ui.screens.SearchScreen(
                     allSongs = songs,
@@ -134,21 +120,27 @@ fun AppNavigation(
                     favoriteSongs = favoriteSongs,
                     currentSong = currentSong,
                     accentColor = accentColor,
+                    recentSearches = recentSearches,
                     onBack = { navController.popBackStack() },
                     onPlaySong = { song -> viewModel.playSongs(songs, song) },
                     onAlbumClick = { albumName -> navController.navigate(Routes.albumDetail(albumName)) },
                     onArtistClick = { artistName -> navController.navigate(Routes.artistDetail(artistName)) },
                     onPlaylistClick = { playlistId -> navController.navigate(Routes.playlistDetail(playlistId)) },
-                    onMenuClick = { /* menu contextuel depuis la recherche : à brancher */ }
+                    onMenuClick = { /* menu contextuel depuis la recherche : à brancher */ },
+                    onSearchSubmitted = { viewModel.addRecentSearch(it) },
+                    onClearSearchHistory = { viewModel.clearSearchHistory() }
                 )
             }
 
             composable(
                 route = Routes.PLAYER,
-                enterTransition = { slideInVertically(initialOffsetY = { it }, animationSpec = tween(250)) + fadeIn(tween(250)) },
-                exitTransition = { slideOutVertically(targetOffsetY = { it }, animationSpec = tween(250)) + fadeOut(tween(180)) },
-                popEnterTransition = { fadeIn(tween(180)) },
-                popExitTransition = { slideOutVertically(targetOffsetY = { it }, animationSpec = tween(250)) + fadeOut(tween(180)) }
+                // Mêmes courbes que l'overlay Player interne (MainScreen) : le lecteur doit
+                // s'animer à l'identique quelle que soit la façon dont on y accède, sinon on
+                // perçoit un "saut" en changeant de point d'entrée.
+                enterTransition = { SgMotion.playerEnter() },
+                exitTransition = { SgMotion.playerExit() },
+                popEnterTransition = { SgMotion.playerPopEnter() },
+                popExitTransition = { SgMotion.playerExit() }
             ) {
                 val song = currentSong
                 val player = controller
@@ -294,22 +286,21 @@ fun AppNavigation(
                     onClose = { showQueue = false },
                     onPlaySong = { index ->
                         val player = controller ?: return@QueueScreen
-                        if (currentPlaylist.isEmpty()) return@QueueScreen
-                        player.seekToDefaultPosition(index)
+                        if (!PlayerGuards.safeSeekToIndex(player, index)) return@QueueScreen
                         player.play()
                     },
                     onRemoveSong = { index ->
                         val player = controller ?: return@QueueScreen
-                        if (currentPlaylist.isEmpty() || index !in currentPlaylist.indices) return@QueueScreen
-                        player.removeMediaItem(index)
+                        if (index !in currentPlaylist.indices) return@QueueScreen
+                        if (!PlayerGuards.safeRemoveMediaItem(player, index)) return@QueueScreen
                         currentPlaylist = currentPlaylist.toMutableList().also { it.removeAt(index) }
                     },
                     onMoveSong = { from, to ->
                         val player = controller ?: return@QueueScreen
-                        if (currentPlaylist.isEmpty() || from !in currentPlaylist.indices || to !in currentPlaylist.indices || from == to) {
+                        if (from !in currentPlaylist.indices || to !in currentPlaylist.indices || from == to) {
                             return@QueueScreen
                         }
-                        player.moveMediaItem(from, to)
+                        if (!PlayerGuards.safeMoveMediaItem(player, from, to)) return@QueueScreen
                         currentPlaylist = currentPlaylist.toMutableList().also { list ->
                             val item = list.removeAt(from)
                             list.add(to, item)

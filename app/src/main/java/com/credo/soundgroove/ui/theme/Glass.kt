@@ -21,7 +21,7 @@ val GlassBorder = Color(0x28FFFFFF)
 val GlassSurfaceDark = Color(0x0AFFFFFF)
 val GlassHighlight = Color(0x1FFFFFFF)
 
-fun surfaceBrush(accentColor: Color = LightPurple): Brush = Brush.linearGradient(
+fun surfaceBrush(accentColor: Color = SilverAccent): Brush = Brush.linearGradient(
     colors = listOf(
         SurfaceElevated.copy(alpha = 0.72f),
         SurfaceOverlay.copy(alpha = 0.58f),
@@ -31,7 +31,7 @@ fun surfaceBrush(accentColor: Color = LightPurple): Brush = Brush.linearGradient
 
 fun Modifier.glassEffect(
     cornerRadius: Dp = SgRadius.lg,
-    accentColor: Color = LightPurple,
+    accentColor: Color = SilverAccent,
     borderAlpha: Float = 0.08f
 ): Modifier = this
     .clip(RoundedCornerShape(cornerRadius))
@@ -93,7 +93,7 @@ fun SgBottomSheetContainer(
                 Brush.verticalGradient(
                     listOf(
                         SurfaceOverlay.copy(alpha = 0.94f),
-                        DeepPurple.copy(alpha = 0.97f)
+                        GraphiteAbyss.copy(alpha = 0.97f)
                     )
                 )
             )

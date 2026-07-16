@@ -61,6 +61,12 @@ interface FavoriteDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE songId = :songId)")
     suspend fun isFavorite(songId: Long): Boolean
+
+    @Query("SELECT * FROM favorites")
+    suspend fun getAllOnce(): List<FavoriteEntity>
+
+    @Query("DELETE FROM favorites")
+    suspend fun clearAll()
 }
 
 @Dao
@@ -103,6 +109,18 @@ interface PlaylistDao {
 
     @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId")
     suspend fun clearPlaylist(playlistId: Long)
+
+    @Query("SELECT * FROM playlists")
+    suspend fun getAllPlaylistsOnce(): List<PlaylistEntity>
+
+    @Query("SELECT * FROM playlist_songs ORDER BY playlistId, position")
+    suspend fun getAllPlaylistSongsOnce(): List<PlaylistSongEntity>
+
+    @Query("DELETE FROM playlist_songs")
+    suspend fun clearAllSongs()
+
+    @Query("DELETE FROM playlists")
+    suspend fun clearAllPlaylists()
 }
 
 // ─── Database ───

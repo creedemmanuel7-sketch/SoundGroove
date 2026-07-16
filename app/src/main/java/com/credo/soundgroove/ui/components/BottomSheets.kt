@@ -130,7 +130,7 @@ fun CreatePlaylistSheet(
                     .height(52.dp)
                     .background(
                         if (name.isNotBlank()) Brush.horizontalGradient(
-                            listOf(MaterialTheme.colorScheme.primary, MediumPurple)
+                            listOf(MaterialTheme.colorScheme.primary, GraphiteMid)
                         ) else Brush.horizontalGradient(
                             listOf(GlassSurface, GlassSurface)
                         ),
@@ -305,7 +305,7 @@ fun AddToPlaylistSheet(
                             modifier = Modifier
                                 .size(44.dp)
                                 .background(
-                                    Brush.radialGradient(listOf(MaterialTheme.colorScheme.primary, MediumPurple)),
+                                    Brush.radialGradient(listOf(MaterialTheme.colorScheme.primary, GraphiteMid)),
                                     RoundedCornerShape(10.dp)
                                 ),
                             contentAlignment = Alignment.Center
@@ -389,7 +389,7 @@ fun SongContextMenuSheet(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(DarkPurple),
+                        .background(GraphiteCard),
                     contentAlignment = Alignment.Center
                 ) {
                     if (song.albumArtUri != null) {
@@ -590,7 +590,7 @@ fun SongInfoBottomSheet(
                     modifier = Modifier
                         .size(72.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(DarkPurple),
+                        .background(GraphiteCard),
                     contentAlignment = Alignment.Center
                 ) {
                     if (song.albumArtUri != null) {

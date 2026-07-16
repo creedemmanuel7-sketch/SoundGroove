@@ -41,17 +41,27 @@ fun SearchScreen(
     favoriteSongs: List<Song>,
     currentSong: Song?,
     accentColor: Color,
+    recentSearches: List<String> = emptyList(),
     onBack: () -> Unit,
     onPlaySong: (Song) -> Unit,
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
     onPlaylistClick: (Long) -> Unit,
-    onMenuClick: (Song) -> Unit
+    onMenuClick: (Song) -> Unit,
+    onSearchSubmitted: (String) -> Unit = {},
+    onClearSearchHistory: () -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
-    val recentSearches = remember { listOf("Favoris", "Chill", "Mix", "Albums") }
+
+    fun submitSearch() {
+        val trimmed = searchQuery.trim()
+        if (trimmed.isNotBlank()) {
+            onSearchSubmitted(trimmed)
+        }
+        focusManager.clearFocus()
+    }
 
     val filteredSongs = remember(searchQuery, allSongs) {
         if (searchQuery.isBlank()) emptyList()
@@ -96,7 +106,7 @@ fun SearchScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(listOf(SurfaceOverlay, DeepPurple, Color(0xFF06030C)))
+                Brush.verticalGradient(listOf(SurfaceOverlay, GraphiteAbyss, Color(0xFF060606)))
             )
             .statusBarsPadding()
     ) {
@@ -131,7 +141,7 @@ fun SearchScreen(
                     },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                    keyboardActions = KeyboardActions(onSearch = { submitSearch() }),
                     shape = RoundedCornerShape(SgRadius.pill),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = accentColor.copy(alpha = 0.42f),
@@ -174,13 +184,42 @@ fun SearchScreen(
                             color = TextSecondary
                         )
                         Spacer(modifier = Modifier.height(SgSpacing.lg))
-                        SectionTitle("Suggestions")
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "RECHERCHES RÉCENTES",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextTertiary,
+                                modifier = Modifier.padding(horizontal = SgSpacing.sm)
+                            )
+                            if (recentSearches.isNotEmpty()) {
+                                TextButton(onClick = onClearSearchHistory) {
+                                    Text("Effacer", color = accentColor, style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                    }
+                    if (recentSearches.isEmpty()) {
+                        item {
+                            Text(
+                                text = "Vos recherches apparaîtront ici.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSecondary,
+                                modifier = Modifier.padding(bottom = SgSpacing.md)
+                            )
+                        }
                     }
                     items(recentSearches) { term ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { searchQuery = term }
+                                .clickable {
+                                    searchQuery = term
+                                    submitSearch()
+                                }
                                 .padding(vertical = SgSpacing.sm),
                             verticalAlignment = Alignment.CenterVertically
                         ) {

@@ -6,57 +6,65 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
+/**
+ * Trois identités visuelles premium et universelles, inspirées des leaders du secteur
+ * (noir profond, gris argenté, graphite) — volontairement sobres, sans violet/corail
+ * générique. Chaque thème reste sombre pour garantir un contraste de texte fiable partout
+ * dans l'app (voir Design.kt / TextPrimary) ; un vrai thème clair (fond blanc) nécessiterait
+ * de rendre les tokens de texte dépendants du thème — un chantier distinct et volontairement
+ * hors scope ici pour ne pas fragiliser le reste de l'UI.
+ */
 enum class AppTheme {
-    CLASSIC_DARK,
-    ORIGINAL_PURPLE,
-    CORAL_VIBRANT
+    NOIR_ABSOLU,
+    ARGENT_CLAIR,
+    GRAPHITE
 }
 
-private val OriginalPurpleColors = darkColorScheme(
-    primary = LightPurple,
-    secondary = CyanAccent,
-    background = DeepPurple,
+private val NoirAbsoluColors = darkColorScheme(
+    primary = ChampagneGold,
+    secondary = ChampagneGold,
+    background = AbsoluteBlackBg,
     surface = CardSurface,
-    onPrimary = TextPrimary,
+    onPrimary = Color(0xFF1A1408),
     onBackground = TextPrimary,
     onSurface = TextPrimary,
 )
 
-private val ClassicDarkColors = darkColorScheme(
-    primary = ClassicAccent,
-    secondary = ClassicAccent,
-    background = ClassicBackground,
-    surface = ClassicSurface,
-    onPrimary = TextPrimary,
+private val ArgentClairColors = darkColorScheme(
+    primary = SteelBlue,
+    secondary = SteelBlue,
+    background = ArgentClairBg,
+    surface = CardSurface,
+    onPrimary = Color(0xFF08111C),
     onBackground = TextPrimary,
     onSurface = TextPrimary,
 )
 
-private val CoralVibrantColors = darkColorScheme(
-    primary = CoralAccent,
-    secondary = CoralAccent,
-    background = CoralBackground,
-    surface = CoralSurface,
-    onPrimary = TextPrimary,
+private val GraphiteColors = darkColorScheme(
+    primary = SilverAccent,
+    secondary = IceAccent,
+    background = GraphiteAbyss,
+    surface = CardSurface,
+    onPrimary = Color(0xFF15161A),
     onBackground = TextPrimary,
     onSurface = TextPrimary,
 )
 
 fun accentColorForTheme(appTheme: AppTheme): Color = when (appTheme) {
-    AppTheme.CLASSIC_DARK -> ClassicAccent
-    AppTheme.ORIGINAL_PURPLE -> LightPurple
-    AppTheme.CORAL_VIBRANT -> CoralAccent
+    AppTheme.NOIR_ABSOLU -> ChampagneGold
+    AppTheme.ARGENT_CLAIR -> SteelBlue
+    AppTheme.GRAPHITE -> SilverAccent
 }
 
 fun themeBackgroundBrush(appTheme: AppTheme): Brush = when (appTheme) {
-    AppTheme.CLASSIC_DARK -> Brush.verticalGradient(
-        listOf(Color(0xFF0A1810), Color(0xFF030303), Color(0xFF000000))
+    AppTheme.NOIR_ABSOLU -> Brush.verticalGradient(
+        listOf(Color(0xFF161208), Color(0xFF040404), Color(0xFF000000))
     )
-    AppTheme.ORIGINAL_PURPLE -> Brush.verticalGradient(
-        listOf(Color(0xFF1A0E30), Color(0xFF0C0616), Color(0xFF06030C))
+    AppTheme.ARGENT_CLAIR -> Brush.verticalGradient(
+        listOf(Color(0xFF454A53), Color(0xFF2E323A), Color(0xFF23262C))
     )
-    AppTheme.CORAL_VIBRANT -> Brush.verticalGradient(
-        listOf(Color(0xFF2A1014), Color(0xFF14080A), Color(0xFF0A0406))
+    AppTheme.GRAPHITE -> Brush.verticalGradient(
+        listOf(Color(0xFF20222A), Color(0xFF0D0E10), Color(0xFF0A0A0C))
     )
 }
 
@@ -65,13 +73,13 @@ fun themeSecondaryAccent(accentColor: Color): Color =
 
 @Composable
 fun SoundGrooveTheme(
-    appTheme: AppTheme = AppTheme.CLASSIC_DARK,
+    appTheme: AppTheme = AppTheme.NOIR_ABSOLU,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when (appTheme) {
-        AppTheme.CLASSIC_DARK -> ClassicDarkColors
-        AppTheme.ORIGINAL_PURPLE -> OriginalPurpleColors
-        AppTheme.CORAL_VIBRANT -> CoralVibrantColors
+        AppTheme.NOIR_ABSOLU -> NoirAbsoluColors
+        AppTheme.ARGENT_CLAIR -> ArgentClairColors
+        AppTheme.GRAPHITE -> GraphiteColors
     }
 
     MaterialTheme(

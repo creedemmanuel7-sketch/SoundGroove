@@ -56,10 +56,15 @@ fun SettingsScreen(
     performanceModeEnabled: Boolean = false,
     onPerformanceModeChange: (Boolean) -> Unit = {},
     onReloadMusic: () -> Unit = {},
-    onClearRecentlyPlayed: () -> Unit = {}
+    onClearRecentlyPlayed: () -> Unit = {},
+    onExportBackup: () -> Unit = {},
+    onImportBackup: () -> Unit = {},
+    onClearSearchHistory: () -> Unit = {}
 ) {
     val backgroundBrush = themeBackgroundBrush(currentTheme)
     var showClearRecentConfirm by remember { mutableStateOf(false) }
+    var showClearSearchConfirm by remember { mutableStateOf(false) }
+    var showImportConfirm by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -113,25 +118,25 @@ fun SettingsScreen(
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     ThemeOptionRow(
-                        title = "Vert Émeraude",
-                        description = "Style classique sombre",
-                        accentColor = ClassicAccent,
-                        isSelected = currentTheme == AppTheme.CLASSIC_DARK,
-                        onClick = { onThemeSelected(AppTheme.CLASSIC_DARK) }
+                        title = "Noir Absolu",
+                        description = "Noir profond, accent or champagne",
+                        accentColor = ChampagneGold,
+                        isSelected = currentTheme == AppTheme.NOIR_ABSOLU,
+                        onClick = { onThemeSelected(AppTheme.NOIR_ABSOLU) }
                     )
                     ThemeOptionRow(
-                        title = "Violet Original",
-                        description = "L'esprit SoundGroove",
-                        accentColor = LightPurple,
-                        isSelected = currentTheme == AppTheme.ORIGINAL_PURPLE,
-                        onClick = { onThemeSelected(AppTheme.ORIGINAL_PURPLE) }
+                        title = "Argent Clair",
+                        description = "Gris argenté lumineux, accent bleu nuit",
+                        accentColor = SteelBlue,
+                        isSelected = currentTheme == AppTheme.ARGENT_CLAIR,
+                        onClick = { onThemeSelected(AppTheme.ARGENT_CLAIR) }
                     )
                     ThemeOptionRow(
-                        title = "Corail Vibrant",
-                        description = "Ambiance chaleureuse",
-                        accentColor = CoralAccent,
-                        isSelected = currentTheme == AppTheme.CORAL_VIBRANT,
-                        onClick = { onThemeSelected(AppTheme.CORAL_VIBRANT) }
+                        title = "Graphite",
+                        description = "Graphite mat, accent argent/platine",
+                        accentColor = SilverAccent,
+                        isSelected = currentTheme == AppTheme.GRAPHITE,
+                        onClick = { onThemeSelected(AppTheme.GRAPHITE) }
                     )
                 }
             }
@@ -284,6 +289,26 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
+            SettingsSection(title = "Sauvegarde") {
+                SettingsActionRow(
+                    iconRes = R.drawable.ic_songs,
+                    title = "Exporter les données",
+                    description = "Favoris, playlists et thème au format JSON",
+                    accentColor = accentColor,
+                    onClick = onExportBackup
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                SettingsActionRow(
+                    iconRes = R.drawable.ic_playlists,
+                    title = "Restaurer une sauvegarde",
+                    description = "Remplacer favoris et playlists depuis un fichier JSON",
+                    accentColor = accentColor,
+                    onClick = { showImportConfirm = true }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
             SettingsSection(title = "Bibliothèque") {
                 SettingsActionRow(
                     iconRes = R.drawable.ic_songs,
@@ -299,6 +324,14 @@ fun SettingsScreen(
                     description = "Efface l'historique local, sans toucher aux fichiers",
                     accentColor = FavoritePink,
                     onClick = { showClearRecentConfirm = true }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                SettingsActionRow(
+                    iconRes = R.drawable.ic_trash,
+                    title = "Effacer l'historique de recherche",
+                    description = "Supprime les recherches enregistrées dans l'écran Recherche",
+                    accentColor = FavoritePink,
+                    onClick = { showClearSearchConfirm = true }
                 )
             }
 
@@ -360,6 +393,68 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearRecentConfirm = false }) {
+                    Text("Annuler", color = TextSecondary)
+                }
+            },
+            containerColor = CardSurface,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary
+        )
+    }
+
+    if (showClearSearchConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearSearchConfirm = false },
+            title = { Text("Effacer l'historique de recherche ?", color = TextPrimary) },
+            text = {
+                Text(
+                    "Cette action supprime toutes les recherches récentes enregistrées.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onClearSearchHistory()
+                        showClearSearchConfirm = false
+                    }
+                ) {
+                    Text("Effacer", color = FavoritePink, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearSearchConfirm = false }) {
+                    Text("Annuler", color = TextSecondary)
+                }
+            },
+            containerColor = CardSurface,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary
+        )
+    }
+
+    if (showImportConfirm) {
+        AlertDialog(
+            onDismissRequest = { showImportConfirm = false },
+            title = { Text("Restaurer une sauvegarde ?", color = TextPrimary) },
+            text = {
+                Text(
+                    "Les favoris et playlists actuels seront remplacés par le contenu du fichier choisi.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showImportConfirm = false
+                        onImportBackup()
+                    }
+                ) {
+                    Text("Continuer", color = accentColor, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportConfirm = false }) {
                     Text("Annuler", color = TextSecondary)
                 }
             },

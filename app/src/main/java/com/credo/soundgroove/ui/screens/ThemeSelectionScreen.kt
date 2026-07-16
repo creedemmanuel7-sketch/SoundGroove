@@ -27,7 +27,7 @@ import com.credo.soundgroove.ui.theme.*
 fun ThemeSelectionScreen(
     onThemeSelected: (AppTheme) -> Unit
 ) {
-    var selectedTheme by remember { mutableStateOf(AppTheme.CLASSIC_DARK) }
+    var selectedTheme by remember { mutableStateOf(AppTheme.NOIR_ABSOLU) }
     val activeColor = accentColorForTheme(selectedTheme)
 
     SgScreenBackground(appTheme = selectedTheme) {
@@ -75,28 +75,28 @@ fun ThemeSelectionScreen(
                 verticalArrangement = Arrangement.spacedBy(SgSpacing.lg, Alignment.CenterVertically)
             ) {
                 ThemeCard(
-                    title = "Vert Émeraude",
-                    description = "Classique et épuré, inspiré des apps musicales modernes.",
-                    accentColor = ClassicAccent,
-                    bgColor = ClassicSurface,
-                    isSelected = selectedTheme == AppTheme.CLASSIC_DARK,
-                    onClick = { selectedTheme = AppTheme.CLASSIC_DARK }
+                    title = "Noir Absolu",
+                    description = "Noir profond et épuré, accent or champagne discret.",
+                    accentColor = ChampagneGold,
+                    bgColor = AbsoluteBlackSurface,
+                    isSelected = selectedTheme == AppTheme.NOIR_ABSOLU,
+                    onClick = { selectedTheme = AppTheme.NOIR_ABSOLU }
                 )
                 ThemeCard(
-                    title = "Violet Original",
-                    description = "L'identité SoundGroove avec des teintes nocturnes profondes.",
-                    accentColor = LightPurple,
-                    bgColor = DarkPurple,
-                    isSelected = selectedTheme == AppTheme.ORIGINAL_PURPLE,
-                    onClick = { selectedTheme = AppTheme.ORIGINAL_PURPLE }
+                    title = "Argent Clair",
+                    description = "Gris argenté lumineux, accent bleu nuit sobre.",
+                    accentColor = SteelBlue,
+                    bgColor = ArgentClairSurface,
+                    isSelected = selectedTheme == AppTheme.ARGENT_CLAIR,
+                    onClick = { selectedTheme = AppTheme.ARGENT_CLAIR }
                 )
                 ThemeCard(
-                    title = "Corail Vibrant",
-                    description = "Chaleureux et dynamique, pour une énergie affirmée.",
-                    accentColor = CoralAccent,
-                    bgColor = CoralSurface,
-                    isSelected = selectedTheme == AppTheme.CORAL_VIBRANT,
-                    onClick = { selectedTheme = AppTheme.CORAL_VIBRANT }
+                    title = "Graphite",
+                    description = "Graphite mat et technique, accent argent/platine.",
+                    accentColor = SilverAccent,
+                    bgColor = GraphiteCard,
+                    isSelected = selectedTheme == AppTheme.GRAPHITE,
+                    onClick = { selectedTheme = AppTheme.GRAPHITE }
                 )
             }
 

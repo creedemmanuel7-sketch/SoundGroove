@@ -15,6 +15,9 @@ import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.data.repository.DatabaseRepository
 import com.credo.soundgroove.data.repository.MusicRepository
+import com.credo.soundgroove.data.repository.SearchHistoryRepository
+import com.credo.soundgroove.data.backup.BackupManager
+import com.credo.soundgroove.data.backup.BackupSnapshot
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Job
@@ -23,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import android.net.Uri
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -35,9 +39,9 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _currentTheme = MutableStateFlow(
         try {
-            AppTheme.valueOf(prefs.getString("selected_theme", AppTheme.CLASSIC_DARK.name) ?: AppTheme.CLASSIC_DARK.name)
+            AppTheme.valueOf(prefs.getString("selected_theme", AppTheme.NOIR_ABSOLU.name) ?: AppTheme.NOIR_ABSOLU.name)
         } catch (e: Exception) {
-            AppTheme.CLASSIC_DARK
+            AppTheme.NOIR_ABSOLU
         }
     )
     val currentTheme: StateFlow<AppTheme> = _currentTheme.asStateFlow()
@@ -61,7 +65,18 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         db.recentlyPlayedDao(),
         db.playlistDao()
     )
+    private val searchHistoryRepository = SearchHistoryRepository(application)
+    private val backupManager = BackupManager(application)
     private val musicRepository = MusicRepository(application)
+
+    private val _recentSearches = MutableStateFlow(searchHistoryRepository.getRecentSearches())
+    val recentSearches: StateFlow<List<String>> = _recentSearches.asStateFlow()
+
+    private val _hiddenFolders = MutableStateFlow(loadHiddenFolders())
+    val hiddenFolders: StateFlow<Set<String>> = _hiddenFolders.asStateFlow()
+
+    private val _backupMessage = MutableStateFlow<String?>(null)
+    val backupMessage: StateFlow<String?> = _backupMessage.asStateFlow()
 
     // --- MediaController ---
     private var controllerFuture: ListenableFuture<MediaController>? = null
@@ -69,8 +84,10 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     val mediaController: StateFlow<MediaController?> = _mediaController.asStateFlow()
 
     // --- State ---
-    private val _songs = MutableStateFlow<List<Song>>(emptyList())
-    val songs: StateFlow<List<Song>> = _songs.asStateFlow()
+    private val _allSongs = MutableStateFlow<List<Song>>(emptyList())
+    val songs: StateFlow<List<Song>> = combine(_allSongs, _hiddenFolders) { all, hidden ->
+        filterSongsByHiddenFolders(all, hidden)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _favoriteSongs = MutableStateFlow<List<Song>>(emptyList())
     val favoriteSongs: StateFlow<List<Song>> = _favoriteSongs.asStateFlow()
@@ -114,8 +131,8 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     private val _sortMode = MutableStateFlow(0)
     val sortMode: StateFlow<Int> = _sortMode.asStateFlow()
 
-    val sortedSongs: StateFlow<List<Song>> = combine(_songs, _sortMode) { songs, mode ->
-        sortSongs(songs, mode)
+    val sortedSongs: StateFlow<List<Song>> = combine(songs, _sortMode) { visibleSongs, mode ->
+        sortSongs(visibleSongs, mode)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private var resumeReminderJob: Job? = null
@@ -149,7 +166,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     fun syncSongs(songs: List<Song>) {
         if (songs.isNotEmpty()) {
-            _songs.value = songs
+            _allSongs.value = songs
             updateCurrentSongFromMediaItem(_mediaController.value?.currentMediaItem)
         }
     }
@@ -236,6 +253,83 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private fun loadHiddenFolders(): Set<String> {
+        val stored = prefs.getStringSet("hidden_folders", emptySet()) ?: emptySet()
+        return stored.toSet()
+    }
+
+    private fun saveHiddenFolders(folders: Set<String>) {
+        prefs.edit().putStringSet("hidden_folders", folders).apply()
+    }
+
+    private fun folderKey(song: Song): String =
+        song.folderPath.takeIf { it.isNotBlank() } ?: "Dossier inconnu"
+
+    private fun filterSongsByHiddenFolders(all: List<Song>, hidden: Set<String>): List<Song> =
+        if (hidden.isEmpty()) all
+        else all.filter { folderKey(it) !in hidden }
+
+    fun hideFolder(folderPath: String) {
+        val updated = _hiddenFolders.value + folderPath
+        _hiddenFolders.value = updated
+        saveHiddenFolders(updated)
+    }
+
+    fun unhideFolder(folderPath: String) {
+        val updated = _hiddenFolders.value - folderPath
+        _hiddenFolders.value = updated
+        saveHiddenFolders(updated)
+    }
+
+    fun addRecentSearch(query: String) {
+        searchHistoryRepository.addSearch(query)
+        _recentSearches.value = searchHistoryRepository.getRecentSearches()
+    }
+
+    fun clearSearchHistory() {
+        searchHistoryRepository.clearHistory()
+        _recentSearches.value = emptyList()
+    }
+
+    fun clearBackupMessage() {
+        _backupMessage.value = null
+    }
+
+    fun exportBackup(uri: Uri) {
+        viewModelScope.launch {
+            runCatching {
+                val snapshot = BackupSnapshot(
+                    theme = _currentTheme.value,
+                    favorites = dbRepository.getFavoritesSnapshot(),
+                    playlists = dbRepository.getPlaylistsSnapshot()
+                )
+                val json = backupManager.serialize(snapshot)
+                backupManager.writeToUri(uri, json)
+                "Sauvegarde exportée avec succès."
+            }.onSuccess { message ->
+                _backupMessage.value = message
+            }.onFailure { error ->
+                _backupMessage.value = error.message ?: "Échec de l'exportation."
+            }
+        }
+    }
+
+    fun importBackup(uri: Uri) {
+        viewModelScope.launch {
+            runCatching {
+                val json = backupManager.readFromUri(uri)
+                val snapshot = backupManager.parse(json)
+                dbRepository.replaceLibraryData(snapshot.favorites, snapshot.playlists)
+                snapshot.theme?.let { setTheme(it) }
+                "Restauration terminée : ${snapshot.favorites.size} favori(s), ${snapshot.playlists.size} playlist(s)."
+            }.onSuccess { message ->
+                _backupMessage.value = message
+            }.onFailure { error ->
+                _backupMessage.value = error.message ?: "Échec de la restauration."
+            }
+        }
+    }
+
     private fun sortSongs(songs: List<Song>, mode: Int): List<Song> =
         when (mode) {
             0 -> songs.sortedBy { it.title.lowercase() }
@@ -248,7 +342,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     private fun loadMusic() {
         viewModelScope.launch {
             val loadedSongs = musicRepository.getSongs()
-            _songs.value = loadedSongs
+            _allSongs.value = loadedSongs
             updateCurrentSongFromMediaItem(_mediaController.value?.currentMediaItem)
         }
     }
@@ -275,8 +369,8 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     private fun updateCurrentSongFromMediaItem(mediaItem: MediaItem?) {
         val item = mediaItem ?: return
         val uriStr = item.mediaId
-        val resolved = _songs.value.find { it.uri.toString() == uriStr }
-            ?: item.localConfiguration?.uri?.let { uri -> _songs.value.find { it.uri == uri } }
+        val resolved = _allSongs.value.find { it.uri.toString() == uriStr }
+            ?: item.localConfiguration?.uri?.let { uri -> _allSongs.value.find { it.uri == uri } }
 
         resolved?.let { song ->
             if (_currentSong.value?.id != song.id) {
@@ -302,7 +396,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     // --- Player Actions ---
     fun playSong(song: Song) {
-        playSongs(_songs.value, song)
+        playSongs(songs.value, song)
     }
 
     fun playSongs(queue: List<Song>, startSong: Song) {
@@ -337,8 +431,21 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         if (_isPlaying.value) _mediaController.value?.pause() else _mediaController.value?.play()
     }
 
-    fun skipNext() = _mediaController.value?.seekToNext()
-    fun skipPrevious() = _mediaController.value?.seekToPrevious()
+    fun skipNext() {
+        val controller = _mediaController.value ?: return
+        if (controller.mediaItemCount > 0 &&
+            controller.currentMediaItemIndex < controller.mediaItemCount - 1
+        ) {
+            controller.seekToNextMediaItem()
+        }
+    }
+
+    fun skipPrevious() {
+        val controller = _mediaController.value ?: return
+        if (controller.mediaItemCount > 0 && controller.currentMediaItemIndex > 0) {
+            controller.seekToPreviousMediaItem()
+        }
+    }
     fun seekTo(position: Long) = _mediaController.value?.seekTo(position)
 
     fun setPlaybackSpeed(speed: Float) {

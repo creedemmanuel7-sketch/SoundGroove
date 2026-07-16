@@ -19,10 +19,11 @@ object SgMotion {
     const val SlowMs = 320
     const val ProgressMs = 600
 
-    val EaseOut = FastOutSlowInEasing
+    /** Décélération "emphasized" (Material 3) : entrée plus douce, sans à-coup final. */
+    val EaseOut = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
     val EaseIn = FastOutLinearInEasing
-    val SpringSnappy = spring<Float>(dampingRatio = 0.78f, stiffness = 520f)
-    val SpringSoft = spring<Float>(dampingRatio = 0.82f, stiffness = 340f)
+    val SpringSnappy = spring<Float>(dampingRatio = 0.86f, stiffness = 420f)
+    val SpringSoft = spring<Float>(dampingRatio = 0.88f, stiffness = 300f)
 
     fun tweenFast() = tween<Float>(FastMs, easing = EaseOut)
     fun tweenMedium() = tween<Float>(MediumMs, easing = EaseOut)

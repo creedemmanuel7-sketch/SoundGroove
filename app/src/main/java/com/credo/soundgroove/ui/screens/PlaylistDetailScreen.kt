@@ -62,7 +62,7 @@ fun PlaylistDetailScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(SurfaceOverlay, DeepPurple)))
+            .background(Brush.verticalGradient(listOf(SurfaceOverlay, GraphiteAbyss)))
     ) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
 
@@ -344,7 +344,7 @@ fun PlaylistDetailScreen(
                             modifier = Modifier
                                 .size(46.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(DarkPurple),
+                                .background(GraphiteCard),
                             contentAlignment = Alignment.Center
                         ) {
                             if (song.albumArtUri != null) {
@@ -523,7 +523,7 @@ fun RenamePlaylistSheet(
                         .weight(1f)
                         .height(48.dp)
                         .background(
-                            Brush.horizontalGradient(listOf(LightPurple, MediumPurple)),
+                            Brush.horizontalGradient(listOf(SilverAccent, GraphiteMid)),
                             RoundedCornerShape(14.dp)
                         )
                         .clickable(enabled = name.isNotBlank()) {

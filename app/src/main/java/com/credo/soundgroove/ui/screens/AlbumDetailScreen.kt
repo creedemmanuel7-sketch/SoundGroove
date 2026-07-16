@@ -55,7 +55,7 @@ fun AlbumDetailScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(SurfaceOverlay, DeepPurple)))
+            .background(Brush.verticalGradient(listOf(SurfaceOverlay, GraphiteAbyss)))
     ) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
 

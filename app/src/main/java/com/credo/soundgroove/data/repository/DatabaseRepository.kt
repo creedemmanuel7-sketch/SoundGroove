@@ -127,4 +127,46 @@ class DatabaseRepository(
     suspend fun removeSongFromPlaylist(playlistId: Long, songId: Long) {
         playlistDao.removeSong(playlistId, songId)
     }
+
+    suspend fun getFavoritesSnapshot(): List<Song> =
+        favoriteDao.getAllOnce().map { it.toSong() }
+
+    suspend fun getPlaylistsSnapshot(): List<Playlist> {
+        val entities = playlistDao.getAllPlaylistsOnce()
+        val allSongs = playlistDao.getAllPlaylistSongsOnce()
+        return entities.map { entity ->
+            Playlist(
+                id = entity.id,
+                name = entity.name,
+                songs = allSongs
+                    .filter { it.playlistId == entity.id }
+                    .sortedBy { it.position }
+                    .map { it.toSong() }
+            )
+        }
+    }
+
+    suspend fun replaceLibraryData(favorites: List<Song>, playlists: List<Playlist>) {
+        favoriteDao.clearAll()
+        favorites.forEach { favoriteDao.insert(it.toFavoriteEntity()) }
+
+        playlistDao.clearAllSongs()
+        playlistDao.clearAllPlaylists()
+        playlists.forEach { playlist ->
+            playlistDao.insertPlaylist(PlaylistEntity(playlist.id, playlist.name))
+            playlist.songs.forEachIndexed { index, song ->
+                playlistDao.insertSong(
+                    PlaylistSongEntity(
+                        playlistId = playlist.id,
+                        songId = song.id,
+                        title = song.title,
+                        artist = song.artist,
+                        uri = song.uri.toString(),
+                        albumArtUri = song.albumArtUri?.toString(),
+                        position = index
+                    )
+                )
+            }
+        }
+    }
 }
