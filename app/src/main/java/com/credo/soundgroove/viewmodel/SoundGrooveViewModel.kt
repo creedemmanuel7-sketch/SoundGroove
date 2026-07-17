@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -14,6 +15,8 @@ import com.credo.soundgroove.SoundGrooveDatabase
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.data.repository.DatabaseRepository
+import com.credo.soundgroove.data.repository.ListeningStats
+import com.credo.soundgroove.data.repository.ListeningStatsRepository
 import com.credo.soundgroove.data.repository.MusicRepository
 import com.credo.soundgroove.data.repository.SearchHistoryRepository
 import com.credo.soundgroove.data.backup.BackupManager
@@ -30,8 +33,14 @@ import android.net.Uri
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.credo.soundgroove.MetadataOverrideEntity
 import com.credo.soundgroove.notifications.SmartNotificationManager
 import com.credo.soundgroove.ui.theme.AppTheme
+import com.credo.soundgroove.util.MetadataEditor
+import com.credo.soundgroove.util.PlaybackPreferences
+import com.credo.soundgroove.util.PlayerGuards
+import kotlinx.coroutines.Dispatchers
+import androidx.room.withTransaction
 
 class SoundGrooveViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -63,9 +72,11 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     private val dbRepository = DatabaseRepository(
         db.favoriteDao(),
         db.recentlyPlayedDao(),
-        db.playlistDao()
+        db.playlistDao(),
+        db.metadataOverrideDao()
     )
     private val searchHistoryRepository = SearchHistoryRepository(application)
+    private val listeningStatsRepository = ListeningStatsRepository(application)
     private val backupManager = BackupManager(application)
     private val musicRepository = MusicRepository(application)
 
@@ -102,6 +113,13 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     private val _currentSong = MutableStateFlow<Song?>(null)
     val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
 
+    /** File d'attente telle que lancée (album, suggestions, playlist, etc.). */
+    private val _playbackQueue = MutableStateFlow<List<Song>>(emptyList())
+    val playbackQueue: StateFlow<List<Song>> = _playbackQueue.asStateFlow()
+
+    private val _playbackQueueIndex = MutableStateFlow(0)
+    val playbackQueueIndex: StateFlow<Int> = _playbackQueueIndex.asStateFlow()
+
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
 
@@ -116,8 +134,23 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     val sleepTimerRemainingSeconds: StateFlow<Int?> = _sleepTimerRemainingSeconds.asStateFlow()
     private var sleepTimerJob: Job? = null
 
-    private val _playbackSpeed = MutableStateFlow(prefs.getFloat("playback_speed", 1.0f))
+    private val _playbackSpeed = MutableStateFlow(prefs.getFloat(PlaybackPreferences.KEY_PLAYBACK_SPEED, 1.0f))
     val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
+
+    private val _playbackPitch = MutableStateFlow(prefs.getFloat(PlaybackPreferences.KEY_PLAYBACK_PITCH, 1.0f))
+    val playbackPitch: StateFlow<Float> = _playbackPitch.asStateFlow()
+
+    private val _gaplessEnabled = MutableStateFlow(prefs.getBoolean(PlaybackPreferences.KEY_GAPLESS_ENABLED, true))
+    val gaplessEnabled: StateFlow<Boolean> = _gaplessEnabled.asStateFlow()
+
+    private val _crossfadeDurationMs = MutableStateFlow(prefs.getInt(PlaybackPreferences.KEY_CROSSFADE_MS, 0))
+    val crossfadeDurationMs: StateFlow<Int> = _crossfadeDurationMs.asStateFlow()
+
+    private val _metadataOverrides = MutableStateFlow<Map<Long, MetadataOverrideEntity>>(emptyMap())
+    val metadataOverrides: StateFlow<Map<Long, MetadataOverrideEntity>> = _metadataOverrides.asStateFlow()
+
+    private val _metadataEditMessage = MutableStateFlow<String?>(null)
+    val metadataEditMessage: StateFlow<String?> = _metadataEditMessage.asStateFlow()
 
     private val _smartNotificationsEnabled = MutableStateFlow(prefs.getBoolean("smart_notifications_enabled", true))
     val smartNotificationsEnabled: StateFlow<Boolean> = _smartNotificationsEnabled.asStateFlow()
@@ -147,6 +180,11 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _totalListeningSeconds = MutableStateFlow(prefs.getLong("total_listening_seconds", 0L))
     val totalListeningSeconds: StateFlow<Long> = _totalListeningSeconds.asStateFlow()
+
+    private val _listeningStats = MutableStateFlow(
+        listeningStatsRepository.getStats(_totalListeningSeconds.value)
+    )
+    val listeningStats: StateFlow<ListeningStats> = _listeningStats.asStateFlow()
 
     init {
         initMediaController()
@@ -182,6 +220,10 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
             val controller = controllerFuture?.get()
             _mediaController.value = controller
             controller?.setPlaybackSpeed(_playbackSpeed.value)
+            controller?.playbackParameters = PlaybackParameters(
+                _playbackSpeed.value,
+                _playbackPitch.value
+            )
             controller?.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     _isPlaying.value = isPlaying
@@ -196,10 +238,15 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                 }
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                     updateCurrentSongFromMediaItem(mediaItem)
+                    controller?.let { syncPlaybackQueueIndex(it.currentMediaItemIndex) }
                 }
             })
             updateCurrentSongFromMediaItem(controller?.currentMediaItem)
             _isPlaying.value = controller?.isPlaying == true
+            controller?.let { player ->
+                syncPlaybackQueueIndex(player.currentMediaItemIndex)
+                maybeRestorePlaybackQueueFromPlayer(player)
+            }
             startProgressUpdate()
         }, MoreExecutors.directExecutor())
     }
@@ -213,6 +260,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                     val updated = _totalListeningSeconds.value + 1
                     _totalListeningSeconds.value = updated
                     prefs.edit().putLong("total_listening_seconds", updated).apply()
+                    _listeningStats.value = listeningStatsRepository.recordSecond(updated)
                     continuousPlaySeconds++
                     if (_smartNotificationsEnabled.value &&
                         !sessionSummaryShown &&
@@ -319,7 +367,9 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
             runCatching {
                 val json = backupManager.readFromUri(uri)
                 val snapshot = backupManager.parse(json)
-                dbRepository.replaceLibraryData(snapshot.favorites, snapshot.playlists)
+                db.withTransaction {
+                    dbRepository.replaceLibraryData(snapshot.favorites, snapshot.playlists)
+                }
                 snapshot.theme?.let { setTheme(it) }
                 "Restauration terminée : ${snapshot.favorites.size} favori(s), ${snapshot.playlists.size} playlist(s)."
             }.onSuccess { message ->
@@ -341,16 +391,28 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun loadMusic() {
         viewModelScope.launch {
-            val loadedSongs = musicRepository.getSongs()
+            val loadedSongs = musicRepository.getSongs().map { applyMetadataOverride(it) }
             _allSongs.value = loadedSongs
             updateCurrentSongFromMediaItem(_mediaController.value?.currentMediaItem)
         }
     }
 
+    private fun applyMetadataOverride(song: Song): Song {
+        val override = _metadataOverrides.value[song.id] ?: return song
+        return song.copy(
+            title = override.title ?: song.title,
+            artist = override.artist ?: song.artist,
+            albumName = override.album ?: song.albumName
+        )
+    }
+
+    fun displaySong(song: Song): Song = applyMetadataOverride(song)
+
     private fun songToMediaItem(song: Song): MediaItem {
-        val title = song.title.takeIf { it.isNotBlank() } ?: (song.uri.lastPathSegment ?: "Titre inconnu")
-        val artist = song.artist.takeIf { it.isNotBlank() } ?: "Artiste inconnu"
-        val album = song.albumName.takeIf { it.isNotBlank() } ?: "Album inconnu"
+        val display = applyMetadataOverride(song)
+        val title = display.title.takeIf { it.isNotBlank() } ?: (display.uri.lastPathSegment ?: "Titre inconnu")
+        val artist = display.artist.takeIf { it.isNotBlank() } ?: "Artiste inconnu"
+        val album = display.albumName.takeIf { it.isNotBlank() } ?: "Album inconnu"
 
         return MediaItem.Builder()
             .setUri(song.uri)
@@ -360,7 +422,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                     .setTitle(title)
                     .setArtist(artist)
                     .setAlbumTitle(album)
-                    .setArtworkUri(song.albumArtUri)
+                    .setArtworkUri(display.albumArtUri)
                     .build()
             )
             .build()
@@ -392,6 +454,35 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             dbRepository.getAllPlaylists().collect { _playlists.value = it }
         }
+        viewModelScope.launch {
+            dbRepository.getMetadataOverrides().collect { overrides ->
+                _metadataOverrides.value = overrides
+                _allSongs.value = _allSongs.value.map { applyMetadataOverride(it) }
+            }
+        }
+    }
+
+    private fun setPlaybackContext(queue: List<Song>, startIndex: Int) {
+        _playbackQueue.value = queue
+        _playbackQueueIndex.value = startIndex.coerceIn(0, (queue.size - 1).coerceAtLeast(0))
+    }
+
+    private fun syncPlaybackQueueIndex(index: Int) {
+        val queue = _playbackQueue.value
+        if (queue.isEmpty()) return
+        _playbackQueueIndex.value = index.coerceIn(0, queue.lastIndex)
+    }
+
+    /** Restaure la file depuis le player (ex. reprise de session) — jamais sur le thread UI. */
+    private fun maybeRestorePlaybackQueueFromPlayer(player: Player) {
+        if (_playbackQueue.value.isNotEmpty() || player.mediaItemCount <= 0) return
+        viewModelScope.launch(Dispatchers.Default) {
+            val rebuilt = PlayerGuards.rebuildPlaylistFromPlayer(player, _allSongs.value)
+            if (_playbackQueue.value.isEmpty() && rebuilt.isNotEmpty()) {
+                _playbackQueue.value = rebuilt
+                _playbackQueueIndex.value = PlayerGuards.safeCurrentIndex(player)
+            }
+        }
     }
 
     // --- Player Actions ---
@@ -403,8 +494,10 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         val controller = _mediaController.value ?: return
         val safeQueue = queue.ifEmpty { listOf(startSong) }
         val items = safeQueue.map { songToMediaItem(it) }
-        val index = safeQueue.indexOf(startSong)
+        val index = safeQueue.indexOfFirst { it.id == startSong.id }.takeIf { it >= 0 }
+            ?: safeQueue.indexOf(startSong)
         if (index != -1) {
+            setPlaybackContext(safeQueue, index)
             controller.setMediaItems(items)
             controller.seekTo(index, 0)
             controller.prepare()
@@ -415,16 +508,48 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     }
     
     fun playPlaylist(playlist: Playlist, startSong: Song? = null) {
+        if (playlist.songs.isEmpty()) return
         val controller = _mediaController.value ?: return
         val items = playlist.songs.map { songToMediaItem(it) }
         controller.setMediaItems(items)
         
-        val index = startSong?.let { playlist.songs.indexOf(it) }?.takeIf { it != -1 } ?: 0
+        val index = startSong?.let { s ->
+            playlist.songs.indexOfFirst { it.id == s.id }.takeIf { it >= 0 }
+                ?: playlist.songs.indexOf(s)
+        }?.takeIf { it != -1 } ?: 0
+        setPlaybackContext(playlist.songs, index)
         controller.seekTo(index, 0)
         controller.prepare()
         controller.play()
         playlist.songs.getOrNull(index)?.let { _currentSong.value = it }
         _isPlaying.value = true
+    }
+
+    fun seekToQueueIndex(index: Int) {
+        val controller = _mediaController.value ?: return
+        if (!PlayerGuards.safeSeekToIndex(controller, index)) return
+        controller.play()
+        syncPlaybackQueueIndex(index)
+    }
+
+    fun removeFromPlaybackQueue(index: Int) {
+        val controller = _mediaController.value ?: return
+        if (index !in _playbackQueue.value.indices) return
+        if (!PlayerGuards.safeRemoveMediaItem(controller, index)) return
+        _playbackQueue.value = _playbackQueue.value.toMutableList().also { it.removeAt(index) }
+        syncPlaybackQueueIndex(PlayerGuards.safeCurrentIndex(controller))
+    }
+
+    fun moveInPlaybackQueue(from: Int, to: Int) {
+        val controller = _mediaController.value ?: return
+        val queue = _playbackQueue.value
+        if (from !in queue.indices || to !in queue.indices || from == to) return
+        if (!PlayerGuards.safeMoveMediaItem(controller, from, to)) return
+        _playbackQueue.value = queue.toMutableList().also { list ->
+            val item = list.removeAt(from)
+            list.add(to, item)
+        }
+        syncPlaybackQueueIndex(PlayerGuards.safeCurrentIndex(controller))
     }
 
     fun togglePlayPause() {
@@ -451,8 +576,77 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     fun setPlaybackSpeed(speed: Float) {
         val clamped = speed.coerceIn(0.5f, 2.0f)
         _playbackSpeed.value = clamped
-        prefs.edit().putFloat("playback_speed", clamped).apply()
+        prefs.edit().putFloat(PlaybackPreferences.KEY_PLAYBACK_SPEED, clamped).apply()
         _mediaController.value?.setPlaybackSpeed(clamped)
+    }
+
+    fun setPlaybackPitch(pitch: Float) {
+        val clamped = pitch.coerceIn(0.5f, 2.0f)
+        _playbackPitch.value = clamped
+        prefs.edit().putFloat(PlaybackPreferences.KEY_PLAYBACK_PITCH, clamped).apply()
+        _mediaController.value?.playbackParameters = PlaybackParameters(
+            _playbackSpeed.value,
+            clamped
+        )
+    }
+
+    fun setGaplessEnabled(enabled: Boolean) {
+        _gaplessEnabled.value = enabled
+        prefs.edit().putBoolean(PlaybackPreferences.KEY_GAPLESS_ENABLED, enabled).apply()
+    }
+
+    fun setCrossfadeDurationMs(ms: Int) {
+        val valid = PlaybackPreferences.CROSSFADE_OPTIONS_MS.find { it == ms } ?: 0
+        _crossfadeDurationMs.value = valid
+        prefs.edit().putInt(PlaybackPreferences.KEY_CROSSFADE_MS, valid).apply()
+    }
+
+    fun clearMetadataEditMessage() {
+        _metadataEditMessage.value = null
+    }
+
+    fun saveSongMetadata(song: Song, title: String, artist: String, album: String) {
+        viewModelScope.launch {
+            dbRepository.saveMetadataOverride(song.id, title, artist, album)
+            val result = MetadataEditor.tryWriteToMediaStore(
+                getApplication(),
+                song,
+                title.trim(),
+                artist.trim(),
+                album.trim()
+            )
+            _metadataEditMessage.value = result.message
+            _allSongs.value = _allSongs.value.map { s ->
+                if (s.id == song.id) {
+                    applyMetadataOverride(
+                        s.copy(title = title.trim(), artist = artist.trim(), albumName = album.trim())
+                    )
+                } else s
+            }
+            _currentSong.value?.takeIf { it.id == song.id }?.let { current ->
+                _currentSong.value = applyMetadataOverride(
+                    current.copy(title = title.trim(), artist = artist.trim(), albumName = album.trim())
+                )
+            }
+            _playbackQueue.value = _playbackQueue.value.map { s ->
+                if (s.id == song.id) {
+                    applyMetadataOverride(
+                        s.copy(title = title.trim(), artist = artist.trim(), albumName = album.trim())
+                    )
+                } else s
+            }
+            val controller = _mediaController.value
+            if (controller != null && _currentSong.value?.id == song.id) {
+                val index = controller.currentMediaItemIndex
+                val items = (0 until controller.mediaItemCount).mapNotNull { controller.getMediaItemAt(it) }
+                if (index in items.indices) {
+                    val updated = songToMediaItem(
+                        song.copy(title = title.trim(), artist = artist.trim(), albumName = album.trim())
+                    )
+                    controller.replaceMediaItem(index, updated)
+                }
+            }
+        }
     }
 
     fun setSmartNotificationsEnabled(enabled: Boolean) {
@@ -480,11 +674,15 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         val controller = _mediaController.value ?: return
         val item = songToMediaItem(song)
         if (controller.mediaItemCount == 0) {
+            setPlaybackContext(listOf(song), 0)
             controller.setMediaItems(listOf(item))
             controller.prepare()
         } else {
             val insertAt = (controller.currentMediaItemIndex + 1).coerceAtMost(controller.mediaItemCount)
             controller.addMediaItem(insertAt, item)
+            val newList = _playbackQueue.value.toMutableList()
+            newList.add(insertAt.coerceIn(0, newList.size), song)
+            _playbackQueue.value = newList
         }
     }
 
@@ -492,10 +690,12 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         val controller = _mediaController.value ?: return
         val item = songToMediaItem(song)
         if (controller.mediaItemCount == 0) {
+            setPlaybackContext(listOf(song), 0)
             controller.setMediaItems(listOf(item))
             controller.prepare()
         } else {
             controller.addMediaItem(item)
+            _playbackQueue.value = _playbackQueue.value + song
         }
     }
 

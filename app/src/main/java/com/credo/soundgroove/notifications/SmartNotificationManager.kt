@@ -1,10 +1,14 @@
 package com.credo.soundgroove.notifications
 
-import android.app.PendingIntent
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.app.PendingIntent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.credo.soundgroove.MainActivity
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
@@ -12,6 +16,25 @@ import com.credo.soundgroove.data.model.Song
 object SmartNotificationManager {
     private const val RESUME_NOTIFICATION_ID = 2001
     private const val SESSION_SUMMARY_NOTIFICATION_ID = 2002
+
+    private fun canNotify(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+        return NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }
+
+    private fun safeNotify(context: Context, id: Int, notification: android.app.Notification) {
+        if (!canNotify(context)) return
+        try {
+            NotificationManagerCompat.from(context).notify(id, notification)
+        } catch (_: SecurityException) {
+            // Permission refusée ou notifications désactivées au moment de l'envoi.
+        }
+    }
 
     fun cancelAll(context: Context) {
         val manager = NotificationManagerCompat.from(context)
@@ -46,7 +69,7 @@ object SmartNotificationManager {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
-        NotificationManagerCompat.from(context).notify(RESUME_NOTIFICATION_ID, notification)
+        safeNotify(context, RESUME_NOTIFICATION_ID, notification)
     }
 
     fun showSessionSummary(context: Context, minutes: Int) {
@@ -72,6 +95,6 @@ object SmartNotificationManager {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        NotificationManagerCompat.from(context).notify(SESSION_SUMMARY_NOTIFICATION_ID, notification)
+        safeNotify(context, SESSION_SUMMARY_NOTIFICATION_ID, notification)
     }
 }

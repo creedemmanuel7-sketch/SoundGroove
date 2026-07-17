@@ -1,6 +1,8 @@
 package com.credo.soundgroove.data.repository
 
 import com.credo.soundgroove.FavoriteDao
+import com.credo.soundgroove.MetadataOverrideDao
+import com.credo.soundgroove.MetadataOverrideEntity
 import com.credo.soundgroove.PlaylistDao
 import com.credo.soundgroove.PlaylistEntity
 import com.credo.soundgroove.PlaylistSongEntity
@@ -19,7 +21,8 @@ import kotlinx.coroutines.flow.map
 class DatabaseRepository(
     private val favoriteDao: FavoriteDao,
     private val recentlyPlayedDao: RecentlyPlayedDao,
-    private val playlistDao: PlaylistDao
+    private val playlistDao: PlaylistDao,
+    private val metadataOverrideDao: MetadataOverrideDao
 ) {
     // --- Favorites ---
     fun getFavorites(): Flow<List<Song>> = favoriteDao.getAll().map { list ->
@@ -168,5 +171,27 @@ class DatabaseRepository(
                 )
             }
         }
+    }
+
+    // --- Metadata overrides ---
+    fun getMetadataOverrides(): Flow<Map<Long, MetadataOverrideEntity>> =
+        metadataOverrideDao.getAll().map { list ->
+            list.associateBy { it.songId }
+        }
+
+    suspend fun saveMetadataOverride(
+        songId: Long,
+        title: String?,
+        artist: String?,
+        album: String?
+    ) {
+        metadataOverrideDao.upsert(
+            MetadataOverrideEntity(
+                songId = songId,
+                title = title?.takeIf { it.isNotBlank() },
+                artist = artist?.takeIf { it.isNotBlank() },
+                album = album?.takeIf { it.isNotBlank() }
+            )
+        )
     }
 }

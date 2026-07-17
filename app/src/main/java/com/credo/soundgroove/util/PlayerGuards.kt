@@ -2,6 +2,7 @@ package com.credo.soundgroove.util
 
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import android.net.Uri
 import com.credo.soundgroove.Song
 
 /** Garde-fous Media3 pour éviter les crashs (index invalides, file vide). */
@@ -48,10 +49,23 @@ object PlayerGuards {
             ?: item.localConfiguration?.uri?.let { uri -> songs.find { it.uri == uri } }
     }
 
-    fun rebuildPlaylistFromPlayer(player: Player, songs: List<Song>): List<Song> =
-        (0 until player.mediaItemCount).mapNotNull { index ->
-            resolveSongFromMediaItem(player.getMediaItemAt(index), songs)
+    fun rebuildPlaylistFromPlayer(player: Player, songs: List<Song>): List<Song> {
+        if (player.mediaItemCount == 0) return emptyList()
+        val byMediaId = HashMap<String, Song>(songs.size)
+        val byUri = HashMap<Uri, Song>(songs.size)
+        for (song in songs) {
+            byMediaId[song.uri.toString()] = song
+            byUri[song.uri] = song
         }
+        return buildList(player.mediaItemCount) {
+            for (index in 0 until player.mediaItemCount) {
+                val item = player.getMediaItemAt(index)
+                val resolved = byMediaId[item.mediaId]
+                    ?: item.localConfiguration?.uri?.let { uri -> byUri[uri] }
+                if (resolved != null) add(resolved)
+            }
+        }
+    }
 
     fun safeCurrentIndex(player: Player): Int =
         if (player.mediaItemCount <= 0) 0

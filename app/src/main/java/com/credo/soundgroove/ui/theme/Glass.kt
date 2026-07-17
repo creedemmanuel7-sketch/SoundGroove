@@ -16,12 +16,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-val GlassSurface = Color(0x14FFFFFF)
-val GlassBorder = Color(0x28FFFFFF)
-val GlassSurfaceDark = Color(0x0AFFFFFF)
-val GlassHighlight = Color(0x1FFFFFFF)
-
-fun surfaceBrush(accentColor: Color = SilverAccent): Brush = Brush.linearGradient(
+@Composable
+fun surfaceBrush(accentColor: Color = MaterialTheme.colorScheme.primary): Brush = Brush.linearGradient(
     colors = listOf(
         SurfaceElevated.copy(alpha = 0.72f),
         SurfaceOverlay.copy(alpha = 0.58f),
@@ -29,24 +25,28 @@ fun surfaceBrush(accentColor: Color = SilverAccent): Brush = Brush.linearGradien
     )
 )
 
+@Composable
 fun Modifier.glassEffect(
     cornerRadius: Dp = SgRadius.lg,
-    accentColor: Color = SilverAccent,
-    borderAlpha: Float = 0.08f
-): Modifier = this
-    .clip(RoundedCornerShape(cornerRadius))
-    .background(surfaceBrush(accentColor))
-    .border(
-        width = 1.dp,
-        brush = Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = borderAlpha),
-                accentColor.copy(alpha = borderAlpha * 0.4f),
-                Color.White.copy(alpha = borderAlpha * 0.15f)
-            )
-        ),
-        shape = RoundedCornerShape(cornerRadius)
-    )
+    accentColor: Color = MaterialTheme.colorScheme.primary,
+    borderAlpha: Float = if (IsLightTheme) 0.12f else 0.08f
+): Modifier {
+    val edgeColor = if (IsLightTheme) Color.Black else Color.White
+    return this
+        .clip(RoundedCornerShape(cornerRadius))
+        .background(surfaceBrush(accentColor))
+        .border(
+            width = 1.dp,
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    edgeColor.copy(alpha = borderAlpha),
+                    accentColor.copy(alpha = borderAlpha * 0.4f),
+                    edgeColor.copy(alpha = borderAlpha * 0.15f)
+                )
+            ),
+            shape = RoundedCornerShape(cornerRadius)
+        )
+}
 
 @Composable
 fun GlassCard(
@@ -55,13 +55,14 @@ fun GlassCard(
     accentColor: Color = MaterialTheme.colorScheme.primary,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val edgeColor = if (IsLightTheme) Color.Black else Color.White
     Box(
         modifier = modifier
             .shadow(
-                elevation = 3.dp,
+                elevation = if (IsLightTheme) 2.dp else 3.dp,
                 shape = RoundedCornerShape(cornerRadius),
                 spotColor = accentColor.copy(alpha = 0.06f),
-                ambientColor = Color.Black.copy(alpha = 0.18f)
+                ambientColor = Color.Black.copy(alpha = if (IsLightTheme) 0.08f else 0.18f)
             )
             .clip(RoundedCornerShape(cornerRadius))
             .background(surfaceBrush(accentColor))
@@ -69,9 +70,9 @@ fun GlassCard(
                 width = 1.dp,
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.08f),
+                        edgeColor.copy(alpha = if (IsLightTheme) 0.10f else 0.08f),
                         accentColor.copy(alpha = 0.045f),
-                        Color.White.copy(alpha = 0.015f)
+                        edgeColor.copy(alpha = if (IsLightTheme) 0.04f else 0.015f)
                     )
                 ),
                 shape = RoundedCornerShape(cornerRadius)
@@ -86,6 +87,7 @@ fun SgBottomSheetContainer(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val bottomColor = if (IsLightTheme) ArgentClairBg else GraphiteAbyss
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -93,7 +95,7 @@ fun SgBottomSheetContainer(
                 Brush.verticalGradient(
                     listOf(
                         SurfaceOverlay.copy(alpha = 0.94f),
-                        GraphiteAbyss.copy(alpha = 0.97f)
+                        bottomColor.copy(alpha = 0.97f)
                     )
                 )
             )

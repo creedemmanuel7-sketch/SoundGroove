@@ -2,6 +2,8 @@ package com.credo.soundgroove.ui.navigation
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.*
@@ -22,12 +24,17 @@ fun LegacyMainHost(
     onNavigateToPlaylist: (Long) -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToAlbum: (String) -> Unit,
-    onNavigateToArtist: (String) -> Unit
+    onNavigateToArtist: (String) -> Unit,
+    onNavigateToPlayer: () -> Unit
 ) {
     val controller by viewModel.mediaController.collectAsState()
     val currentTheme by viewModel.currentTheme.collectAsState()
     val sleepTimerRemainingSeconds by viewModel.sleepTimerRemainingSeconds.collectAsState()
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
+    val playbackPitch by viewModel.playbackPitch.collectAsState()
+    val gaplessEnabled by viewModel.gaplessEnabled.collectAsState()
+    val crossfadeDurationMs by viewModel.crossfadeDurationMs.collectAsState()
+    val metadataEditMessage by viewModel.metadataEditMessage.collectAsState()
     val songs by viewModel.songs.collectAsState()
     val sortedSongs by viewModel.sortedSongs.collectAsState()
     val sortMode by viewModel.sortMode.collectAsState()
@@ -38,12 +45,14 @@ fun LegacyMainHost(
     val isPlaying by viewModel.isPlaying.collectAsState()
     val playbackPosition by viewModel.playbackPosition.collectAsState()
     val totalListeningSeconds by viewModel.totalListeningSeconds.collectAsState()
+    val listeningStats by viewModel.listeningStats.collectAsState()
     val mainSelectedTab by viewModel.mainSelectedTab.collectAsState()
     val librarySelectedTab by viewModel.librarySelectedTab.collectAsState()
     val smartNotificationsEnabled by viewModel.smartNotificationsEnabled.collectAsState()
     val persistentMiniPlayerEnabled by viewModel.persistentMiniPlayerEnabled.collectAsState()
     val performanceModeEnabled by viewModel.performanceModeEnabled.collectAsState()
     val hiddenFolders by viewModel.hiddenFolders.collectAsState()
+    val playbackQueue by viewModel.playbackQueue.collectAsState()
     val backupMessage by viewModel.backupMessage.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -67,10 +76,11 @@ fun LegacyMainHost(
         uri?.let { viewModel.importBackup(it) }
     }
 
-    if (controller != null) {
-        androidx.compose.foundation.layout.Box {
-            com.credo.soundgroove.MainScreen(
-            player = controller!!,
+    val activeController = controller
+    if (activeController != null) {
+        Box {
+            com.credo.soundgroove.ui.screens.MainScreen(
+            player = activeController,
             accentColor = accentColor,
             currentTheme = currentTheme,
             onThemeSelected = { viewModel.setTheme(it) },
@@ -79,11 +89,23 @@ fun LegacyMainHost(
             onSetSleepTimerEndOfTrack = { viewModel.setSleepTimerEndOfTrack() },
             onCancelSleepTimer = { viewModel.cancelSleepTimer() },
             playbackSpeed = playbackSpeed,
+            playbackPitch = playbackPitch,
             onPlaybackSpeedChange = { viewModel.setPlaybackSpeed(it) },
+            onPlaybackPitchChange = { viewModel.setPlaybackPitch(it) },
+            gaplessEnabled = gaplessEnabled,
+            onGaplessChange = { viewModel.setGaplessEnabled(it) },
+            crossfadeDurationMs = crossfadeDurationMs,
+            onCrossfadeDurationChange = { viewModel.setCrossfadeDurationMs(it) },
+            onSaveSongMetadata = { song, title, artist, album ->
+                viewModel.saveSongMetadata(song, title, artist, album)
+            },
+            metadataEditMessage = metadataEditMessage,
+            onClearMetadataEditMessage = { viewModel.clearMetadataEditMessage() },
             onNavigateToPlaylist = onNavigateToPlaylist,
             onNavigateToSearch = onNavigateToSearch,
             onNavigateToAlbum = onNavigateToAlbum,
             onNavigateToArtist = onNavigateToArtist,
+            onNavigateToPlayer = onNavigateToPlayer,
             songs = songs,
             sortedSongs = sortedSongs,
             sortMode = sortMode,
@@ -94,12 +116,18 @@ fun LegacyMainHost(
             currentSong = currentSong,
             isPlaying = isPlaying,
             playbackPosition = playbackPosition,
+            playbackQueue = playbackQueue,
+            onPlaySongs = { queue, song -> viewModel.playSongs(queue, song) },
+            onPlayNextSong = { viewModel.playNext(it) },
+            onAddSongToQueue = { viewModel.addToQueue(it) },
             selectedTab = mainSelectedTab,
             onSelectedTabChange = { viewModel.updateMainSelectedTab(it) },
             librarySelectedTab = librarySelectedTab,
             onLibrarySelectedTabChange = { viewModel.updateLibrarySelectedTab(it) },
             onReloadMusic = { viewModel.reloadMusic() },
             listeningTimeLabel = viewModel.formatListeningTime(totalListeningSeconds),
+            listeningStats = listeningStats,
+            formatListeningTime = { viewModel.formatListeningTime(it) },
             smartNotificationsEnabled = smartNotificationsEnabled,
             onSmartNotificationsChange = { viewModel.setSmartNotificationsEnabled(it) },
             persistentMiniPlayerEnabled = persistentMiniPlayerEnabled,
@@ -132,6 +160,13 @@ fun LegacyMainHost(
                 hostState = snackbarHostState,
                 modifier = androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter)
             )
+        }
+    } else {
+        Box(
+            modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            androidx.compose.material3.CircularProgressIndicator(color = accentColor)
         }
     }
 }

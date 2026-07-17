@@ -4,7 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.media.RingtoneManager
 import android.widget.Toast
-import com.credo.soundgroove.Song
+import androidx.core.content.FileProvider
+import com.credo.soundgroove.data.model.Song
 
 object PlayerActions {
 
@@ -16,8 +17,13 @@ object PlayerActions {
             putExtra(Intent.EXTRA_TEXT, text)
             putExtra(Intent.EXTRA_SUBJECT, song.title)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            clipData = android.content.ClipData.newRawUri("audio", song.uri)
         }
         context.startActivity(Intent.createChooser(shareIntent, "Partager"))
+    }
+
+    fun shareSongCard(context: Context, song: Song, accentArgb: Int = 0xFFD4AF37.toInt()) {
+        ShareCardGenerator.shareCard(context, song, accentArgb)
     }
 
     fun setAsRingtone(context: Context, song: Song): Boolean {

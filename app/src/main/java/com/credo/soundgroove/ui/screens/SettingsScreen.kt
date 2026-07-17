@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.credo.soundgroove.R
 import com.credo.soundgroove.ui.theme.*
+import com.credo.soundgroove.util.AudioFormatInfo
+import com.credo.soundgroove.util.PlaybackPreferences
 
 fun formatSleepTimerDisplay(seconds: Int?): String? {
     if (seconds == null) return null
@@ -44,6 +46,11 @@ fun SettingsScreen(
     listeningTimeLabel: String = "0 min",
     sleepTimerRemainingSeconds: Int?,
     playbackSpeed: Float,
+    playbackPitch: Float = 1f,
+    gaplessEnabled: Boolean = true,
+    onGaplessChange: (Boolean) -> Unit = {},
+    crossfadeDurationMs: Int = 0,
+    onOpenCrossfade: () -> Unit = {},
     onBack: () -> Unit,
     onThemeSelected: (AppTheme) -> Unit,
     onOpenSleepTimer: () -> Unit,
@@ -119,15 +126,15 @@ fun SettingsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     ThemeOptionRow(
                         title = "Noir Absolu",
-                        description = "Noir profond, accent or champagne",
-                        accentColor = ChampagneGold,
+                        description = "Noir profond, accent cyan (icône)",
+                        accentColor = BrandCyan,
                         isSelected = currentTheme == AppTheme.NOIR_ABSOLU,
                         onClick = { onThemeSelected(AppTheme.NOIR_ABSOLU) }
                     )
                     ThemeOptionRow(
-                        title = "Argent Clair",
-                        description = "Gris argenté lumineux, accent bleu nuit",
-                        accentColor = SteelBlue,
+                        title = "Clair Argent",
+                        description = "Fond blanc, texte sombre, accent cyan",
+                        accentColor = ArgentClairAccent,
                         isSelected = currentTheme == AppTheme.ARGENT_CLAIR,
                         onClick = { onThemeSelected(AppTheme.ARGENT_CLAIR) }
                     )
@@ -231,7 +238,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Vitesse de lecture",
+                            text = "Vitesse et tonalité",
                             color = TextPrimary,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium
@@ -241,8 +248,70 @@ fun SettingsScreen(
                         } else {
                             "${playbackSpeed}x"
                         }
+                        val pitchLabel = if (playbackPitch == playbackPitch.toLong().toFloat()) {
+                            "${playbackPitch.toLong()}x"
+                        } else {
+                            "${playbackPitch}x"
+                        }
                         Text(
-                            text = "Actuelle : $speedLabel",
+                            text = "Vitesse : $speedLabel · Tonalité : $pitchLabel",
+                            color = accentColor,
+                            fontSize = 12.sp
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Filled.ChevronRight,
+                        contentDescription = null,
+                        tint = TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = GlassBorder.copy(alpha = 0.4f))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                SettingsToggleRow(
+                    icon = Icons.Filled.SkipNext,
+                    title = "Lecture gapless",
+                    description = "Enchaînement fluide entre les pistes (ExoPlayer/Media3)",
+                    checked = gaplessEnabled,
+                    accentColor = accentColor,
+                    onCheckedChange = onGaplessChange
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenCrossfade() }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(accentColor.copy(alpha = 0.2f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.BlurLinear,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Crossfade",
+                            color = TextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = PlaybackPreferences.crossfadeLabel(crossfadeDurationMs),
                             color = accentColor,
                             fontSize = 12.sp
                         )
@@ -365,6 +434,13 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.weight(1f))
                     Text("v$appVersion", color = TextSecondary, fontSize = 14.sp)
                 }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = AudioFormatInfo.FORMATS_ABOUT_TEXT,
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
             }
 
             Spacer(modifier = Modifier.height(28.dp))

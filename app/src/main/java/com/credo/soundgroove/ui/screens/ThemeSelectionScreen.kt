@@ -76,16 +76,16 @@ fun ThemeSelectionScreen(
             ) {
                 ThemeCard(
                     title = "Noir Absolu",
-                    description = "Noir profond et épuré, accent or champagne discret.",
-                    accentColor = ChampagneGold,
+                    description = "Noir profond, accent cyan — identité de l'icône.",
+                    accentColor = BrandCyan,
                     bgColor = AbsoluteBlackSurface,
                     isSelected = selectedTheme == AppTheme.NOIR_ABSOLU,
                     onClick = { selectedTheme = AppTheme.NOIR_ABSOLU }
                 )
                 ThemeCard(
-                    title = "Argent Clair",
-                    description = "Gris argenté lumineux, accent bleu nuit sobre.",
-                    accentColor = SteelBlue,
+                    title = "Clair Argent",
+                    description = "Fond blanc argenté, texte sombre, accent cyan doux.",
+                    accentColor = ArgentClairAccent,
                     bgColor = ArgentClairSurface,
                     isSelected = selectedTheme == AppTheme.ARGENT_CLAIR,
                     onClick = { selectedTheme = AppTheme.ARGENT_CLAIR }
@@ -108,7 +108,7 @@ fun ThemeSelectionScreen(
                     .padding(bottom = SgSpacing.lg),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = activeColor,
-                    contentColor = Color.White
+                    contentColor = if (selectedTheme == AppTheme.ARGENT_CLAIR) TextPrimary else Color.White
                 ),
                 shape = RoundedCornerShape(SgRadius.pill),
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
@@ -179,7 +179,7 @@ fun ThemeCard(
                             .width(32.dp)
                             .height(3.dp)
                             .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.15f))
+                            .background(TextPrimary.copy(alpha = if (IsLightTheme) 0.10f else 0.15f))
                     ) {
                         Box(
                             modifier = Modifier
@@ -216,10 +216,11 @@ fun ThemeCard(
                     modifier = Modifier.size(24.dp)
                 )
             } else {
+                val ringColor = if (IsLightTheme) Color.Black else Color.White
                 Box(
                     modifier = Modifier
                         .size(24.dp)
-                        .border(1.5.dp, Color.White.copy(alpha = borderAlpha), CircleShape)
+                        .border(1.5.dp, ringColor.copy(alpha = borderAlpha), CircleShape)
                 )
             }
         }

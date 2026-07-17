@@ -3,6 +3,7 @@ package com.credo.soundgroove.ui.theme
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Indication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -171,3 +172,32 @@ fun SgChip(
 
 fun Modifier.albumArtShape(cornerRadius: Dp = SgRadius.md): Modifier =
     clip(RoundedCornerShape(cornerRadius))
+
+/**
+ * Zone tactile minimale (Fitts's Law — lawsofux.com/fittss-law : le temps pour
+ * atteindre une cible dépend de sa taille et de la distance à parcourir).
+ * Agrandit la surface cliquable à [minSize] sans changer la taille visuelle
+ * du contenu, qui reste centré dans la zone.
+ *
+ * Utile pour les icônes de contrôle du player (suivant, shuffle, répéter…)
+ * dont le glyphe est volontairement petit mais dont la cible tactile doit
+ * respecter les ~48dp recommandés par Material 3.
+ */
+@Composable
+fun SgTapTarget(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    minSize: Dp = 48.dp,
+    interactionSource: MutableInteractionSource? = null,
+    indication: Indication? = null,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val source = interactionSource ?: remember { MutableInteractionSource() }
+    Box(
+        modifier = modifier
+            .size(minSize)
+            .clickable(interactionSource = source, indication = indication) { onClick() },
+        contentAlignment = Alignment.Center,
+        content = content
+    )
+}

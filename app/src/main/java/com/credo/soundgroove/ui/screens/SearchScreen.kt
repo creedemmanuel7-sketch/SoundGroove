@@ -1,9 +1,12 @@
 package com.credo.soundgroove.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -11,27 +14,37 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.SongListItem
 import com.credo.soundgroove.ui.theme.*
+import com.credo.soundgroove.util.MediaPermissions
+import com.credo.soundgroove.viewmodel.SearchFilter
+import com.credo.soundgroove.viewmodel.SearchViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,17 +56,29 @@ fun SearchScreen(
     accentColor: Color,
     recentSearches: List<String> = emptyList(),
     onBack: () -> Unit,
-    onPlaySong: (Song) -> Unit,
+    onPlaySong: (Song, List<Song>) -> Unit,
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
     onPlaylistClick: (Long) -> Unit,
+    onFolderClick: (String) -> Unit,
     onMenuClick: (Song) -> Unit,
     onSearchSubmitted: (String) -> Unit = {},
-    onClearSearchHistory: () -> Unit = {}
+    onClearSearchHistory: () -> Unit = {},
+    searchViewModel: SearchViewModel = viewModel()
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableStateOf<SearchFilter?>(null) }
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
+
+    var hasPermission by remember {
+        mutableStateOf(MediaPermissions.hasAudioReadPermission(context))
+    }
+    val audioPermission = remember { MediaPermissions.audioReadPermission() }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> hasPermission = granted }
 
     fun submitSearch() {
         val trimmed = searchQuery.trim()
@@ -63,50 +88,48 @@ fun SearchScreen(
         focusManager.clearFocus()
     }
 
-    val filteredSongs = remember(searchQuery, allSongs) {
-        if (searchQuery.isBlank()) emptyList()
-        else allSongs.filter {
-            it.title.contains(searchQuery, ignoreCase = true) ||
-                it.artist.contains(searchQuery, ignoreCase = true) ||
-                it.albumName.contains(searchQuery, ignoreCase = true)
-        }.take(20)
+    fun folderLabel(folderPath: String): String = searchViewModel.folderLabel(folderPath)
+
+    val searchResults = remember(searchQuery, allSongs, playlists, selectedFilter) {
+        val raw = searchViewModel.buildResults(searchQuery.trim(), allSongs, playlists)
+        searchViewModel.filterResults(raw, selectedFilter)
     }
 
-    val filteredAlbums = remember(searchQuery, allSongs) {
-        if (searchQuery.isBlank()) emptyList()
-        else allSongs.groupBy { it.albumName }
-            .filterKeys { it.contains(searchQuery, ignoreCase = true) }
-            .toList()
-            .sortedBy { it.first }
-            .take(8)
+    val filteredSongs = searchResults.songs
+    val filteredAlbums = searchResults.albums
+    val filteredArtists = searchResults.artists
+    val filteredPlaylists = searchResults.playlists
+    val filteredFolders = searchResults.folders
+
+    val showSongs = selectedFilter == null || selectedFilter == SearchFilter.Songs
+    val showAlbums = selectedFilter == null || selectedFilter == SearchFilter.Albums
+    val showArtists = selectedFilter == null || selectedFilter == SearchFilter.Artists
+    val showPlaylists = selectedFilter == null || selectedFilter == SearchFilter.Playlists
+    val showFolders = selectedFilter == null || selectedFilter == SearchFilter.Folders
+
+    val hasResults = (showSongs && filteredSongs.isNotEmpty()) ||
+        (showAlbums && filteredAlbums.isNotEmpty()) ||
+        (showArtists && filteredArtists.isNotEmpty()) ||
+        (showPlaylists && filteredPlaylists.isNotEmpty()) ||
+        (showFolders && filteredFolders.isNotEmpty())
+
+    LaunchedEffect(Unit) {
+        if (hasPermission) {
+            focusRequester.requestFocus()
+        }
     }
-
-    val filteredArtists = remember(searchQuery, allSongs) {
-        if (searchQuery.isBlank()) emptyList()
-        else allSongs.groupBy { it.artist }
-            .filterKeys { it.contains(searchQuery, ignoreCase = true) }
-            .map { it.key to it.value.size }
-            .sortedBy { it.first }
-            .take(8)
-    }
-
-    val filteredPlaylists = remember(searchQuery, playlists) {
-        if (searchQuery.isBlank()) emptyList()
-        else playlists.filter { it.name.contains(searchQuery, ignoreCase = true) }.take(8)
-    }
-
-    val hasResults = filteredSongs.isNotEmpty() ||
-        filteredAlbums.isNotEmpty() ||
-        filteredArtists.isNotEmpty() ||
-        filteredPlaylists.isNotEmpty()
-
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(listOf(SurfaceOverlay, GraphiteAbyss, Color(0xFF060606)))
+                Brush.verticalGradient(
+                    listOf(
+                        SurfaceOverlay,
+                        MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.background
+                    )
+                )
             )
             .statusBarsPadding()
     ) {
@@ -134,12 +157,13 @@ fun SearchScreen(
                         .focusRequester(focusRequester),
                     placeholder = {
                         Text(
-                            "Titres, albums, artistes, playlists...",
+                            "Titres, albums, artistes, playlists, dossiers…",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextTertiary
                         )
                     },
                     singleLine = true,
+                    enabled = hasPermission,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { submitSearch() }),
                     shape = RoundedCornerShape(SgRadius.pill),
@@ -150,7 +174,10 @@ fun SearchScreen(
                         unfocusedContainerColor = SurfaceElevated.copy(alpha = 0.32f),
                         focusedTextColor = TextPrimary,
                         unfocusedTextColor = TextPrimary,
-                        cursorColor = accentColor
+                        cursorColor = accentColor,
+                        disabledTextColor = TextTertiary,
+                        disabledBorderColor = BorderSubtle.copy(alpha = 0.25f),
+                        disabledContainerColor = SurfaceElevated.copy(alpha = 0.18f)
                     ),
                     leadingIcon = {
                         Icon(Icons.Default.Search, null, tint = TextTertiary, modifier = Modifier.size(20.dp))
@@ -165,94 +192,114 @@ fun SearchScreen(
                 )
             }
 
-            if (searchQuery.isBlank()) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = SgSpacing.lg, vertical = SgSpacing.md)
-                ) {
-                    item {
-                        Text(
-                            text = "Recherche",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(SgSpacing.xs))
-                        Text(
-                            text = "Trouve rapidement une chanson, un album, un artiste ou une playlist.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(SgSpacing.lg))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "RECHERCHES RÉCENTES",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TextTertiary,
-                                modifier = Modifier.padding(horizontal = SgSpacing.sm)
+            if (!hasPermission) {
+                SearchEmptyState(
+                    icon = {
+                        Icon(Icons.Default.Lock, null, tint = accentColor, modifier = Modifier.size(52.dp))
+                    },
+                    title = "Accès à la musique requis",
+                    subtitle = "Autorisez SoundGroove à lire vos fichiers audio pour rechercher dans votre bibliothèque.",
+                    actionLabel = "Accorder la permission",
+                    accentColor = accentColor,
+                    onAction = { permissionLauncher.launch(audioPermission) }
+                )
+            } else {
+                SearchFilterRow(
+                    selectedFilter = selectedFilter,
+                    accentColor = accentColor,
+                    onFilterSelected = { selectedFilter = it }
+                )
+
+                if (searchQuery.isBlank()) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = SgSpacing.lg, vertical = SgSpacing.md)
+                    ) {
+                        item {
+                            SearchEmptyState(
+                                icon = {
+                                    Icon(Icons.Default.Search, null, tint = accentColor.copy(alpha = 0.85f), modifier = Modifier.size(48.dp))
+                                },
+                                title = "Rechercher dans votre bibliothèque",
+                                subtitle = if (selectedFilter != null) {
+                                    "Filtre « ${selectedFilter!!.label} » actif — saisissez un mot-clé."
+                                } else {
+                                    "Saisissez un titre, un album, un artiste, une playlist ou un dossier."
+                                },
+                                compact = true
                             )
-                            if (recentSearches.isNotEmpty()) {
-                                TextButton(onClick = onClearSearchHistory) {
-                                    Text("Effacer", color = accentColor, style = MaterialTheme.typography.labelMedium)
+                            Spacer(modifier = Modifier.height(SgSpacing.lg))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "RECHERCHES RÉCENTES",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextTertiary,
+                                    modifier = Modifier.padding(horizontal = SgSpacing.sm)
+                                )
+                                if (recentSearches.isNotEmpty()) {
+                                    TextButton(onClick = onClearSearchHistory) {
+                                        Text("Effacer", color = accentColor, style = MaterialTheme.typography.labelMedium)
+                                    }
                                 }
                             }
                         }
-                    }
-                    if (recentSearches.isEmpty()) {
-                        item {
-                            Text(
-                                text = "Vos recherches apparaîtront ici.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = TextSecondary,
-                                modifier = Modifier.padding(bottom = SgSpacing.md)
-                            )
+                        if (recentSearches.isEmpty()) {
+                            item {
+                                Text(
+                                    text = "Vos recherches récentes apparaîtront ici.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = TextSecondary,
+                                    modifier = Modifier.padding(bottom = SgSpacing.md)
+                                )
+                            }
+                        }
+                        items(recentSearches) { term ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        searchQuery = term
+                                        submitSearch()
+                                    }
+                                    .padding(vertical = SgSpacing.sm),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.History, null, tint = TextTertiary, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(SgSpacing.md))
+                                Text(term, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                            }
                         }
                     }
-                    items(recentSearches) { term ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    searchQuery = term
-                                    submitSearch()
-                                }
-                                .padding(vertical = SgSpacing.sm),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.History, null, tint = TextTertiary, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(SgSpacing.md))
-                            Text(term, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
-                        }
-                    }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = SgSpacing.sm, vertical = SgSpacing.xs)
-                ) {
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = SgSpacing.sm, vertical = SgSpacing.xs)
+                    ) {
                     if (!hasResults) {
                         item {
-                            Box(
-                                modifier = Modifier
-                                    .fillParentMaxSize()
-                                    .padding(horizontal = SgSpacing.xl),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(Icons.Default.Search, null, tint = TextTertiary, modifier = Modifier.size(44.dp))
-                                    Spacer(modifier = Modifier.height(SgSpacing.md))
-                                    Text("Aucun résultat", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                                    Text("Essaie avec un autre titre, artiste ou album.", color = TextSecondary)
-                                }
-                            }
+                            SearchEmptyState(
+                                icon = {
+                                    Icon(Icons.Default.SearchOff, null, tint = TextTertiary, modifier = Modifier.size(48.dp))
+                                },
+                                title = "Aucun résultat pour « $searchQuery »",
+                                subtitle = when (selectedFilter) {
+                                    SearchFilter.Songs -> "Essayez un autre titre ou artiste."
+                                    SearchFilter.Albums -> "Aucun album ne correspond à cette recherche."
+                                    SearchFilter.Artists -> "Aucun artiste ne correspond à cette recherche."
+                                    SearchFilter.Playlists -> "Aucune playlist ne correspond à cette recherche."
+                                    SearchFilter.Folders -> "Aucun dossier ne correspond à cette recherche."
+                                    null -> "Essayez un autre mot-clé ou changez de filtre."
+                                },
+                                compact = true
+                            )
                         }
                     }
 
-                    if (filteredSongs.isNotEmpty()) {
+                    if (showSongs && filteredSongs.isNotEmpty()) {
                         item { SectionTitle("${filteredSongs.size} chanson(s)") }
                         items(filteredSongs, key = { it.id }) { song ->
                             SongListItem(
@@ -260,13 +307,13 @@ fun SearchScreen(
                                 isFavorite = favoriteSongs.any { it.id == song.id },
                                 isCurrentSong = currentSong?.id == song.id,
                                 accentColor = accentColor,
-                                onClick = { onPlaySong(song) },
+                                onClick = { onPlaySong(song, filteredSongs) },
                                 onMenuClick = { onMenuClick(song) }
                             )
                         }
                     }
 
-                    if (filteredAlbums.isNotEmpty()) {
+                    if (showAlbums && filteredAlbums.isNotEmpty()) {
                         item { SectionTitle("Albums") }
                         items(filteredAlbums, key = { it.first }) { (albumName, albumSongs) ->
                             SearchEntityRow(
@@ -279,7 +326,7 @@ fun SearchScreen(
                         }
                     }
 
-                    if (filteredArtists.isNotEmpty()) {
+                    if (showArtists && filteredArtists.isNotEmpty()) {
                         item { SectionTitle("Artistes") }
                         items(filteredArtists, key = { it.first }) { (artistName, songCount) ->
                             SearchEntityRow(
@@ -292,7 +339,7 @@ fun SearchScreen(
                         }
                     }
 
-                    if (filteredPlaylists.isNotEmpty()) {
+                    if (showPlaylists && filteredPlaylists.isNotEmpty()) {
                         item { SectionTitle("Playlists") }
                         items(filteredPlaylists, key = { it.id }) { playlist ->
                             SearchEntityRow(
@@ -305,8 +352,114 @@ fun SearchScreen(
                         }
                     }
 
+                    if (showFolders && filteredFolders.isNotEmpty()) {
+                        item { SectionTitle("Dossiers") }
+                        items(filteredFolders, key = { it.first }) { (folderPath, folderSongs) ->
+                            SearchEntityRow(
+                                title = folderLabel(folderPath),
+                                subtitle = buildString {
+                                    append("${folderSongs.size} chanson(s)")
+                                    if (folderPath.contains('/')) {
+                                        append(" · ")
+                                        append(folderPath.substringBeforeLast('/'))
+                                    }
+                                },
+                                icon = Icons.Default.Folder,
+                                accentColor = accentColor,
+                                onClick = { onFolderClick(folderPath) }
+                            )
+                        }
+                    }
+
                     item { Spacer(modifier = Modifier.height(96.dp)) }
                 }
+            }
+        }
+        }
+    }
+}
+
+@Composable
+private fun SearchFilterRow(
+    selectedFilter: SearchFilter?,
+    accentColor: Color,
+    onFilterSelected: (SearchFilter?) -> Unit
+) {
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.xs),
+        horizontalArrangement = Arrangement.spacedBy(SgSpacing.sm)
+    ) {
+        item {
+            SgChip(
+                text = "Tout",
+                selected = selectedFilter == null,
+                accentColor = accentColor,
+                onClick = { onFilterSelected(null) }
+            )
+        }
+        items(SearchFilter.entries) { filter ->
+            SgChip(
+                text = filter.label,
+                selected = selectedFilter == filter,
+                accentColor = accentColor,
+                onClick = {
+                    onFilterSelected(if (selectedFilter == filter) null else filter)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SearchEmptyState(
+    icon: @Composable () -> Unit,
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    actionLabel: String? = null,
+    accentColor: Color = TextPrimary,
+    onAction: (() -> Unit)? = null
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (compact) Modifier.padding(vertical = SgSpacing.xl)
+                else Modifier.fillMaxHeight().padding(horizontal = SgSpacing.xl)
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = if (compact) Arrangement.Top else Arrangement.Center
+    ) {
+        icon()
+        Spacer(modifier = Modifier.height(SgSpacing.md))
+        Text(
+            text = title,
+            color = TextPrimary,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(SgSpacing.xs))
+        Text(
+            text = subtitle,
+            color = TextSecondary,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center
+        )
+        if (actionLabel != null && onAction != null) {
+            Spacer(modifier = Modifier.height(SgSpacing.lg))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(SgRadius.md))
+                    .background(accentColor)
+                    .clickable { onAction() }
+                    .padding(horizontal = SgSpacing.lg, vertical = SgSpacing.sm),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(actionLabel, color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -326,9 +479,10 @@ private fun SectionTitle(text: String) {
 private fun SearchEntityRow(
     title: String,
     subtitle: String,
-    iconRes: Int,
     accentColor: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    iconRes: Int? = null,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null
 ) {
     Row(
         modifier = Modifier
@@ -343,12 +497,15 @@ private fun SearchEntityRow(
                 .background(accentColor.copy(alpha = 0.14f), RoundedCornerShape(SgRadius.md)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                painter = painterResource(iconRes),
-                contentDescription = null,
-                tint = accentColor,
-                modifier = Modifier.size(22.dp)
-            )
+            when {
+                icon != null -> Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(22.dp))
+                iconRes != null -> Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
         }
         Spacer(modifier = Modifier.width(SgSpacing.md))
         Column(modifier = Modifier.weight(1f)) {

@@ -104,7 +104,8 @@ fun MiniPlayer(
                 if (song.albumArtUri != null) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
-                            .data(song.albumArtUri).crossfade(true).build(),
+                            // Token M3 "Fast" (SgMotion) : micro-surface, transition rapide.
+                            .data(song.albumArtUri).crossfade(SgMotion.FastMs).build(),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
@@ -137,36 +138,43 @@ fun MiniPlayer(
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .graphicsLayer {
-                        scaleX = playScale
-                        scaleY = playScale
-                    }
-                    .background(
-                        Brush.radialGradient(listOf(displayAccent, displayAccent.copy(0.7f))),
-                        CircleShape
-                    )
-                    .clickable(interactionSource = playInteraction, indication = null) { onPlayPause() },
-                contentAlignment = Alignment.Center
+            // Cible tactile ≥48dp (Fitts's Law) autour du bouton visuel de 38dp.
+            SgTapTarget(
+                onClick = onPlayPause,
+                interactionSource = playInteraction,
+                indication = null
             ) {
-                Icon(
-                    painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
-                    contentDescription = if (isPlaying) "Pause" else "Jouer",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .graphicsLayer {
+                            scaleX = playScale
+                            scaleY = playScale
+                        }
+                        .background(
+                            Brush.radialGradient(listOf(displayAccent, displayAccent.copy(0.7f))),
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
+                        contentDescription = if (isPlaying) "Pause" else "Jouer",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
 
-            Icon(
-                painter = painterResource(R.drawable.ic_next),
-                contentDescription = "Suivant",
-                tint = TextSecondary,
-                modifier = Modifier
-                    .size(26.dp)
-                    .clickable { onSkipNext() }
-            )
+            // Cible tactile ≥48dp autour de l'icône "suivant" (26dp).
+            SgTapTarget(onClick = onSkipNext) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_next),
+                    contentDescription = "Suivant",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
         }
     }
 }

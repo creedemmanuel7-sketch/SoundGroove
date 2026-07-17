@@ -29,6 +29,7 @@ import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.EditMetadataBottomSheet
 import com.credo.soundgroove.ui.components.SongContextMenuSheet
 import com.credo.soundgroove.ui.components.SongInfoBottomSheet
 import com.credo.soundgroove.ui.theme.*
@@ -50,13 +51,15 @@ fun PlaylistDetailScreen(
     onRenamePlaylist: (String) -> Unit,
     onPlayNext: (Song) -> Unit = {},
     onAddToQueue: (Song) -> Unit = {},
-    onAddToPlaylist: (Song) -> Unit = {}
+    onAddToPlaylist: (Song) -> Unit = {},
+    onSaveMetadata: (Song, String, String, String) -> Unit = { _, _, _, _ -> }
 ) {
     var showRenameSheet by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showOptionsMenu by remember { mutableStateOf(false) }
     var songMenuTarget by remember { mutableStateOf<Song?>(null) }
     var infoSong by remember { mutableStateOf<Song?>(null) }
+    var editSong by remember { mutableStateOf<Song?>(null) }
     val context = LocalContext.current
 
     Box(
@@ -111,7 +114,7 @@ fun PlaylistDetailScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(
-                                    Brush.verticalGradient(listOf(Color(0xFF3D1D7A), Color(0xFF0D0517)))
+                                    sgHeroPlaceholderBrush()
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
@@ -128,13 +131,7 @@ fun PlaylistDetailScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    0f to Color.Transparent,
-                                    0.5f to Color.Black.copy(0.3f),
-                                    1f to Color(0xFF0D0517)
-                                )
-                            )
+                            .background(sgHeroScrimBrush())
                     )
 
                     // Back + Options
@@ -178,7 +175,7 @@ fun PlaylistDetailScreen(
                             DropdownMenu(
                                 expanded = showOptionsMenu,
                                 onDismissRequest = { showOptionsMenu = false },
-                                modifier = Modifier.background(Color(0xFF2D1B4E))
+                                modifier = Modifier.background(SurfaceElevated)
                             ) {
                                 DropdownMenuItem(
                                     text = { Text("Renommer", color = TextPrimary) },
@@ -186,9 +183,9 @@ fun PlaylistDetailScreen(
                                     leadingIcon = { Icon(painter = painterResource(R.drawable.ic_sort), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp)) }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Supprimer la playlist", color = Color(0xFFFF6B6B)) },
+                                    text = { Text("Supprimer la playlist", color = ErrorRed) },
                                     onClick = { showOptionsMenu = false; showDeleteDialog = true },
-                                    leadingIcon = { Icon(painter = painterResource(R.drawable.ic_favorite_outline), contentDescription = null, tint = Color(0xFFFF6B6B), modifier = Modifier.size(18.dp)) }
+                                    leadingIcon = { Icon(painter = painterResource(R.drawable.ic_favorite_outline), contentDescription = null, tint = ErrorRed, modifier = Modifier.size(18.dp)) }
                                 )
                             }
                         }
@@ -415,6 +412,14 @@ fun PlaylistDetailScreen(
                 onAddToQueue = { onAddToQueue(song) },
                 onAddToPlaylist = { onAddToPlaylist(song) },
                 onViewInfo = { infoSong = song },
+                onShareCard = {
+                    com.credo.soundgroove.util.PlayerActions.shareSongCard(
+                        context,
+                        song,
+                        accentColor.hashCode()
+                    )
+                },
+                onEditMetadata = { editSong = song },
                 onDismiss = { songMenuTarget = null }
             )
         }
@@ -426,8 +431,25 @@ fun PlaylistDetailScreen(
                 isFavorite = favoriteSongs.any { it.id == song.id },
                 onToggleFavorite = { onToggleFavorite(song) },
                 onShare = { com.credo.soundgroove.util.PlayerActions.shareSong(context, song) },
+                onShareCard = {
+                    com.credo.soundgroove.util.PlayerActions.shareSongCard(
+                        context,
+                        song,
+                        accentColor.hashCode()
+                    )
+                },
+                onEditMetadata = { editSong = song; infoSong = null },
                 onSetRingtone = { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, song) },
                 onDismiss = { infoSong = null }
+            )
+        }
+
+        editSong?.let { song ->
+            EditMetadataBottomSheet(
+                song = song,
+                accentColor = accentColor,
+                onSave = { title, artist, album -> onSaveMetadata(song, title, artist, album) },
+                onDismiss = { editSong = null }
             )
         }
 
@@ -445,12 +467,12 @@ fun PlaylistDetailScreen(
         if (showDeleteDialog) {
             AlertDialog(
                 onDismissRequest = { showDeleteDialog = false },
-                containerColor = Color(0xFF2D1B4E),
+                containerColor = CardSurface,
                 title = { Text("Supprimer la playlist ?", color = TextPrimary, fontWeight = FontWeight.Bold) },
                 text = { Text("\"${playlist.name}\" sera supprimée définitivement.", color = TextSecondary) },
                 confirmButton = {
                     TextButton(onClick = { showDeleteDialog = false; onDeletePlaylist(); onBack() }) {
-                        Text("Supprimer", color = Color(0xFFFF6B6B), fontWeight = FontWeight.Bold)
+                        Text("Supprimer", color = ErrorRed, fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {

@@ -2,7 +2,6 @@ package com.credo.soundgroove.ui.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,24 +21,23 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.credo.soundgroove.R
-import com.credo.soundgroove.ui.theme.ChampagneGold
+import com.credo.soundgroove.ui.theme.BrandBlack
+import com.credo.soundgroove.ui.theme.BrandCyan
 import com.credo.soundgroove.ui.theme.SgRadius
 import com.credo.soundgroove.ui.theme.SoundGrooveTheme
 
 /**
- * Rend la véritable identité visuelle de l'app (les mêmes vecteurs que l'icône du
- * launcher : `ic_launcher_background` + `ic_launcher_foreground`), afin que le logo
- * affiché à l'écran de bienvenue / dans l'app soit identique à l'icône installée sur
- * l'appareil — plus de divergence entre les deux. Un halo discret dans la couleur
- * d'accent du thème choisi enrichit la présentation sans changer la marque elle-même.
+ * Affiche la même identité visuelle que l'icône du launcher
+ * (note cyan sur fond noir — [R.drawable.ic_launcher_playstore]).
  */
 @Composable
 fun SoundGrooveLogo(
     modifier: Modifier = Modifier,
-    accentColor: Color = ChampagneGold,
-    backgroundColor: Color = Color(0xFF000000)
+    accentColor: Color = BrandCyan,
+    backgroundColor: Color = BrandBlack
 ) {
     val description = stringResource(id = R.string.soundgroove_logo_description)
+
     Box(
         modifier = modifier.size(120.dp),
         contentAlignment = Alignment.Center
@@ -49,31 +47,21 @@ fun SoundGrooveLogo(
                 .fillMaxSize()
                 .background(
                     Brush.radialGradient(
-                        listOf(accentColor.copy(alpha = 0.22f), Color.Transparent)
+                        listOf(accentColor.copy(alpha = 0.18f), Color.Transparent)
                     )
                 )
         )
-        Box(
+        Image(
+            painter = painterResource(id = R.drawable.ic_launcher_playstore),
+            contentDescription = description,
             modifier = Modifier
                 .fillMaxSize(0.86f)
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(SgRadius.xl))
-                .border(1.dp, accentColor.copy(alpha = 0.3f), RoundedCornerShape(SgRadius.xl))
-                .semantics { contentDescription = description }
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.ic_launcher_background),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-            Image(
-                painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-        }
+                .background(backgroundColor)
+                .semantics { contentDescription = description },
+            contentScale = ContentScale.Fit
+        )
     }
 }
 
@@ -82,7 +70,7 @@ fun SoundGrooveLogo(
 fun SoundGrooveLogoPreview() {
     SoundGrooveTheme {
         Box(
-            modifier = Modifier.fillMaxSize().background(Color.Black),
+            modifier = Modifier.fillMaxSize().background(BrandBlack),
             contentAlignment = Alignment.Center
         ) {
             SoundGrooveLogo()

@@ -365,6 +365,8 @@ fun SongContextMenuSheet(
     onAddToQueue: () -> Unit = {},
     onAddToPlaylist: () -> Unit,
     onViewInfo: () -> Unit,
+    onShareCard: () -> Unit = {},
+    onEditMetadata: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(
@@ -426,7 +428,9 @@ fun SongContextMenuSheet(
                 Triple("Jouer ensuite", R.drawable.ic_play, onPlayNext),
                 Triple("Ajouter à la file", R.drawable.ic_queue, onAddToQueue),
                 Triple("Ajouter à une playlist", R.drawable.ic_add, onAddToPlaylist),
-                Triple("Infos sur la chanson", R.drawable.ic_songs, onViewInfo)
+                Triple("Infos sur la chanson", R.drawable.ic_songs, onViewInfo),
+                Triple("Partager la carte", R.drawable.ic_options, onShareCard),
+                Triple("Modifier métadonnées", R.drawable.ic_settings, onEditMetadata)
             )
 
             actions.forEach { (label, iconRes, action) ->
@@ -565,6 +569,8 @@ fun SongInfoBottomSheet(
     onToggleFavorite: () -> Unit,
     onShare: () -> Unit,
     onSetRingtone: () -> Unit,
+    onShareCard: () -> Unit = onShare,
+    onEditMetadata: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(
@@ -641,6 +647,26 @@ fun SongInfoBottomSheet(
                     modifier = Modifier.weight(1f),
                     onClick = onShare
                 )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                InfoActionChip(
+                    label = "Carte",
+                    icon = Icons.Filled.Image,
+                    tint = accentColor,
+                    modifier = Modifier.weight(1f),
+                    onClick = onShareCard
+                )
+                InfoActionChip(
+                    label = "Éditer",
+                    icon = Icons.Filled.Edit,
+                    tint = accentColor,
+                    modifier = Modifier.weight(1f),
+                    onClick = onEditMetadata
+                )
                 InfoActionChip(
                     label = "Sonnerie",
                     icon = Icons.Filled.Notifications,
@@ -696,17 +722,20 @@ private fun InfoActionChip(
     }
 }
 
-// ─── Playback Speed Sheet ───────────────────────────────────────────────────
+// ─── Playback Speed + Pitch Sheet ───────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaybackSpeedBottomSheet(
     currentSpeed: Float,
+    currentPitch: Float = 1f,
     accentColor: Color,
     onSpeedSelected: (Float) -> Unit,
+    onPitchSelected: (Float) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+    val pitches = listOf(0.75f, 0.875f, 1.0f, 1.125f, 1.25f, 1.5f)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = SurfaceOverlay.copy(alpha = 0.96f),
@@ -719,18 +748,20 @@ fun PlaybackSpeedBottomSheet(
                 .padding(bottom = 26.dp)
         ) {
             Text(
-                "Vitesse de lecture",
+                "Vitesse et tonalité",
                 color = TextPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "Vitesse actuelle : ${formatSpeedLabel(currentSpeed)}",
+                "Vitesse : ${formatSpeedLabel(currentSpeed)} · Tonalité : ${formatPitchLabel(currentPitch)}",
                 color = TextSecondary,
                 fontSize = 13.sp
             )
             Spacer(modifier = Modifier.height(16.dp))
+            Text("Vitesse", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(8.dp))
             speeds.forEach { speed ->
                 val isSelected = kotlin.math.abs(speed - currentSpeed) < 0.01f
                 Row(
@@ -738,8 +769,8 @@ fun PlaybackSpeedBottomSheet(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .background(if (isSelected) accentColor.copy(alpha = 0.12f) else Color.Transparent)
-                        .clickable { onSpeedSelected(speed); onDismiss() }
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                        .clickable { onSpeedSelected(speed) }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -754,10 +785,203 @@ fun PlaybackSpeedBottomSheet(
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Tonalité (pitch)", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Indépendante de la vitesse (Media3 setPitch)",
+                color = TextTertiary,
+                fontSize = 11.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            pitches.forEach { pitch ->
+                val isSelected = kotlin.math.abs(pitch - currentPitch) < 0.01f
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isSelected) accentColor.copy(alpha = 0.12f) else Color.Transparent)
+                        .clickable { onPitchSelected(pitch) }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        formatPitchLabel(pitch),
+                        color = if (isSelected) accentColor else TextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                    )
+                    if (isSelected) {
+                        Icon(Icons.Filled.Check, null, tint = accentColor, modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CrossfadeBottomSheet(
+    currentMs: Int,
+    accentColor: Color,
+    onDurationSelected: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = com.credo.soundgroove.util.PlaybackPreferences.CROSSFADE_OPTIONS_MS
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceOverlay.copy(alpha = 0.96f),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 26.dp)
+        ) {
+            Text(
+                "Crossfade",
+                color = TextPrimary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Fondu entre les pistes via le volume du lecteur",
+                color = TextSecondary,
+                fontSize = 13.sp
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            options.forEach { ms ->
+                val isSelected = ms == currentMs
+                val label = com.credo.soundgroove.util.PlaybackPreferences.crossfadeLabel(ms)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isSelected) accentColor.copy(alpha = 0.12f) else Color.Transparent)
+                        .clickable { onDurationSelected(ms); onDismiss() }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        label,
+                        color = if (isSelected) accentColor else TextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                    )
+                    if (isSelected) {
+                        Icon(Icons.Filled.Check, null, tint = accentColor, modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditMetadataBottomSheet(
+    song: Song,
+    accentColor: Color,
+    onSave: (title: String, artist: String, album: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var title by remember(song.id) { mutableStateOf(song.title) }
+    var artist by remember(song.id) { mutableStateOf(song.artist) }
+    var album by remember(song.id) { mutableStateOf(song.albumName) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceOverlay.copy(alpha = 0.96f),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp)
+        ) {
+            Text(
+                "Modifier les métadonnées",
+                color = TextPrimary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                "Enregistrement local + tentative d'écriture MediaStore",
+                color = TextSecondary,
+                fontSize = 12.sp
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("Titre") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = accentColor,
+                    unfocusedBorderColor = GlassBorder,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary
+                )
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(
+                value = artist,
+                onValueChange = { artist = it },
+                label = { Text("Artiste") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = accentColor,
+                    unfocusedBorderColor = GlassBorder,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary
+                )
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(
+                value = album,
+                onValueChange = { album = it },
+                label = { Text("Album") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = accentColor,
+                    unfocusedBorderColor = GlassBorder,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary
+                )
+            )
+            Spacer(modifier = Modifier.height(18.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(accentColor)
+                    .clickable {
+                        onSave(title.trim(), artist.trim(), album.trim())
+                        onDismiss()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Enregistrer", color = Color.White, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
 
 private fun formatSpeedLabel(speed: Float): String {
     return if (speed == speed.toLong().toFloat()) "${speed.toLong()}x" else "${speed}x"
+}
+
+private fun formatPitchLabel(pitch: Float): String {
+    return if (pitch == pitch.toLong().toFloat()) "${pitch.toLong()}x" else "${pitch}x"
 }

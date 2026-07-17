@@ -25,6 +25,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.EditMetadataBottomSheet
 import com.credo.soundgroove.ui.components.SongContextMenuSheet
 import com.credo.soundgroove.ui.components.SongInfoBottomSheet
 import com.credo.soundgroove.ui.theme.*
@@ -44,10 +45,12 @@ fun ArtistDetailScreen(
     onToggleFavorite: (Song) -> Unit,
     onPlayNext: (Song) -> Unit = {},
     onAddToQueue: (Song) -> Unit = {},
-    onAddToPlaylist: (Song) -> Unit = {}
+    onAddToPlaylist: (Song) -> Unit = {},
+    onSaveMetadata: (Song, String, String, String) -> Unit = { _, _, _, _ -> }
 ) {
     var songMenuTarget by remember { mutableStateOf<Song?>(null) }
     var infoSong by remember { mutableStateOf<Song?>(null) }
+    var editSong by remember { mutableStateOf<Song?>(null) }
     val context = LocalContext.current
     // Get a nice image for the artist (using first album art)
     val artistCover = songs.firstOrNull { it.albumArtUri != null }?.albumArtUri
@@ -70,7 +73,7 @@ fun ArtistDetailScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Brush.verticalGradient(listOf(GraphiteCard, Color(0xFF0A0A0C))))
+                            .background(Brush.verticalGradient(listOf(GraphiteCard, MaterialTheme.colorScheme.background)))
                     )
 
                     // Back Button
@@ -231,6 +234,14 @@ fun ArtistDetailScreen(
                 onAddToQueue = { onAddToQueue(song) },
                 onAddToPlaylist = { onAddToPlaylist(song) },
                 onViewInfo = { infoSong = song },
+                onShareCard = {
+                    com.credo.soundgroove.util.PlayerActions.shareSongCard(
+                        context,
+                        song,
+                        accentColor.hashCode()
+                    )
+                },
+                onEditMetadata = { editSong = song },
                 onDismiss = { songMenuTarget = null }
             )
         }
@@ -242,8 +253,25 @@ fun ArtistDetailScreen(
                 isFavorite = favoriteSongs.any { it.id == song.id },
                 onToggleFavorite = { onToggleFavorite(song) },
                 onShare = { com.credo.soundgroove.util.PlayerActions.shareSong(context, song) },
+                onShareCard = {
+                    com.credo.soundgroove.util.PlayerActions.shareSongCard(
+                        context,
+                        song,
+                        accentColor.hashCode()
+                    )
+                },
+                onEditMetadata = { editSong = song; infoSong = null },
                 onSetRingtone = { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, song) },
                 onDismiss = { infoSong = null }
+            )
+        }
+
+        editSong?.let { song ->
+            EditMetadataBottomSheet(
+                song = song,
+                accentColor = accentColor,
+                onSave = { title, artist, album -> onSaveMetadata(song, title, artist, album) },
+                onDismiss = { editSong = null }
             )
         }
     }
