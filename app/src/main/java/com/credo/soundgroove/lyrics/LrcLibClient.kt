@@ -31,14 +31,15 @@ object LrcLibClient {
     }
 
     /** Tente de récupérer les paroles en ligne. Retourne null si rien ou erreur réseau. */
-    fun fetchLyrics(song: Song): LrcLibResult? {
+    fun fetchLyrics(song: Song): LrcLibResult? = runCatching {
+        if (song.title.isBlank() && song.artist.isBlank()) return@runCatching null
         val durationSec = durationSeconds(song)
         if (durationSec != null) {
-            fetchBySignature(song, durationSec, cachedOnly = true)?.let { return it }
-            fetchBySignature(song, durationSec, cachedOnly = false)?.let { return it }
+            fetchBySignature(song, durationSec, cachedOnly = true)?.let { return@runCatching it }
+            fetchBySignature(song, durationSec, cachedOnly = false)?.let { return@runCatching it }
         }
-        return fetchBySearch(song, durationSec)
-    }
+        fetchBySearch(song, durationSec)
+    }.getOrNull()
 
     private fun durationSeconds(song: Song): Long? {
         if (song.duration <= 0L) return null
@@ -49,50 +50,48 @@ object LrcLibClient {
         song: Song,
         durationSec: Long,
         cachedOnly: Boolean
-    ): LrcLibResult? {
+    ): LrcLibResult? = runCatching {
         val endpoint = if (cachedOnly) "get-cached" else "get"
         val url = buildString {
             append("$BASE_URL/api/$endpoint?")
-            append("track_name=${encode(song.title)}")
-            append("&artist_name=${encode(song.artist)}")
+            append("track_name=${encode(song.title.ifBlank { "Unknown" })}")
+            append("&artist_name=${encode(song.artist.ifBlank { "Unknown" })}")
             append("&album_name=${encode(song.albumName.ifBlank { "Unknown" })}")
             append("&duration=$durationSec")
         }
-        val body = httpGet(url) ?: return null
-        return parseRecord(body)
-    }
+        val body = httpGet(url) ?: return@runCatching null
+        parseRecord(body)
+    }.getOrNull()
 
-    private fun fetchBySearch(song: Song, durationSec: Long?): LrcLibResult? {
+    private fun fetchBySearch(song: Song, durationSec: Long?): LrcLibResult? = runCatching {
         val url = buildString {
             append("$BASE_URL/api/search?")
-            append("track_name=${encode(song.title)}")
-            append("&artist_name=${encode(song.artist)}")
+            append("track_name=${encode(song.title.ifBlank { "Unknown" })}")
+            append("&artist_name=${encode(song.artist.ifBlank { "Unknown" })}")
         }
-        val body = httpGet(url) ?: return null
-        return runCatching {
-            val array = JSONArray(body)
-            var best: JSONObject? = null
-            var bestDelta = Long.MAX_VALUE
-            for (i in 0 until array.length()) {
-                val item = array.getJSONObject(i)
-                if (item.optBoolean("instrumental", false)) continue
-                if (!hasLyrics(item)) continue
+        val body = httpGet(url) ?: return@runCatching null
+        val array = JSONArray(body)
+        var best: JSONObject? = null
+        var bestDelta = Long.MAX_VALUE
+        for (i in 0 until array.length()) {
+            val item = array.getJSONObject(i)
+            if (item.optBoolean("instrumental", false)) continue
+            if (!hasLyrics(item)) continue
 
-                if (durationSec != null) {
-                    val itemDuration = item.optInt("duration", -1)
-                    if (itemDuration <= 0) continue
-                    val delta = abs(itemDuration - durationSec)
-                    if (delta <= DURATION_TOLERANCE_SEC && delta < bestDelta) {
-                        best = item
-                        bestDelta = delta
-                    }
-                } else if (best == null) {
+            if (durationSec != null) {
+                val itemDuration = item.optInt("duration", -1)
+                if (itemDuration <= 0) continue
+                val delta = abs(itemDuration - durationSec)
+                if (delta <= DURATION_TOLERANCE_SEC && delta < bestDelta) {
                     best = item
+                    bestDelta = delta
                 }
+            } else if (best == null) {
+                best = item
             }
-            best?.let { parseRecord(it) }
-        }.getOrNull()
-    }
+        }
+        best?.let { parseRecord(it) }
+    }.getOrNull()
 
     private fun parseRecord(body: String): LrcLibResult? = runCatching {
         parseRecord(JSONObject(body))

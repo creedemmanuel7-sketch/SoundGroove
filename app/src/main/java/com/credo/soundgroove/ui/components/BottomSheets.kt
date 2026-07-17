@@ -367,6 +367,7 @@ fun SongContextMenuSheet(
     onViewInfo: () -> Unit,
     onShareCard: () -> Unit = {},
     onEditMetadata: () -> Unit = {},
+    onSetCoverArt: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(
@@ -430,7 +431,8 @@ fun SongContextMenuSheet(
                 Triple("Ajouter à une playlist", R.drawable.ic_add, onAddToPlaylist),
                 Triple("Infos sur la chanson", R.drawable.ic_songs, onViewInfo),
                 Triple("Partager la carte", R.drawable.ic_options, onShareCard),
-                Triple("Modifier métadonnées", R.drawable.ic_settings, onEditMetadata)
+                Triple("Modifier métadonnées", R.drawable.ic_settings, onEditMetadata),
+                Triple("Choisir une pochette", R.drawable.ic_add, onSetCoverArt)
             )
 
             actions.forEach { (label, iconRes, action) ->
@@ -571,6 +573,7 @@ fun SongInfoBottomSheet(
     onSetRingtone: () -> Unit,
     onShareCard: () -> Unit = onShare,
     onEditMetadata: () -> Unit = {},
+    onSetCoverArt: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(
@@ -666,6 +669,13 @@ fun SongInfoBottomSheet(
                     tint = accentColor,
                     modifier = Modifier.weight(1f),
                     onClick = onEditMetadata
+                )
+                InfoActionChip(
+                    label = "Pochette",
+                    icon = Icons.Filled.Image,
+                    tint = accentColor,
+                    modifier = Modifier.weight(1f),
+                    onClick = onSetCoverArt
                 )
                 InfoActionChip(
                     label = "Sonnerie",

@@ -29,9 +29,11 @@ import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.AlbumArtThumb
 import com.credo.soundgroove.ui.components.EditMetadataBottomSheet
 import com.credo.soundgroove.ui.components.SongContextMenuSheet
 import com.credo.soundgroove.ui.components.SongInfoBottomSheet
+import com.credo.soundgroove.ui.components.rememberSongCoverArtPicker
 import com.credo.soundgroove.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,7 +54,8 @@ fun PlaylistDetailScreen(
     onPlayNext: (Song) -> Unit = {},
     onAddToQueue: (Song) -> Unit = {},
     onAddToPlaylist: (Song) -> Unit = {},
-    onSaveMetadata: (Song, String, String, String) -> Unit = { _, _, _, _ -> }
+    onSaveMetadata: (Song, String, String, String) -> Unit = { _, _, _, _ -> },
+    onSetCoverArt: (Song, android.net.Uri) -> Unit = { _, _ -> }
 ) {
     var showRenameSheet by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -61,6 +64,7 @@ fun PlaylistDetailScreen(
     var infoSong by remember { mutableStateOf<Song?>(null) }
     var editSong by remember { mutableStateOf<Song?>(null) }
     val context = LocalContext.current
+    val launchCoverPicker = rememberSongCoverArtPicker(onCoverSelected = onSetCoverArt)
 
     Box(
         modifier = Modifier
@@ -336,31 +340,12 @@ fun PlaylistDetailScreen(
                             }
                         }
 
-                        // Cover
-                        Box(
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(GraphiteCard),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (song.albumArtUri != null) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(LocalContext.current)
-                                        .data(song.albumArtUri).crossfade(true).build(),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_songs),
-                                    contentDescription = null,
-                                    tint = TextSecondary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
+                        AlbumArtThumb(
+                            albumArtUri = song.albumArtUri,
+                            size = 46.dp,
+                            cornerRadius = 10.dp,
+                            accentColor = accentColor
+                        )
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
@@ -420,6 +405,7 @@ fun PlaylistDetailScreen(
                     )
                 },
                 onEditMetadata = { editSong = song },
+                onSetCoverArt = { launchCoverPicker(song) },
                 onDismiss = { songMenuTarget = null }
             )
         }
@@ -439,6 +425,7 @@ fun PlaylistDetailScreen(
                     )
                 },
                 onEditMetadata = { editSong = song; infoSong = null },
+                onSetCoverArt = { launchCoverPicker(song); infoSong = null },
                 onSetRingtone = { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, song) },
                 onDismiss = { infoSong = null }
             )

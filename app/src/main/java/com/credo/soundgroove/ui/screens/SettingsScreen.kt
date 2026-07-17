@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -26,6 +27,7 @@ import com.credo.soundgroove.R
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.util.AudioFormatInfo
 import com.credo.soundgroove.util.PlaybackPreferences
+import kotlinx.coroutines.launch
 
 fun formatSleepTimerDisplay(seconds: Int?): String? {
     if (seconds == null) return null
@@ -68,22 +70,31 @@ fun SettingsScreen(
     onImportBackup: () -> Unit = {},
     onClearSearchHistory: () -> Unit = {}
 ) {
-    val backgroundBrush = themeBackgroundBrush(currentTheme)
+    val revealState = rememberSgThemeRevealState()
+    val scope = rememberCoroutineScope()
     var showClearRecentConfirm by remember { mutableStateOf(false) }
     var showClearSearchConfirm by remember { mutableStateOf(false) }
     var showImportConfirm by remember { mutableStateOf(false) }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(backgroundBrush)
+        modifier = Modifier.fillMaxSize()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
-        ) {
+        SgThemeRevealHost(
+            baseTheme = currentTheme,
+            revealState = revealState,
+            modifier = Modifier.fillMaxSize()
+        ) { theme ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(themeBackgroundBrush(theme))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp)
+                ) {
             Spacer(modifier = Modifier.height(38.dp))
 
             Row(
@@ -129,21 +140,33 @@ fun SettingsScreen(
                         description = "Noir profond, accent cyan (icône)",
                         accentColor = BrandCyan,
                         isSelected = currentTheme == AppTheme.NOIR_ABSOLU,
-                        onClick = { onThemeSelected(AppTheme.NOIR_ABSOLU) }
+                        onClick = { origin ->
+                            launchThemeReveal(
+                                revealState, scope, AppTheme.NOIR_ABSOLU, currentTheme, origin, onThemeSelected
+                            )
+                        }
                     )
                     ThemeOptionRow(
                         title = "Clair Argent",
                         description = "Fond blanc, texte sombre, accent cyan",
                         accentColor = ArgentClairAccent,
                         isSelected = currentTheme == AppTheme.ARGENT_CLAIR,
-                        onClick = { onThemeSelected(AppTheme.ARGENT_CLAIR) }
+                        onClick = { origin ->
+                            launchThemeReveal(
+                                revealState, scope, AppTheme.ARGENT_CLAIR, currentTheme, origin, onThemeSelected
+                            )
+                        }
                     )
                     ThemeOptionRow(
                         title = "Graphite",
                         description = "Graphite mat, accent argent/platine",
                         accentColor = SilverAccent,
                         isSelected = currentTheme == AppTheme.GRAPHITE,
-                        onClick = { onThemeSelected(AppTheme.GRAPHITE) }
+                        onClick = { origin ->
+                            launchThemeReveal(
+                                revealState, scope, AppTheme.GRAPHITE, currentTheme, origin, onThemeSelected
+                            )
+                        }
                     )
                 }
             }
@@ -444,6 +467,8 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(28.dp))
+                }
+            }
         }
     }
 
@@ -570,11 +595,13 @@ private fun ThemeOptionRow(
     description: String,
     accentColor: Color,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: (Offset) -> Unit
 ) {
+    var revealOrigin by remember { mutableStateOf(Offset.Zero) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .sgThemeRevealOrigin { revealOrigin = it }
             .clip(RoundedCornerShape(14.dp))
             .background(if (isSelected) accentColor.copy(alpha = 0.11f) else GlassSurface.copy(alpha = 0.28f))
             .border(
@@ -582,7 +609,7 @@ private fun ThemeOptionRow(
                 color = if (isSelected) accentColor.copy(alpha = 0.45f) else GlassBorder.copy(alpha = 0.26f),
                 shape = RoundedCornerShape(14.dp)
             )
-            .clickable { onClick() }
+            .clickable { onClick(revealOrigin) }
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

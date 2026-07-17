@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.credo.soundgroove.data.model.Song
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,30 +51,36 @@ class LyricsViewModel(application: Application) : AndroidViewModel(application) 
 
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            val cached = withContext(Dispatchers.IO) {
-                LyricsRepository.loadFromCache(getApplication(), song)
-            }
-            if (cached != null && LyricsRepository.isComplete(cached)) {
-                _lyricsContent.value = cached
-                return@launch
-            }
+            try {
+                val cached = withContext(Dispatchers.IO) {
+                    LyricsRepository.loadFromCache(getApplication(), song)
+                }
+                if (cached != null && LyricsRepository.isComplete(cached)) {
+                    _lyricsContent.value = cached
+                    return@launch
+                }
 
-            _lyricsContent.value = LyricsContent.Loading
+                _lyricsContent.value = LyricsContent.Loading
 
-            val local = withContext(Dispatchers.IO) {
-                LyricsRepository.loadLocalLyrics(getApplication(), song)
-            }
-            if (LyricsRepository.isComplete(local)) {
-                _lyricsContent.value = local
-                return@launch
-            }
+                val local = withContext(Dispatchers.IO) {
+                    LyricsRepository.loadLocalLyrics(getApplication(), song)
+                }
+                if (LyricsRepository.isComplete(local)) {
+                    _lyricsContent.value = local
+                    return@launch
+                }
 
-            _lyricsContent.value = LyricsContent.SearchingOnline
+                _lyricsContent.value = LyricsContent.SearchingOnline
 
-            val online = withContext(Dispatchers.IO) {
-                LyricsRepository.fetchOnlineLyrics(getApplication(), song)
+                val online = withContext(Dispatchers.IO) {
+                    LyricsRepository.fetchOnlineLyrics(getApplication(), song)
+                }
+                _lyricsContent.value = online
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _lyricsContent.value = LyricsContent.NotFound
             }
-            _lyricsContent.value = online
         }
     }
 

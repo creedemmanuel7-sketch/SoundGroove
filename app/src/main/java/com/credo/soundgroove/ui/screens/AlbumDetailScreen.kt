@@ -25,9 +25,11 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.AlbumArtThumb
 import com.credo.soundgroove.ui.components.EditMetadataBottomSheet
 import com.credo.soundgroove.ui.components.SongContextMenuSheet
 import com.credo.soundgroove.ui.components.SongInfoBottomSheet
+import com.credo.soundgroove.ui.components.rememberSongCoverArtPicker
 import com.credo.soundgroove.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,12 +48,14 @@ fun AlbumDetailScreen(
     onPlayNext: (Song) -> Unit = {},
     onAddToQueue: (Song) -> Unit = {},
     onAddToPlaylist: (Song) -> Unit = {},
-    onSaveMetadata: (Song, String, String, String) -> Unit = { _, _, _, _ -> }
+    onSaveMetadata: (Song, String, String, String) -> Unit = { _, _, _, _ -> },
+    onSetCoverArt: (Song, android.net.Uri) -> Unit = { _, _ -> }
 ) {
     var songMenuTarget by remember { mutableStateOf<Song?>(null) }
     var infoSong by remember { mutableStateOf<Song?>(null) }
     var editSong by remember { mutableStateOf<Song?>(null) }
     val context = LocalContext.current
+    val launchCoverPicker = rememberSongCoverArtPicker(onCoverSelected = onSetCoverArt)
     val albumCover = songs.firstOrNull { it.albumArtUri != null }?.albumArtUri
     val artistName = songs.firstOrNull()?.artist ?: "Inconnu"
 
@@ -199,6 +203,13 @@ fun AlbumDetailScreen(
                         }
                     }
 
+                    AlbumArtThumb(
+                        albumArtUri = song.albumArtUri,
+                        size = 46.dp,
+                        cornerRadius = 10.dp,
+                        accentColor = accentColor
+                    )
+
                     Column(modifier = Modifier.weight(1f)) {
                         Text(song.title, color = if (isCurrent) accentColor else TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(song.artist, color = TextSecondary, fontSize = 12.sp, maxLines = 1)
@@ -235,6 +246,7 @@ fun AlbumDetailScreen(
                     )
                 },
                 onEditMetadata = { editSong = song },
+                onSetCoverArt = { launchCoverPicker(song) },
                 onDismiss = { songMenuTarget = null }
             )
         }
@@ -254,6 +266,7 @@ fun AlbumDetailScreen(
                     )
                 },
                 onEditMetadata = { editSong = song; infoSong = null },
+                onSetCoverArt = { launchCoverPicker(song); infoSong = null },
                 onSetRingtone = { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, song) },
                 onDismiss = { infoSong = null }
             )

@@ -41,6 +41,7 @@ fun MiniPlayer(
     progress: Float,
     accentColor: Color,
     onPlayPause: () -> Unit,
+    onSkipPrevious: () -> Unit,
     onSkipNext: () -> Unit,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
@@ -138,42 +139,55 @@ fun MiniPlayer(
                 )
             }
 
-            // Cible tactile ≥48dp (Fitts's Law) autour du bouton visuel de 38dp.
-            SgTapTarget(
-                onClick = onPlayPause,
-                interactionSource = playInteraction,
-                indication = null
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .graphicsLayer {
-                            scaleX = playScale
-                            scaleY = playScale
-                        }
-                        .background(
-                            Brush.radialGradient(listOf(displayAccent, displayAccent.copy(0.7f))),
-                            CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
+                SgTapTarget(onClick = onSkipPrevious) {
                     Icon(
-                        painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
-                        contentDescription = if (isPlaying) "Pause" else "Jouer",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        painter = painterResource(R.drawable.ic_previous),
+                        contentDescription = "Précédent",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(26.dp)
                     )
                 }
-            }
 
-            // Cible tactile ≥48dp autour de l'icône "suivant" (26dp).
-            SgTapTarget(onClick = onSkipNext) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_next),
-                    contentDescription = "Suivant",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(26.dp)
-                )
+                // Cible tactile ≥48dp (Fitts's Law) autour du bouton visuel de 38dp.
+                SgTapTarget(
+                    onClick = onPlayPause,
+                    interactionSource = playInteraction,
+                    indication = null
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .graphicsLayer {
+                                scaleX = playScale
+                                scaleY = playScale
+                            }
+                            .background(
+                                Brush.radialGradient(listOf(displayAccent, displayAccent.copy(0.7f))),
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
+                            contentDescription = if (isPlaying) "Pause" else "Jouer",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                SgTapTarget(onClick = onSkipNext) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_next),
+                        contentDescription = "Suivant",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
             }
         }
     }

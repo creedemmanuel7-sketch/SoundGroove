@@ -110,7 +110,7 @@ fun SongItem(
                     else
                         Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
                 )
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .padding(horizontal = 10.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -162,20 +162,9 @@ fun SongItem(
 
             Text(
                 text = formatDuration(song.duration),
-                color = TextSecondary,
-                fontSize = 12.sp
+                color = TextTertiary.copy(alpha = 0.7f),
+                fontSize = 11.sp
             )
-            Spacer(modifier = Modifier.width(8.dp))
-
-            if (isPlaying) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_songs),
-                    contentDescription = null,
-                    tint = IceAccent,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-            }
 
             if (showMenu) {
                 Box {

@@ -361,10 +361,11 @@ private fun SyncedLyricsList(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(currentLineIndex) {
+    LaunchedEffect(currentLineIndex, lines.size) {
         if (currentLineIndex >= 0 && lines.isNotEmpty()) {
+            val targetIndex = (currentLineIndex - 2).coerceIn(0, lines.lastIndex)
             scope.launch {
-                listState.animateScrollToItem((currentLineIndex - 2).coerceAtLeast(0))
+                runCatching { listState.animateScrollToItem(targetIndex) }
             }
         }
     }
@@ -410,7 +411,9 @@ private fun SyncedLyricsList(
                         scaleX = scale
                         scaleY = scale
                     }
-                    .clickable { onLineClick(line.timeMs) }
+                    .clickable {
+                        runCatching { onLineClick(line.timeMs) }
+                    }
                     .padding(horizontal = 24.dp, vertical = 4.dp)
             )
         }

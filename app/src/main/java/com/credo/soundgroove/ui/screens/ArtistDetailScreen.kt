@@ -14,20 +14,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.AlbumArtThumb
+import com.credo.soundgroove.ui.components.ArtistAvatarView
 import com.credo.soundgroove.ui.components.EditMetadataBottomSheet
 import com.credo.soundgroove.ui.components.SongContextMenuSheet
 import com.credo.soundgroove.ui.components.SongInfoBottomSheet
+import com.credo.soundgroove.ui.components.rememberSongCoverArtPicker
 import com.credo.soundgroove.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,13 +46,15 @@ fun ArtistDetailScreen(
     onPlayNext: (Song) -> Unit = {},
     onAddToQueue: (Song) -> Unit = {},
     onAddToPlaylist: (Song) -> Unit = {},
-    onSaveMetadata: (Song, String, String, String) -> Unit = { _, _, _, _ -> }
+    onSaveMetadata: (Song, String, String, String) -> Unit = { _, _, _, _ -> },
+    onSetCoverArt: (Song, android.net.Uri) -> Unit = { _, _ -> }
 ) {
     var songMenuTarget by remember { mutableStateOf<Song?>(null) }
     var infoSong by remember { mutableStateOf<Song?>(null) }
     var editSong by remember { mutableStateOf<Song?>(null) }
     val context = LocalContext.current
-    // Get a nice image for the artist (using first album art)
+    val launchCoverPicker = rememberSongCoverArtPicker(onCoverSelected = onSetCoverArt)
+
     val artistCover = songs.firstOrNull { it.albumArtUri != null }?.albumArtUri
 
     Box(
@@ -62,21 +64,18 @@ fun ArtistDetailScreen(
     ) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
 
-            // ── Header ────────────────────────────────────────────────────────
             item {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(280.dp)
                 ) {
-                    // Background blur / gradient
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(Brush.verticalGradient(listOf(GraphiteCard, MaterialTheme.colorScheme.background)))
                     )
 
-                    // Back Button
                     Box(
                         modifier = Modifier
                             .statusBarsPadding()
@@ -86,36 +85,29 @@ fun ArtistDetailScreen(
                             .clickable { onBack() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(painter = painterResource(R.drawable.ic_back), contentDescription = "Retour", tint = Color.White, modifier = Modifier.size(20.dp))
+                        Icon(
+                            painter = painterResource(R.drawable.ic_back),
+                            contentDescription = "Retour",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
 
-                    // Artist Info centered
                     Column(
-                        modifier = Modifier.align(Alignment.Center).padding(top = 40.dp),
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(top = 40.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(128.dp)
-                                .clip(CircleShape)
-                                .background(GlassSurface)
-                                .padding(if (artistCover == null) 30.dp else 0.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (artistCover != null) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(LocalContext.current).data(artistCover).crossfade(true).build(),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Icon(painter = painterResource(R.drawable.ic_profile), contentDescription = null, tint = accentColor, modifier = Modifier.fillMaxSize())
-                            }
-                        }
-                        
+                        ArtistAvatarView(
+                            albumArtUri = artistCover,
+                            artistName = artistName,
+                            size = 128.dp,
+                            accentColor = accentColor
+                        )
+
                         Spacer(modifier = Modifier.height(16.dp))
-                        
+
                         Text(
                             text = artistName,
                             color = Color.White,
@@ -133,7 +125,6 @@ fun ArtistDetailScreen(
                 }
             }
 
-            // ── Actions Bar ───────────────────────────────────────────────────
             item {
                 Row(
                     modifier = Modifier
@@ -145,12 +136,23 @@ fun ArtistDetailScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
-                            .background(Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor))), RoundedCornerShape(14.dp))
+                            .background(
+                                Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor))),
+                                RoundedCornerShape(14.dp)
+                            )
                             .clickable { songs.firstOrNull()?.let { onPlaySong(it) } },
                         contentAlignment = Alignment.Center
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(painter = painterResource(R.drawable.ic_play), contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_play),
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
                             Text("Lecture", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
                     }
@@ -163,17 +165,23 @@ fun ArtistDetailScreen(
                             .clickable { onShufflePlay() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(painter = painterResource(R.drawable.ic_shuffle), contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_shuffle),
+                                contentDescription = null,
+                                tint = accentColor,
+                                modifier = Modifier.size(18.dp)
+                            )
                             Text("Aléatoire", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
                     }
                 }
             }
 
-            // ── Song List ────────────────────────────────────────────────────
-            itemsIndexed(songs) { index, song ->
-                val isFav = favoriteSongs.any { it.id == song.id }
+            itemsIndexed(songs) { _, song ->
                 val isCurrent = song.id == currentSong?.id
 
                 Row(
@@ -184,31 +192,47 @@ fun ArtistDetailScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Cover
-                    Box(
-                        modifier = Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)).background(GraphiteCard),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (song.albumArtUri != null) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current).data(song.albumArtUri).crossfade(true).build(),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            Icon(painter = painterResource(R.drawable.ic_songs), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(20.dp))
-                        }
+                    Box(modifier = Modifier.size(46.dp)) {
+                        AlbumArtThumb(
+                            albumArtUri = song.albumArtUri,
+                            size = 46.dp,
+                            cornerRadius = 10.dp,
+                            accentColor = accentColor
+                        )
                         if (isCurrent) {
-                            Box(modifier = Modifier.fillMaxSize().background(accentColor.copy(alpha = 0.35f)), contentAlignment = Alignment.Center) {
-                                Icon(painter = painterResource(R.drawable.ic_play), contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(accentColor.copy(alpha = 0.35f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_play),
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
                         }
                     }
 
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(song.title, color = if (isCurrent) accentColor else TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(song.albumName, color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            song.title,
+                            color = if (isCurrent) accentColor else TextPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            song.albumName,
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
 
                     Icon(
@@ -224,7 +248,6 @@ fun ArtistDetailScreen(
             item { Spacer(modifier = Modifier.height(120.dp)) }
         }
 
-        // Song context menu
         songMenuTarget?.let { song ->
             SongContextMenuSheet(
                 song = song,
@@ -242,6 +265,7 @@ fun ArtistDetailScreen(
                     )
                 },
                 onEditMetadata = { editSong = song },
+                onSetCoverArt = { launchCoverPicker(song) },
                 onDismiss = { songMenuTarget = null }
             )
         }
@@ -261,6 +285,7 @@ fun ArtistDetailScreen(
                     )
                 },
                 onEditMetadata = { editSong = song; infoSong = null },
+                onSetCoverArt = { launchCoverPicker(song); infoSong = null },
                 onSetRingtone = { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, song) },
                 onDismiss = { infoSong = null }
             )

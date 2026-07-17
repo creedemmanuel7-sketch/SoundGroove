@@ -185,12 +185,27 @@ class DatabaseRepository(
         artist: String?,
         album: String?
     ) {
+        val existing = metadataOverrideDao.getBySongId(songId)
         metadataOverrideDao.upsert(
             MetadataOverrideEntity(
                 songId = songId,
-                title = title?.takeIf { it.isNotBlank() },
-                artist = artist?.takeIf { it.isNotBlank() },
-                album = album?.takeIf { it.isNotBlank() }
+                title = title?.takeIf { it.isNotBlank() } ?: existing?.title,
+                artist = artist?.takeIf { it.isNotBlank() } ?: existing?.artist,
+                album = album?.takeIf { it.isNotBlank() } ?: existing?.album,
+                coverArtUri = existing?.coverArtUri
+            )
+        )
+    }
+
+    suspend fun saveCoverArtOverride(songId: Long, coverArtUri: String) {
+        val existing = metadataOverrideDao.getBySongId(songId)
+        metadataOverrideDao.upsert(
+            MetadataOverrideEntity(
+                songId = songId,
+                title = existing?.title,
+                artist = existing?.artist,
+                album = existing?.album,
+                coverArtUri = coverArtUri
             )
         )
     }

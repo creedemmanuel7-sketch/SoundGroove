@@ -97,6 +97,7 @@ fun MainScreen(
     crossfadeDurationMs: Int = 0,
     onCrossfadeDurationChange: (Int) -> Unit = {},
     onSaveSongMetadata: (Song, String, String, String) -> Unit = { _, _, _, _ -> },
+    onSetSongCoverArt: (Song, android.net.Uri) -> Unit = { _, _ -> },
     metadataEditMessage: String? = null,
     onClearMetadataEditMessage: () -> Unit = {},
     songs: List<Song> = emptyList(),
@@ -305,7 +306,7 @@ fun MainScreen(
                 AnimatedContent(
                     targetState = selectedTab,
                     transitionSpec = {
-                        SgMotion.tabContentEnter() togetherWith SgMotion.tabContentExit()
+                        SgMotion.tabNavTransition(initialState, targetState)
                     },
                     label = "mainTab"
                 ) { tab ->
@@ -411,6 +412,7 @@ fun MainScreen(
                             overlayedSong = song
                             showEditMetadata = true
                         },
+                        onSetCoverArt = onSetSongCoverArt,
                         onShowPlaylistPicker = { song ->
                             overlayedSong = song
                             showPlaylistPicker = true
@@ -475,6 +477,7 @@ fun MainScreen(
                             if (activeIsPlaying) player.pause() else player.play()
                             localIsPlaying = !activeIsPlaying
                         },
+                        onSkipPrevious = { PlayerGuards.safeSeekToPrevious(player) },
                         onSkipNext = { PlayerGuards.safeSeekToNext(player) },
                         onOpen = onNavigateToPlayer
                     )

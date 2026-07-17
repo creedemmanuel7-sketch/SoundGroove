@@ -26,6 +26,7 @@ import com.credo.soundgroove.ui.components.CrossfadeBottomSheet
 import com.credo.soundgroove.ui.components.EditMetadataBottomSheet
 import com.credo.soundgroove.ui.components.PlaybackSpeedBottomSheet
 import com.credo.soundgroove.ui.components.SongInfoBottomSheet
+import com.credo.soundgroove.ui.components.rememberSongCoverArtPicker
 import com.credo.soundgroove.ui.screens.AlbumDetailScreen
 import com.credo.soundgroove.ui.screens.ArtistDetailScreen
 import com.credo.soundgroove.ui.screens.FolderDetailContent
@@ -77,6 +78,10 @@ fun AppNavigation(
     var showSongInfo by remember { mutableStateOf(false) }
     var showPlaybackSpeedSheet by remember { mutableStateOf(false) }
     var showEditMetadata by remember { mutableStateOf(false) }
+
+    val launchCoverPicker = rememberSongCoverArtPicker { song, uri ->
+        viewModel.saveSongCoverArt(song, uri)
+    }
 
     LaunchedEffect(metadataEditMessage) {
         metadataEditMessage?.let {
@@ -157,7 +162,7 @@ fun AppNavigation(
                 enterTransition = { SgMotion.playerEnter() },
                 exitTransition = { SgMotion.playerExit() },
                 popEnterTransition = { SgMotion.playerPopEnter() },
-                popExitTransition = { SgMotion.playerExit() }
+                popExitTransition = { SgMotion.playerPopExit() }
             ) {
                 val song = currentSong
                 val player = controller
@@ -223,7 +228,8 @@ fun AppNavigation(
                         onAddToPlaylist = { /* sélecteur de playlist non disponible depuis le détail */ },
                         onSaveMetadata = { song, title, artist, album ->
                             viewModel.saveSongMetadata(song, title, artist, album)
-                        }
+                        },
+                        onSetCoverArt = { song, uri -> viewModel.saveSongCoverArt(song, uri) }
                     )
                 }
             }
@@ -260,7 +266,8 @@ fun AppNavigation(
                         onPlayNext = { song -> viewModel.playNext(song) },
                         onAddToQueue = { song -> viewModel.addToQueue(song) },
                         onShowSongInfo = { /* info chanson non branchée depuis le détail dossier */ },
-                        onShowPlaylistPicker = { /* sélecteur de playlist non disponible depuis le détail dossier */ }
+                        onShowPlaylistPicker = { /* sélecteur de playlist non disponible depuis le détail dossier */ },
+                        onSetCoverArt = { song, uri -> viewModel.saveSongCoverArt(song, uri) }
                     )
                 }
             }
@@ -290,7 +297,8 @@ fun AppNavigation(
                     onAddToPlaylist = { /* sélecteur de playlist non disponible depuis le détail */ },
                     onSaveMetadata = { song, title, artist, album ->
                         viewModel.saveSongMetadata(song, title, artist, album)
-                    }
+                    },
+                    onSetCoverArt = { song, uri -> viewModel.saveSongCoverArt(song, uri) }
                 )
             }
 
@@ -319,7 +327,8 @@ fun AppNavigation(
                     onAddToPlaylist = { /* sélecteur de playlist non disponible depuis le détail */ },
                     onSaveMetadata = { song, title, artist, album ->
                         viewModel.saveSongMetadata(song, title, artist, album)
-                    }
+                    },
+                    onSetCoverArt = { song, uri -> viewModel.saveSongCoverArt(song, uri) }
                 )
             }
         }
@@ -337,6 +346,7 @@ fun AppNavigation(
                     progress = (playbackPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f),
                     accentColor = accentColor,
                     onPlayPause = { viewModel.togglePlayPause() },
+                    onSkipPrevious = { viewModel.skipPrevious() },
                     onSkipNext = { viewModel.skipNext() },
                     onOpen = { navController.navigate(Routes.PLAYER) },
                     modifier = Modifier
@@ -405,6 +415,7 @@ fun AppNavigation(
                         )
                     },
                     onEditMetadata = { showEditMetadata = true },
+                    onSetCoverArt = { currentSong?.let { launchCoverPicker(it) } },
                     onSetRingtone = { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, song) },
                     onDismiss = { showSongInfo = false }
                 )

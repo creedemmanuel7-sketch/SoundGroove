@@ -53,6 +53,7 @@ data class MetadataOverrideEntity(
     val title: String?,
     val artist: String?,
     val album: String?,
+    val coverArtUri: String? = null,
     val updatedAt: Long = System.currentTimeMillis()
 )
 
@@ -158,7 +159,7 @@ interface MetadataOverrideDao {
         PlaylistSongEntity::class,
         MetadataOverrideEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class SoundGrooveDatabase : RoomDatabase() {
@@ -186,6 +187,14 @@ abstract class SoundGrooveDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE metadata_overrides ADD COLUMN coverArtUri TEXT"
+                )
+            }
+        }
+
         fun getInstance(context: Context): SoundGrooveDatabase {
             return INSTANCE ?: synchronized(this) {
                 Room.databaseBuilder(
@@ -193,7 +202,7 @@ abstract class SoundGrooveDatabase : RoomDatabase() {
                     SoundGrooveDatabase::class.java,
                     "soundgroove.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build().also { INSTANCE = it }
             }
         }

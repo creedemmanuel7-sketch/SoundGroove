@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 import com.credo.soundgroove.MetadataOverrideEntity
 import com.credo.soundgroove.notifications.SmartNotificationManager
 import com.credo.soundgroove.ui.theme.AppTheme
+import com.credo.soundgroove.util.CoverArtStorage
 import com.credo.soundgroove.util.MetadataEditor
 import com.credo.soundgroove.util.PlaybackPreferences
 import com.credo.soundgroove.util.PlayerGuards
@@ -402,7 +403,8 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         return song.copy(
             title = override.title ?: song.title,
             artist = override.artist ?: song.artist,
-            albumName = override.album ?: song.albumName
+            albumName = override.album ?: song.albumName,
+            albumArtUri = override.coverArtUri?.let { Uri.parse(it) } ?: song.albumArtUri
         )
     }
 
@@ -446,18 +448,37 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun observeDatabase() {
         viewModelScope.launch {
-            dbRepository.getFavorites().collect { _favoriteSongs.value = it }
+            combine(
+                dbRepository.getFavorites(),
+                _metadataOverrides
+            ) { favs, _ -> favs.map { applyMetadataOverride(it) } }
+                .collect { _favoriteSongs.value = it }
         }
         viewModelScope.launch {
-            dbRepository.getRecentlyPlayed().collect { _recentlyPlayed.value = it }
+            combine(
+                dbRepository.getRecentlyPlayed(),
+                _metadataOverrides
+            ) { recent, _ -> recent.map { applyMetadataOverride(it) } }
+                .collect { _recentlyPlayed.value = it }
         }
         viewModelScope.launch {
-            dbRepository.getAllPlaylists().collect { _playlists.value = it }
+            combine(
+                dbRepository.getAllPlaylists(),
+                _metadataOverrides
+            ) { playlists, _ ->
+                playlists.map { playlist ->
+                    playlist.copy(songs = playlist.songs.map { applyMetadataOverride(it) })
+                }
+            }.collect { _playlists.value = it }
         }
         viewModelScope.launch {
             dbRepository.getMetadataOverrides().collect { overrides ->
                 _metadataOverrides.value = overrides
                 _allSongs.value = _allSongs.value.map { applyMetadataOverride(it) }
+                _currentSong.value?.let { current ->
+                    _currentSong.value = applyMetadataOverride(current)
+                }
+                _playbackQueue.value = _playbackQueue.value.map { applyMetadataOverride(it) }
             }
         }
     }
@@ -644,6 +665,43 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                         song.copy(title = title.trim(), artist = artist.trim(), albumName = album.trim())
                     )
                     controller.replaceMediaItem(index, updated)
+                }
+            }
+        }
+    }
+
+    fun saveSongCoverArt(song: Song, sourceUri: Uri) {
+        viewModelScope.launch {
+            val savedUri = CoverArtStorage.saveFromUri(getApplication(), song.id, sourceUri)
+            dbRepository.saveCoverArtOverride(song.id, savedUri.toString())
+            val updated = song.copy(albumArtUri = savedUri)
+            _allSongs.value = _allSongs.value.map { s ->
+                if (s.id == song.id) applyMetadataOverride(updated) else s
+            }
+            _currentSong.value?.takeIf { it.id == song.id }?.let { current ->
+                _currentSong.value = applyMetadataOverride(current.copy(albumArtUri = savedUri))
+            }
+            _playbackQueue.value = _playbackQueue.value.map { s ->
+                if (s.id == song.id) applyMetadataOverride(updated) else s
+            }
+            _favoriteSongs.value = _favoriteSongs.value.map { s ->
+                if (s.id == song.id) applyMetadataOverride(updated) else s
+            }
+            _recentlyPlayed.value = _recentlyPlayed.value.map { s ->
+                if (s.id == song.id) applyMetadataOverride(updated) else s
+            }
+            _playlists.value = _playlists.value.map { playlist ->
+                playlist.copy(
+                    songs = playlist.songs.map { s ->
+                        if (s.id == song.id) applyMetadataOverride(updated) else s
+                    }
+                )
+            }
+            val controller = _mediaController.value
+            if (controller != null && _currentSong.value?.id == song.id) {
+                val index = controller.currentMediaItemIndex
+                if (index in 0 until controller.mediaItemCount) {
+                    controller.replaceMediaItem(index, songToMediaItem(updated))
                 }
             }
         }

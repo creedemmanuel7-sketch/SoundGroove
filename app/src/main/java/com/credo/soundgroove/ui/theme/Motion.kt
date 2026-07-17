@@ -43,6 +43,9 @@ object SgMotion {
     /** M3 "Medium3" (350ms) — transitions "emphasized" : écrans pleine page. */
     const val SlowMs = 350
 
+    /** Révélation circulaire lors d'un changement de thème. */
+    const val ThemeRevealMs = 420
+
     /**
      * Durée de lissage de la barre de progression, calée sur l'intervalle de
      * polling du player (500ms) pour que l'anim rattrape la vraie position
@@ -118,22 +121,39 @@ object SgMotion {
         slideInVertically(initialOffsetY = { it / 6 }, animationSpec = tweenSlowOf()) +
             fadeIn(tweenMediumOf())
 
-    fun playerExit(): ExitTransition =
-        slideOutVertically(targetOffsetY = { it / 6 }, animationSpec = tweenMediumAccelOf()) +
-            fadeOut(tweenFastAccelOf())
+    fun playerExit(): ExitTransition = fadeOut(tweenFastAccelOf())
 
     fun playerPopEnter(): EnterTransition = fadeIn(tweenFastOf())
 
+    fun playerPopExit(): ExitTransition = ExitTransition.None
+
     private fun <T> tweenSlowOf() = tween<T>(SlowMs, easing = EmphasizedDecelerate)
 
-    /** Anim du morph de la pochette à l'ouverture du Player (scale 0.9 → 1). */
+    /** Scale initial pochette ≈ taille mini-player (44dp vs plein écran). */
+    const val PlayerArtMiniScale = 0.14f
+
+    /** Offset Y (px) simulant la position du mini-player en bas. */
+    const val PlayerArtEnterOffsetY = 220f
+
+    /** Anim du morph de la pochette à l'ouverture du Player (mini → plein). */
     fun playerArtEnterSpec(): AnimationSpec<Float> = tween(SlowMs, easing = EmphasizedDecelerate)
+
+    /** Morph symétrique à la fermeture (plein → mini). */
+    fun playerArtExitSpec(): AnimationSpec<Float> = tween(MediumMs, easing = EmphasizedAccelerate)
+
+    fun playerArtOffsetEnterSpec(): AnimationSpec<Float> = tween(SlowMs, easing = EmphasizedDecelerate)
+
+    fun playerArtOffsetExitSpec(): AnimationSpec<Float> = tween(MediumMs, easing = EmphasizedAccelerate)
 
     /** Délai avant le fade-in du "chrome" (titre, slider, contrôles) après la pochette. */
     const val PlayerChromeDelayMs = 60
 
     /** Anim de fade du "chrome" une fois la pochette lancée. */
     fun playerChromeEnterSpec(): AnimationSpec<Float> = tween(MediumMs, easing = EmphasizedDecelerate)
+
+    fun playerChromeExitSpec(): AnimationSpec<Float> = tween(FastMs, easing = EmphasizedAccelerate)
+
+    fun themeRevealSpec(): AnimationSpec<Float> = tween(ThemeRevealMs, easing = EmphasizedDecelerate)
 
     // ── Overlays (mini-player, queue, sheets) ───────────────────────────────
 
@@ -160,6 +180,28 @@ object SgMotion {
 
     fun tabContentExit(): ExitTransition =
         fadeOut(tweenFastAccelOf()) + scaleOut(targetScale = 0.98f, animationSpec = tweenFastAccelOf())
+
+    /** Transition directionnelle entre onglets navbar (fade + slide subtil). */
+    fun tabNavTransition(fromTab: Int, toTab: Int): ContentTransform {
+        val direction = when {
+            toTab > fromTab -> 1
+            toTab < fromTab -> -1
+            else -> 0
+        }
+        val enter = fadeIn(tweenMediumOf()) +
+            slideInHorizontally(
+                initialOffsetX = { direction * it / 10 },
+                animationSpec = tweenMediumOf()
+            ) +
+            scaleIn(initialScale = 0.985f, animationSpec = tweenMediumOf())
+        val exit = fadeOut(tweenFastAccelOf()) +
+            slideOutHorizontally(
+                targetOffsetX = { -direction * it / 10 },
+                animationSpec = tweenFastAccelOf()
+            ) +
+            scaleOut(targetScale = 0.985f, animationSpec = tweenFastAccelOf())
+        return enter togetherWith exit
+    }
 }
 
 /**

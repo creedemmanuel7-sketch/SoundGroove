@@ -109,32 +109,60 @@ fun PlayerScreen(
     val density = androidx.compose.ui.platform.LocalDensity.current
     val scope = rememberCoroutineScope()
 
-    // Morph d'ouverture inspiré de la transition "Now Playing" d'Apple Music
-    // (kodeco.com/221-recreating-the-apple-music-now-playing-transition) : la
-    // pochette "grandit" légèrement vers sa taille finale pendant que le reste
-    // de l'écran (chrome) apparaît juste après, en fondu. Ceci donne une
-    // sensation de continuité avec le mini-player sans dépendre d'un shared
-    // element position-matché (voir docs/UX_MOTION_GUIDELINES.md, section
-    // "Ce qui reste").
-    val artScale = remember { Animatable(0.9f) }
+    // Morph d'ouverture / fermeture inspiré de la transition "Now Playing" d'Apple Music :
+    // la pochette part de la taille mini-player (scale ~0.14) et remonte vers le centre ;
+    // le chrome apparaît / disparaît en fondu décalé. Symétrique à la fermeture.
+    val artScale = remember { Animatable(SgMotion.PlayerArtMiniScale) }
+    val artOffsetY = remember { Animatable(SgMotion.PlayerArtEnterOffsetY) }
     val chromeAlpha = remember { Animatable(0f) }
-    // Respecte le réglage système "Suppression des animations" (équivalent Android
-    // du "Reduce Motion" des Apple HIG) : l'écran apparaît directement dans son
-    // état final, sans morph, plutôt que de forcer l'animation à ceux qui l'ont
-    // désactivée. Cf. docs/UX_MOTION_GUIDELINES.md.
+    var isExiting by remember { mutableStateOf(false) }
     val reducedMotion = rememberSgReducedMotion()
-    LaunchedEffect(reducedMotion) {
+
+    suspend fun runEnterAnimation() {
         if (reducedMotion) {
             artScale.snapTo(1f)
+            artOffsetY.snapTo(0f)
             chromeAlpha.snapTo(1f)
-            return@LaunchedEffect
+            return
         }
-        launch { artScale.animateTo(1f, animationSpec = SgMotion.playerArtEnterSpec()) }
-        launch {
-            kotlinx.coroutines.delay(SgMotion.PlayerChromeDelayMs.toLong())
-            chromeAlpha.animateTo(1f, animationSpec = SgMotion.playerChromeEnterSpec())
+        kotlinx.coroutines.coroutineScope {
+            launch { artScale.animateTo(1f, animationSpec = SgMotion.playerArtEnterSpec()) }
+            launch { artOffsetY.animateTo(0f, animationSpec = SgMotion.playerArtOffsetEnterSpec()) }
+            launch {
+                kotlinx.coroutines.delay(SgMotion.PlayerChromeDelayMs.toLong())
+                chromeAlpha.animateTo(1f, animationSpec = SgMotion.playerChromeEnterSpec())
+            }
         }
     }
+
+    suspend fun runExitAnimation() {
+        if (reducedMotion) {
+            artScale.snapTo(SgMotion.PlayerArtMiniScale)
+            artOffsetY.snapTo(SgMotion.PlayerArtEnterOffsetY)
+            chromeAlpha.snapTo(0f)
+            return
+        }
+        kotlinx.coroutines.coroutineScope {
+            launch { chromeAlpha.animateTo(0f, animationSpec = SgMotion.playerChromeExitSpec()) }
+            launch { artOffsetY.animateTo(SgMotion.PlayerArtEnterOffsetY, animationSpec = SgMotion.playerArtOffsetExitSpec()) }
+            launch { artScale.animateTo(SgMotion.PlayerArtMiniScale, animationSpec = SgMotion.playerArtExitSpec()) }
+        }
+    }
+
+    fun dismissPlayer() {
+        if (isExiting) return
+        scope.launch {
+            isExiting = true
+            runExitAnimation()
+            onClose()
+        }
+    }
+
+    LaunchedEffect(reducedMotion) {
+        runEnterAnimation()
+    }
+
+    BackHandler(onBack = { dismissPlayer() })
 
     LaunchedEffect(player) {
         while (true) {
@@ -163,7 +191,7 @@ fun PlayerScreen(
                 detectVerticalDragGestures(
                     onDragEnd = {
                         when {
-                            verticalDragOffset > 120f -> onSwipeDown()
+                            verticalDragOffset > 120f -> dismissPlayer()
                             verticalDragOffset < -120f -> onSwipeUp()
                         }
                         verticalDragOffset = 0f
@@ -232,7 +260,7 @@ fun PlayerScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Cible tactile 48dp (Fitts's Law) — la zone cliquable dépasse le glyphe visuel.
-                SgTapTarget(onClick = onClose) {
+                SgTapTarget(onClick = { dismissPlayer() }) {
                     Box(
                         modifier = Modifier
                             .size(40.dp)
@@ -342,11 +370,18 @@ fun PlayerScreen(
             // Pochette
             Box(
                 modifier = Modifier
-                    .offset { androidx.compose.ui.unit.IntOffset(dragOffsetX.toInt(), 0) }
+                    .offset {
+                        IntOffset(
+                            dragOffsetX.toInt(),
+                            (artOffsetY.value + verticalDragOffset.coerceAtLeast(0f)).toInt()
+                        )
+                    }
                     .fillMaxWidth(0.82f)
                     .aspectRatio(1f)
-                    // Morph d'ouverture : la pochette "grandit" depuis 0.9 → 1 (cf. artScale).
-                    .graphicsLayer { scaleX = artScale.value; scaleY = artScale.value }
+                    .graphicsLayer {
+                        scaleX = artScale.value
+                        scaleY = artScale.value
+                    }
                     .border(1.dp, displayAccent.copy(alpha = 0.22f), RoundedCornerShape(SgRadius.xl))
                     .clip(RoundedCornerShape(SgRadius.xl))
                     .background(SurfaceElevated)

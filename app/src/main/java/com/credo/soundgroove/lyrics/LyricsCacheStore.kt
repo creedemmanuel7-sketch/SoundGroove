@@ -20,11 +20,12 @@ object LyricsCacheStore {
         return runCatching { file.readText() }.getOrNull()?.takeIf { it.isNotBlank() }
     }
 
-    fun write(context: Context, songId: Long, rawText: String) {
-        cacheFile(context, songId).writeText(rawText)
-    }
+    fun write(context: Context, songId: Long, rawText: String): Boolean =
+        runCatching {
+            cacheFile(context, songId).writeText(rawText)
+            true
+        }.getOrDefault(false)
 
-    fun delete(context: Context, songId: Long) {
-        cacheFile(context, songId).delete()
-    }
+    fun delete(context: Context, songId: Long): Boolean =
+        runCatching { cacheFile(context, songId).delete() }.getOrDefault(false)
 }

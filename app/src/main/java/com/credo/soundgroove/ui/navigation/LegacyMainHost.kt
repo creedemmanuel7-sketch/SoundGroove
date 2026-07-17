@@ -99,6 +99,7 @@ fun LegacyMainHost(
             onSaveSongMetadata = { song, title, artist, album ->
                 viewModel.saveSongMetadata(song, title, artist, album)
             },
+            onSetSongCoverArt = { song, uri -> viewModel.saveSongCoverArt(song, uri) },
             metadataEditMessage = metadataEditMessage,
             onClearMetadataEditMessage = { viewModel.clearMetadataEditMessage() },
             onNavigateToPlaylist = onNavigateToPlaylist,

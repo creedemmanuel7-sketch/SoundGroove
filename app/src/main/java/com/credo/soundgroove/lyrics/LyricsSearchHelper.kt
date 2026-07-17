@@ -19,7 +19,9 @@ object LyricsSearchHelper {
     }
 
     private fun launchBrowser(context: Context, url: String) {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-        context.startActivity(intent)
+        runCatching {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            context.startActivity(intent)
+        }
     }
 }

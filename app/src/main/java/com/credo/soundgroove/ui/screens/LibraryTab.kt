@@ -97,6 +97,7 @@ fun LibraryTab(
     onShowSongInfo: (Song) -> Unit = {},
     onShareCard: (Song) -> Unit = {},
     onEditMetadata: (Song) -> Unit = {},
+    onSetCoverArt: (Song, android.net.Uri) -> Unit = { _, _ -> },
     onShowPlaylistPicker: (Song) -> Unit = {},
     selectedTab: Int = 0,
     onSelectedTabChange: (Int) -> Unit = {},
@@ -110,6 +111,9 @@ fun LibraryTab(
     var selectedFolder by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     var folderMenuTarget by remember { mutableStateOf<String?>(null) }
     var showHideFolderConfirm by remember { mutableStateOf(false) }
+    val launchCoverPicker = com.credo.soundgroove.ui.components.rememberSongCoverArtPicker(
+        onCoverSelected = onSetCoverArt
+    )
     
     BackHandler(enabled = selectedAlbum != null) { selectedAlbum = null }
     BackHandler(enabled = selectedArtist != null) { selectedArtist = null }
@@ -293,7 +297,8 @@ fun LibraryTab(
 
                             LazyColumn(
                                 modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                contentPadding = PaddingValues(vertical = 4.dp)
                             ) {
                                 items(displaySongs, key = { it.id }) { song ->
                                     com.credo.soundgroove.ui.components.SongListItem(
@@ -328,6 +333,7 @@ fun LibraryTab(
                                 onViewInfo = { onShowSongInfo(song); menuSong = null },
                                 onShareCard = { onShareCard(song); menuSong = null },
                                 onEditMetadata = { onEditMetadata(song); menuSong = null },
+                                onSetCoverArt = { launchCoverPicker(song); menuSong = null },
                                 onDismiss = { menuSong = null }
                             )
                         }
@@ -364,6 +370,20 @@ fun LibraryTab(
                                                 contentScale = ContentScale.Crop,
                                                 modifier = Modifier.fillMaxSize()
                                             )
+                                        } else {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(sgHeroPlaceholderBrush()),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.ic_songs),
+                                                    contentDescription = null,
+                                                    tint = accentColor.copy(alpha = 0.5f),
+                                                    modifier = Modifier.size(36.dp)
+                                                )
+                                            }
                                         }
                                         Box(
                                             modifier = Modifier
@@ -417,32 +437,17 @@ fun LibraryTab(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
-                                    modifier = Modifier
-                                        .size(46.dp)
-                                        .clip(CircleShape)
-                                        .background(GraphiteCard),
+                                    modifier = Modifier.size(46.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     val coverSong =
                                         artistSongs.firstOrNull { it.albumArtUri != null }
-                                    if (coverSong?.albumArtUri != null) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(LocalContext.current)
-                                                .data(coverSong.albumArtUri)
-                                                .crossfade(true)
-                                                .build(),
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    } else {
-                                        Text(
-                                            text = artist.firstOrNull()?.uppercase() ?: "?",
-                                            color = Color.White,
-                                            fontSize = 18.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
+                                    com.credo.soundgroove.ui.components.ArtistAvatarView(
+                                        albumArtUri = coverSong?.albumArtUri,
+                                        artistName = artist,
+                                        size = 46.dp,
+                                        accentColor = accentColor
+                                    )
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
@@ -888,6 +893,7 @@ fun LibraryTab(
                             onShowSongInfo = onShowSongInfo,
                             onShareCard = onShareCard,
                             onEditMetadata = onEditMetadata,
+                            onSetCoverArt = onSetCoverArt,
                             onShowPlaylistPicker = onShowPlaylistPicker
                         )
                     } else if (folders.isEmpty()) {
@@ -1151,9 +1157,13 @@ fun FolderDetailContent(
     onShowSongInfo: (Song) -> Unit,
     onShareCard: (Song) -> Unit = {},
     onEditMetadata: (Song) -> Unit = {},
+    onSetCoverArt: (Song, android.net.Uri) -> Unit = { _, _ -> },
     onShowPlaylistPicker: (Song) -> Unit
 ) {
     var menuSong by remember { mutableStateOf<Song?>(null) }
+    val launchCoverPicker = com.credo.soundgroove.ui.components.rememberSongCoverArtPicker(
+        onCoverSelected = onSetCoverArt
+    )
     val folderLabel = folderName.substringAfterLast('/').ifBlank { "Dossier inconnu" }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -1222,7 +1232,8 @@ fun FolderDetailContent(
 
         LazyColumn(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(vertical = 4.dp)
         ) {
             items(folderSongs, key = { it.id }) { song ->
                 com.credo.soundgroove.ui.components.SongListItem(
@@ -1249,6 +1260,7 @@ fun FolderDetailContent(
             onViewInfo = { onShowSongInfo(song); menuSong = null },
             onShareCard = { onShareCard(song); menuSong = null },
             onEditMetadata = { onEditMetadata(song); menuSong = null },
+            onSetCoverArt = { launchCoverPicker(song); menuSong = null },
             onDismiss = { menuSong = null }
         )
     }
