@@ -1,5 +1,6 @@
 package com.credo.soundgroove.ui.screens
 
+import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -28,9 +29,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,10 +50,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -58,11 +66,14 @@ import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.lyrics.LyricLine
 import com.credo.soundgroove.lyrics.LyricsContent
+import com.credo.soundgroove.lyrics.LyricsSearchHelper
 import com.credo.soundgroove.lyrics.LyricsViewModel
+import com.credo.soundgroove.ui.theme.BorderSubtle
 import com.credo.soundgroove.ui.theme.GlassBorder
 import com.credo.soundgroove.ui.theme.GlassSurface
 import com.credo.soundgroove.ui.theme.SgMotion
-import com.credo.soundgroove.ui.theme.SurfaceOverlay
+import com.credo.soundgroove.ui.theme.SgRadius
+import com.credo.soundgroove.ui.theme.SurfaceElevated
 import com.credo.soundgroove.ui.theme.TextPrimary
 import com.credo.soundgroove.ui.theme.TextSecondary
 import com.credo.soundgroove.ui.theme.TextTertiary
@@ -72,9 +83,8 @@ import kotlinx.coroutines.launch
 /**
  * Écran/overlay Paroles — bottom sheet 3/4+ ouvert depuis le PlayerScreen.
  *
- * Trois états : synchronisé (.lrc, ligne active surlignée + auto-scroll),
- * texte simple (.txt ou .lrc sans horodatage), et vide (aucun fichier trouvé).
- * Zéro dépendance réseau en v1 — voir LyricsRepository pour la logique locale.
+ * États : synchronisé (.lrc), texte simple (.txt), saisie manuelle, et vide.
+ * Cache local prioritaire pour un affichage instantané au retour sur un morceau.
  */
 @Composable
 fun LyricsScreen(
@@ -85,6 +95,7 @@ fun LyricsScreen(
     onClose: () -> Unit,
     viewModel: LyricsViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     var verticalDragOffset by remember { mutableStateOf(0f) }
 
     LaunchedEffect(song.id) {
@@ -97,15 +108,16 @@ fun LyricsScreen(
 
     val content by viewModel.lyricsContent.collectAsState()
     val currentLineIndex by viewModel.currentLineIndex.collectAsState()
+    val isEditing by viewModel.isEditing.collectAsState()
+    val isSaving by viewModel.isSaving.collectAsState()
+    val saveError by viewModel.saveError.collectAsState()
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight(0.92f)
             .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .background(
-                sgSheetGradientBrush()
-            )
+            .background(sgSheetGradientBrush())
             .pointerInput(Unit) { detectTapGestures { } }
             .pointerInput(Unit) {
                 detectVerticalDragGestures(
@@ -186,19 +198,156 @@ fun LyricsScreen(
                     .weight(1f)
                     .fillMaxWidth()
             ) {
-                when (val state = content) {
-                    is LyricsContent.Loading -> LoadingLyricsState(accentColor)
-                    is LyricsContent.Synced -> SyncedLyricsList(
-                        lines = state.lines,
+                when {
+                    isEditing -> PasteLyricsEditor(
+                        song = song,
+                        accentColor = accentColor,
+                        isSaving = isSaving,
+                        saveError = saveError,
+                        onCancel = { viewModel.cancelEditing() },
+                        onSave = { raw -> viewModel.saveLyrics(song, raw) }
+                    )
+                    content is LyricsContent.Loading -> LoadingLyricsState(accentColor)
+                    content is LyricsContent.SearchingOnline -> SearchingOnlineLyricsState(accentColor)
+                    content is LyricsContent.Synced -> SyncedLyricsList(
+                        lines = (content as LyricsContent.Synced).lines,
                         currentLineIndex = currentLineIndex,
                         accentColor = accentColor,
                         onLineClick = { timeMs -> player.seekTo(timeMs) }
                     )
-                    is LyricsContent.PlainText -> PlainTextLyrics(text = state.text)
-                    is LyricsContent.NotFound -> EmptyLyricsState()
+                    content is LyricsContent.PlainText -> PlainTextLyrics(
+                        text = (content as LyricsContent.PlainText).text
+                    )
+                    else -> EmptyLyricsState(
+                        accentColor = accentColor,
+                        onOpenSearch = {
+                            LyricsSearchHelper.openGoogleLyricsSearch(context, song)
+                        },
+                        onPasteLyrics = { viewModel.startEditing() }
+                    )
                 }
             }
         }
+    }
+
+    var wasEditing by remember { mutableStateOf(false) }
+    LaunchedEffect(isEditing, content, isSaving) {
+        if (wasEditing && !isEditing && !isSaving && content !is LyricsContent.NotFound && content !is LyricsContent.Loading) {
+            Toast.makeText(context, "Paroles enregistrées", Toast.LENGTH_SHORT).show()
+        }
+        wasEditing = isEditing
+    }
+}
+
+@Composable
+private fun PasteLyricsEditor(
+    song: Song,
+    accentColor: Color,
+    isSaving: Boolean,
+    saveError: String?,
+    onCancel: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var draft by remember(song.id) { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 4.dp)
+    ) {
+        Text(
+            text = "Coller ou saisir les paroles",
+            color = TextPrimary,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Copiez depuis Genius, AZLyrics ou un autre site, puis collez ici. Format LRC avec horodatages accepté.",
+            color = TextSecondary,
+            fontSize = 12.sp,
+            lineHeight = 17.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            placeholder = {
+                Text(
+                    "Collez les paroles ici…",
+                    color = TextTertiary,
+                    fontSize = 14.sp
+                )
+            },
+            enabled = !isSaving,
+            shape = RoundedCornerShape(SgRadius.md),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = accentColor.copy(alpha = 0.5f),
+                unfocusedBorderColor = BorderSubtle.copy(alpha = 0.45f),
+                focusedContainerColor = SurfaceElevated.copy(alpha = 0.45f),
+                unfocusedContainerColor = SurfaceElevated.copy(alpha = 0.28f),
+                focusedTextColor = TextPrimary,
+                unfocusedTextColor = TextPrimary,
+                cursorColor = accentColor
+            )
+        )
+
+        if (saveError != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = saveError,
+                color = Color(0xFFFF6B6B),
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(
+                onClick = onCancel,
+                enabled = !isSaving,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(SgRadius.pill),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary)
+            ) {
+                Text("Annuler")
+            }
+            Button(
+                onClick = { onSave(draft) },
+                enabled = !isSaving && draft.trim().isNotBlank(),
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(SgRadius.pill),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = accentColor,
+                    contentColor = Color.Black
+                )
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = Color.Black,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("Enregistrer", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
@@ -296,11 +445,42 @@ private fun LoadingLyricsState(accentColor: Color) {
 }
 
 @Composable
-private fun EmptyLyricsState() {
+private fun SearchingOnlineLyricsState(accentColor: Color) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        CircularProgressIndicator(color = accentColor)
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Recherche en ligne…",
+            color = TextPrimary,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "Interrogation de LRCLIB pour ce morceau",
+            color = TextSecondary,
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun EmptyLyricsState(
+    accentColor: Color,
+    onOpenSearch: () -> Unit,
+    onPasteLyrics: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -320,18 +500,58 @@ private fun EmptyLyricsState() {
         }
         Spacer(modifier = Modifier.height(20.dp))
         Text(
-            text = "Aucune parole trouvée",
+            text = "Aucune parole disponible",
             color = TextPrimary,
             fontSize = 17.sp,
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Ajoutez un fichier .lrc (paroles synchronisées) ou .txt portant le même nom que ce morceau, dans le même dossier, pour l'afficher ici.",
+            text = "Recherchez les paroles en ligne, copiez-les, puis enregistrez-les pour ce morceau. Les paroles trouvées automatiquement ou saisies manuellement seront mémorisées pour les prochaines écoutes.",
             color = TextSecondary,
             fontSize = 13.sp,
             lineHeight = 18.sp,
             textAlign = TextAlign.Center
         )
+        Spacer(modifier = Modifier.height(28.dp))
+
+        Button(
+            onClick = onOpenSearch,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(SgRadius.pill),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = accentColor,
+                contentColor = Color.Black
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Filled.OpenInNew,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Ouvrir un site de paroles", fontWeight = FontWeight.SemiBold)
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        OutlinedButton(
+            onClick = onPasteLyrics,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(SgRadius.pill),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary)
+        ) {
+            Text("Coller les paroles")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        TextButton(onClick = onOpenSearch) {
+            Text(
+                text = "Recherche Google : titre + artiste + lyrics",
+                color = TextTertiary,
+                fontSize = 12.sp
+            )
+        }
     }
 }

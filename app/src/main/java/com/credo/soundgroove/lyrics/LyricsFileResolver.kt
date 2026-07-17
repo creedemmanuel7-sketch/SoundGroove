@@ -35,6 +35,24 @@ object LyricsFileResolver {
         return null
     }
 
+    /**
+     * Tente d'écrire un fichier de paroles à côté de l'audio si le dossier est accessible
+     * en écriture. Retourne false sans erreur si l'écriture n'est pas possible.
+     */
+    fun tryWriteLyricsFile(context: Context, song: Song, rawText: String): Boolean {
+        val audioPath = resolveAudioFilePath(context, song) ?: return false
+        val audioFile = File(audioPath)
+        val parent = audioFile.parentFile ?: return false
+        if (!runCatching { parent.canWrite() }.getOrDefault(false)) return false
+
+        val extension = if (LrcParser.isLikelySynced(rawText)) "lrc" else "txt"
+        val target = File(parent, "${audioFile.nameWithoutExtension}.$extension")
+        return runCatching {
+            target.writeText(rawText)
+            true
+        }.getOrDefault(false)
+    }
+
     private fun resolveAudioFilePath(context: Context, song: Song): String? = runCatching {
         context.contentResolver.query(
             song.uri,
