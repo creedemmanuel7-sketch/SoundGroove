@@ -65,3 +65,85 @@ fun rememberAlbumArtAccentColor(albumArtUri: Uri?, defaultColor: Color): Color {
 fun blendWithAlbumArt(themeAccent: Color, albumAccent: Color, weight: Float = 0.42f): Color {
     return lerp(themeAccent, albumAccent, weight.coerceIn(0f, 1f))
 }
+
+/**
+ * Palette dédiée à un écran immersif plein écran (Paroles) : un fond sombre
+ * "premium" dérivé de la pochette + des accents garantis lisibles pour le
+ * texte actif/inactif, quelle que soit la pochette d'origine.
+ */
+data class LyricsPalette(
+    val backgroundTop: Color,
+    val backgroundCenter: Color,
+    val backgroundBottom: Color,
+    val activeText: Color,
+    val inactiveText: Color
+)
+
+@Composable
+fun rememberLyricsPalette(albumArtUri: Uri?, fallbackAccent: Color): LyricsPalette {
+    val context = LocalContext.current
+    val fallback = remember(fallbackAccent) { fallbackLyricsPalette(fallbackAccent) }
+    var palette by remember(albumArtUri, fallbackAccent) { mutableStateOf(fallback) }
+
+    LaunchedEffect(albumArtUri, fallbackAccent) {
+        if (albumArtUri == null) {
+            palette = fallback
+            return@LaunchedEffect
+        }
+        try {
+            val loader = Coil.imageLoader(context)
+            val request = ImageRequest.Builder(context)
+                .data(albumArtUri)
+                .allowHardware(false)
+                .build()
+            val result = loader.execute(request)
+            val bitmap = (result as? SuccessResult)?.drawable as? BitmapDrawable
+            if (bitmap == null) {
+                palette = fallback
+                return@LaunchedEffect
+            }
+            Palette.from(bitmap.bitmap).generate { generated ->
+                palette = generated?.let { buildLyricsPalette(it, fallbackAccent) } ?: fallback
+            }
+        } catch (_: Exception) {
+            palette = fallback
+        }
+    }
+
+    return palette
+}
+
+private fun fallbackLyricsPalette(accent: Color): LyricsPalette {
+    val base = darken(accent, 0.7f)
+    return LyricsPalette(
+        backgroundTop = darken(accent, 0.5f),
+        backgroundCenter = base,
+        backgroundBottom = darken(accent, 0.86f),
+        activeText = ensureReadableOnDark(accent),
+        inactiveText = Color.White.copy(alpha = 0.55f)
+    )
+}
+
+private fun buildLyricsPalette(palette: Palette, fallbackAccent: Color): LyricsPalette {
+    val bgSwatch = palette.darkMutedSwatch ?: palette.dominantSwatch ?: palette.mutedSwatch
+    val accentSwatch = palette.vibrantSwatch ?: palette.lightVibrantSwatch ?: palette.dominantSwatch
+
+    val bgBase = bgSwatch?.rgb?.let { Color(it) } ?: fallbackAccent
+    val accentBase = accentSwatch?.rgb?.let { Color(it) } ?: fallbackAccent
+
+    return LyricsPalette(
+        backgroundTop = darken(bgBase, 0.35f),
+        backgroundCenter = darken(bgBase, 0.62f),
+        backgroundBottom = darken(bgBase, 0.85f),
+        activeText = ensureReadableOnDark(accentBase),
+        inactiveText = Color.White.copy(alpha = 0.5f)
+    )
+}
+
+private fun darken(color: Color, weight: Float): Color = lerp(color, Color.Black, weight.coerceIn(0f, 1f))
+
+/** Éclaircit une couleur d'accent trop sombre pour rester lisible sur un fond noir. */
+private fun ensureReadableOnDark(color: Color): Color {
+    val luminance = 0.299f * color.red + 0.587f * color.green + 0.114f * color.blue
+    return if (luminance < 0.4f) lerp(color, Color.White, 0.45f) else color
+}

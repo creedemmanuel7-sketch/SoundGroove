@@ -22,8 +22,13 @@ object PlayerActions {
         context.startActivity(Intent.createChooser(shareIntent, "Partager"))
     }
 
-    fun shareSongCard(context: Context, song: Song, accentArgb: Int = 0xFFD4AF37.toInt()) {
-        ShareCardGenerator.shareCard(context, song, accentArgb)
+    fun shareSongCard(
+        context: Context,
+        song: Song,
+        accentArgb: Int = 0xFF00D6F9.toInt(),
+        format: ShareCardGenerator.ShareCardFormat = ShareCardGenerator.ShareCardFormat.STORY,
+    ) {
+        ShareCardGenerator.shareCard(context, song, accentArgb, format)
     }
 
     fun setAsRingtone(context: Context, song: Song): Boolean {

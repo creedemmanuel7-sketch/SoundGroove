@@ -35,6 +35,18 @@ class LyricsViewModel(application: Application) : AndroidViewModel(application) 
     private val _saveError = MutableStateFlow<String?>(null)
     val saveError: StateFlow<String?> = _saveError.asStateFlow()
 
+    private val _editingDraft = MutableStateFlow("")
+    val editingDraft: StateFlow<String> = _editingDraft.asStateFlow()
+
+    /**
+     * Décalage de synchronisation (ms) appliqué avant de déterminer la ligne active.
+     * Négatif = les lignes s'illuminent plus tôt, ce qui corrige un ressenti de
+     * paroles "en retard" (latence d'affichage + décalage de perception). Volontairement
+     * gardé configurable ici plutôt qu'en dur, sans dépendre du fichier LRC source.
+     */
+    private val _syncOffsetMs = MutableStateFlow(DEFAULT_SYNC_OFFSET_MS)
+    val syncOffsetMs: StateFlow<Long> = _syncOffsetMs.asStateFlow()
+
     private var loadedSongId: Long? = null
     private var loadJob: Job? = null
 
@@ -84,13 +96,15 @@ class LyricsViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun startEditing() {
+    fun startEditing(initialText: String = "") {
         _saveError.value = null
+        _editingDraft.value = initialText
         _isEditing.value = true
     }
 
     fun cancelEditing() {
         _saveError.value = null
+        _editingDraft.value = ""
         _isEditing.value = false
     }
 
@@ -118,13 +132,19 @@ class LyricsViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** Ajuste le décalage de synchronisation à la volée (ex. depuis un futur réglage utilisateur). */
+    fun setSyncOffsetMs(offsetMs: Long) {
+        _syncOffsetMs.value = offsetMs
+    }
+
     /** À appeler régulièrement avec la position de lecture courante (ms). */
     fun updatePlaybackPosition(positionMs: Long) {
         val synced = _lyricsContent.value as? LyricsContent.Synced ?: run {
             if (_currentLineIndex.value != -1) _currentLineIndex.value = -1
             return
         }
-        val index = synced.lines.indexOfLast { it.timeMs <= positionMs }
+        val adjustedPositionMs = (positionMs - _syncOffsetMs.value).coerceAtLeast(0L)
+        val index = synced.lines.indexOfLast { it.timeMs <= adjustedPositionMs }
         if (index != _currentLineIndex.value) {
             _currentLineIndex.value = index
         }
@@ -133,5 +153,10 @@ class LyricsViewModel(application: Application) : AndroidViewModel(application) 
     override fun onCleared() {
         super.onCleared()
         loadJob?.cancel()
+    }
+
+    companion object {
+        /** Léger décalage par défaut suggéré : compense un ressenti de paroles en retard. */
+        const val DEFAULT_SYNC_OFFSET_MS = -200L
     }
 }

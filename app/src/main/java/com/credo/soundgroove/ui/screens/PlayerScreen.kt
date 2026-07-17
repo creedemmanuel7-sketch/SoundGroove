@@ -104,6 +104,7 @@ fun PlayerScreen(
     var currentPosition by remember { mutableStateOf(0L) }
     var dragOffsetX by remember { mutableStateOf(0f) }
     var verticalDragOffset by remember { mutableStateOf(0f) }
+    var lyricsSwipeOffsetX by remember { mutableStateOf(0f) }
     var showOptionsMenu by remember { mutableStateOf(false) }
     val swipeThreshold = 100.dp
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -200,6 +201,24 @@ fun PlayerScreen(
                     onVerticalDrag = { change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Float ->
                         change.consume()
                         verticalDragOffset += dragAmount
+                    }
+                )
+            }
+            // Swipe horizontal Player → Paroles, au même niveau que le drag sur la
+            // pochette (qui change de piste) : la pochette consomme déjà ses propres
+            // deltas horizontaux (cf. plus bas), donc ce détecteur ne se déclenche
+            // que pour un swipe démarré ailleurs sur l'écran (header, titre, slider,
+            // contrôles) — pas de conflit avec le changement de piste au doigt.
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (lyricsSwipeOffsetX < -100f) onOpenLyrics()
+                        lyricsSwipeOffsetX = 0f
+                    },
+                    onDragCancel = { lyricsSwipeOffsetX = 0f },
+                    onHorizontalDrag = { change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Float ->
+                        change.consume()
+                        lyricsSwipeOffsetX += dragAmount
                     }
                 )
             }
@@ -399,7 +418,12 @@ fun PlayerScreen(
                                 }
                             },
                             onDragCancel = { dragOffsetX = 0f },
-                            onHorizontalDrag = { _, dragAmount ->
+                            onHorizontalDrag = { change, dragAmount ->
+                                // Consommé ici pour ne pas laisser remonter le geste vers le
+                                // détecteur "swipe → Paroles" du Box parent (cf. plus haut) :
+                                // sur la pochette, le drag horizontal ne doit signifier QUE
+                                // "changer de piste", jamais les deux actions à la fois.
+                                change.consume()
                                 dragOffsetX += dragAmount
                             }
                         )

@@ -28,6 +28,23 @@ object PlayerGuards {
         return true
     }
 
+    /**
+     * Seek robuste utilisé par l'écran Paroles (tap sur une ligne synchronisée) :
+     * protège contre un player sans média chargé et borne la position à la durée
+     * connue pour éviter un seek hors plage sur certains décodeurs.
+     */
+    fun safeSeekToPosition(player: Player, positionMs: Long): Boolean {
+        if (player.mediaItemCount <= 0) return false
+        return try {
+            val duration = player.duration
+            val clamped = if (duration > 0L) positionMs.coerceIn(0L, duration) else positionMs.coerceAtLeast(0L)
+            player.seekTo(clamped)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun safeRemoveMediaItem(player: Player, index: Int): Boolean {
         if (index !in 0 until player.mediaItemCount) return false
         player.removeMediaItem(index)

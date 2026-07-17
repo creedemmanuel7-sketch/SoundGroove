@@ -146,52 +146,108 @@ fun AlbumDetailScreen(
 
             // ── Actions Bar ───────────────────────────────────────────────────
             item {
+                val hasSongs = songs.isNotEmpty()
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp)
-                            .background(Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor))), RoundedCornerShape(14.dp))
-                            .clickable { songs.firstOrNull()?.let { onPlaySong(it) } },
+                            .height(50.dp)
+                            .background(
+                                if (hasSongs) Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor)))
+                                else Brush.horizontalGradient(listOf(GlassSurface, GlassSurface)),
+                                RoundedCornerShape(14.dp)
+                            )
+                            .clickable(enabled = hasSongs) { songs.firstOrNull()?.let { onPlaySong(it) } },
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(painter = painterResource(R.drawable.ic_play), contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                            Text("Lecture", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Icon(
+                                painter = painterResource(R.drawable.ic_play),
+                                contentDescription = null,
+                                tint = if (hasSongs) Color.White else TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                "Tout lire",
+                                color = if (hasSongs) Color.White else TextSecondary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
                         }
                     }
 
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp)
+                            .height(50.dp)
                             .background(GlassSurface, RoundedCornerShape(14.dp))
-                            .clickable { onShufflePlay() },
+                            .clickable(enabled = hasSongs) { onShufflePlay() },
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(painter = painterResource(R.drawable.ic_shuffle), contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
-                            Text("Aléatoire", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Icon(
+                                painter = painterResource(R.drawable.ic_shuffle),
+                                contentDescription = null,
+                                tint = if (hasSongs) accentColor else TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                "Aléatoire",
+                                color = if (hasSongs) accentColor else TextSecondary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
                         }
                     }
                 }
             }
 
             // ── Song List ────────────────────────────────────────────────────
+            if (songs.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_songs),
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(52.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "Aucun titre dans cet album",
+                                color = TextPrimary,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Les fichiers audio de cet album n'ont pas été trouvés.",
+                                color = TextSecondary.copy(0.85f),
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                }
+            } else {
             itemsIndexed(songs) { index, song ->
-                val isFav = favoriteSongs.any { it.id == song.id }
                 val isCurrent = song.id == currentSong?.id
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onPlaySong(song) }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -224,6 +280,14 @@ fun AlbumDetailScreen(
                             .clickable { songMenuTarget = song }
                     )
                 }
+
+                if (index < songs.size - 1) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 76.dp, end = 16.dp),
+                        color = GlassBorder.copy(alpha = 0.20f)
+                    )
+                }
+            }
             }
             item { Spacer(modifier = Modifier.height(120.dp)) }
         }

@@ -237,6 +237,8 @@ fun AddToPlaylistSheet(
     onCreateAndAdd: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val manualPlaylists = playlists.filter { !it.isSmart }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = SurfaceOverlay.copy(alpha = 0.96f),
@@ -286,12 +288,12 @@ fun AddToPlaylistSheet(
                 Text("Créer une nouvelle playlist", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             }
 
-            if (playlists.isNotEmpty()) {
+            if (manualPlaylists.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider(color = GlassBorder)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                playlists.forEach { playlist ->
+                manualPlaylists.forEach { playlist ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

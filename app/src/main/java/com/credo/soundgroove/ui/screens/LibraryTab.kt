@@ -473,8 +473,8 @@ fun LibraryTab(
 
 
                 3 -> {
-                    // Playlists
-                    var showCreateDialog by remember { mutableStateOf(false) }
+                    var showCreateSheet by remember { mutableStateOf(false) }
+                    val manualPlaylists = playlists.filter { !it.isSmart }
 
                     Box(modifier = Modifier.fillMaxSize()) {
                         Column(modifier = Modifier.fillMaxSize()) {
@@ -493,7 +493,11 @@ fun LibraryTab(
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = "${playlists.size} playlist(s)",
+                                        text = buildString {
+                                            append("${manualPlaylists.size} playlist(s)")
+                                            val smartCount = playlists.count { it.isSmart }
+                                            if (smartCount > 0) append(" · $smartCount auto")
+                                        },
                                         color = TextSecondary,
                                         fontSize = 13.sp
                                     )
@@ -502,7 +506,7 @@ fun LibraryTab(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(SgRadius.pill))
                                         .background(Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor))))
-                                        .clickable { showCreateDialog = true }
+                                        .clickable { showCreateSheet = true }
                                         .padding(horizontal = 14.dp, vertical = 9.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -526,14 +530,14 @@ fun LibraryTab(
                                             fontSize = 16.sp
                                         )
                                         Text(
-                                            text = "Appuie sur + pour créer",
+                                            text = "Appuie sur Créer pour commencer",
                                             color = TextSecondary,
                                             fontSize = 13.sp
                                         )
                                     }
                                 }
                             } else {
-                                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     items(playlists, key = { it.id }) { playlist ->
                                         var showMenu by remember { mutableStateOf(false) }
                                         var showRenameDialog by remember { mutableStateOf(false) }
@@ -542,14 +546,13 @@ fun LibraryTab(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .background(
-                                                    CardSurface.copy(alpha = 0.32f),
+                                                    if (playlist.isSmart) CardSurface.copy(alpha = 0.42f) else CardSurface.copy(alpha = 0.32f),
                                                     RoundedCornerShape(14.dp)
                                                 )
                                                 .clickable { onNavigateToPlaylist(playlist.id) }
-                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                                .padding(horizontal = 12.dp, vertical = 12.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            // Cover playlist (ton code existant)
                                             Box(
                                                 modifier = Modifier
                                                     .size(52.dp)
@@ -557,7 +560,7 @@ fun LibraryTab(
                                                     .background(
                                                         Brush.radialGradient(
                                                             listOf(
-                                                                SilverAccent,
+                                                                if (playlist.isSmart) accentColor.copy(0.35f) else SilverAccent,
                                                                 GraphiteMid
                                                             )
                                                         )
@@ -576,7 +579,9 @@ fun LibraryTab(
                                                     )
                                                 } else {
                                                     Icon(
-                                                        painter = painterResource(R.drawable.ic_songs),
+                                                        painter = painterResource(
+                                                            if (playlist.isSmart) R.drawable.ic_shuffle else R.drawable.ic_songs
+                                                        ),
                                                         contentDescription = null,
                                                         tint = Color.White,
                                                         modifier = Modifier.size(24.dp)
@@ -587,83 +592,101 @@ fun LibraryTab(
                                             Spacer(modifier = Modifier.width(12.dp))
 
                                             Column(modifier = Modifier.weight(1f)) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Text(
+                                                        text = playlist.name,
+                                                        color = TextPrimary,
+                                                        fontSize = 15.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        modifier = Modifier.weight(1f, fill = false)
+                                                    )
+                                                    if (playlist.isSmart) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .background(accentColor.copy(0.18f), RoundedCornerShape(6.dp))
+                                                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = "Auto",
+                                                                color = accentColor,
+                                                                fontSize = 10.sp,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                                 Text(
-                                                    text = playlist.name,
-                                                    color = TextPrimary,
-                                                    fontSize = 15.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                Text(
-                                                    text = "${playlist.songs.size} chanson(s)",
+                                                    text = if (playlist.songs.isEmpty()) {
+                                                        if (playlist.isSmart) "Se remplit en écoutant" else "Vide"
+                                                    } else {
+                                                        "${playlist.songs.size} chanson(s)"
+                                                    },
                                                     color = TextSecondary,
                                                     fontSize = 12.sp
                                                 )
                                             }
 
-                                            // Bouton ⋮ avec menu
-                                            Box {
-                                                Icon(
-                                                    painter = painterResource(R.drawable.ic_options),
-                                                    contentDescription = "Options",
-                                                    tint = TextSecondary,
-                                                    modifier = Modifier
-                                                        .size(24.dp)
-                                                        .clickable { showMenu = true }
-                                                )
-                                                DropdownMenu(
-                                                    expanded = showMenu,
-                                                    onDismissRequest = { showMenu = false },
-                                                    modifier = Modifier.background(CardSurface)
-                                                ) {
-                                                    DropdownMenuItem(
-                                                        text = {
-                                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                                Icon(
-                                                                    painter = painterResource(R.drawable.ic_options),
-                                                                    contentDescription = null,
-                                                                    tint = TextPrimary,
-                                                                    modifier = Modifier.size(18.dp)
-                                                                )
-                                                                Spacer(modifier = Modifier.width(8.dp))
-                                                                Text(
-                                                                    "Renommer",
-                                                                    color = TextPrimary
-                                                                )
-                                                            }
-                                                        },
-                                                        onClick = {
-                                                            showMenu = false
-                                                            showRenameDialog = true
-                                                        }
+                                            if (!playlist.isSmart) {
+                                                Box {
+                                                    Icon(
+                                                        painter = painterResource(R.drawable.ic_options),
+                                                        contentDescription = "Options",
+                                                        tint = TextSecondary,
+                                                        modifier = Modifier
+                                                            .size(24.dp)
+                                                            .clickable { showMenu = true }
                                                     )
-                                                    DropdownMenuItem(
-                                                        text = {
-                                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                                Icon(
-                                                                    painter = painterResource(R.drawable.ic_trash),
-                                                                    contentDescription = null,
-                                                                    tint = ErrorRed,
-                                                                    modifier = Modifier.size(18.dp)
-                                                                )
-                                                                Spacer(modifier = Modifier.width(8.dp))
-                                                                Text(
-                                                                    "Supprimer",
-                                                                    color = ErrorRed
-                                                                )
+                                                    DropdownMenu(
+                                                        expanded = showMenu,
+                                                        onDismissRequest = { showMenu = false },
+                                                        modifier = Modifier.background(CardSurface)
+                                                    ) {
+                                                        DropdownMenuItem(
+                                                            text = {
+                                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                    Icon(
+                                                                        painter = painterResource(R.drawable.ic_options),
+                                                                        contentDescription = null,
+                                                                        tint = TextPrimary,
+                                                                        modifier = Modifier.size(18.dp)
+                                                                    )
+                                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                                    Text("Renommer", color = TextPrimary)
+                                                                }
+                                                            },
+                                                            onClick = {
+                                                                showMenu = false
+                                                                showRenameDialog = true
                                                             }
-                                                        },
-                                                        onClick = {
-                                                            showMenu = false
-                                                            onPlaylistDelete(playlist)
-                                                        }
-                                                    )
+                                                        )
+                                                        DropdownMenuItem(
+                                                            text = {
+                                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                    Icon(
+                                                                        painter = painterResource(R.drawable.ic_trash),
+                                                                        contentDescription = null,
+                                                                        tint = ErrorRed,
+                                                                        modifier = Modifier.size(18.dp)
+                                                                    )
+                                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                                    Text("Supprimer", color = ErrorRed)
+                                                                }
+                                                            },
+                                                            onClick = {
+                                                                showMenu = false
+                                                                onPlaylistDelete(playlist)
+                                                            }
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
 
-                                        // Dialog renommer
                                         if (showRenameDialog) {
                                             var newName by remember { mutableStateOf(playlist.name) }
                                             Box(
@@ -676,10 +699,7 @@ fun LibraryTab(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .padding(32.dp)
-                                                        .background(
-                                                            CardSurface,
-                                                            RoundedCornerShape(20.dp)
-                                                        )
+                                                        .background(CardSurface, RoundedCornerShape(20.dp))
                                                         .padding(24.dp)
                                                 ) {
                                                     Text(
@@ -692,12 +712,7 @@ fun LibraryTab(
                                                     androidx.compose.material3.TextField(
                                                         value = newName,
                                                         onValueChange = { newName = it },
-                                                        label = {
-                                                            Text(
-                                                                "Nouveau nom",
-                                                                color = TextSecondary
-                                                            )
-                                                        },
+                                                        label = { Text("Nouveau nom", color = TextSecondary) },
                                                         colors = androidx.compose.material3.TextFieldDefaults.colors(
                                                             focusedContainerColor = GraphiteCard,
                                                             unfocusedContainerColor = GraphiteCard,
@@ -719,13 +734,8 @@ fun LibraryTab(
                                                             text = "Annuler",
                                                             color = TextSecondary,
                                                             modifier = Modifier
-                                                                .clickable {
-                                                                    showRenameDialog = false
-                                                                }
-                                                                .padding(
-                                                                    horizontal = 16.dp,
-                                                                    vertical = 8.dp
-                                                                )
+                                                                .clickable { showRenameDialog = false }
+                                                                .padding(horizontal = 16.dp, vertical = 8.dp)
                                                         )
                                                         Spacer(modifier = Modifier.width(8.dp))
                                                         Box(
@@ -736,17 +746,11 @@ fun LibraryTab(
                                                                 )
                                                                 .clickable {
                                                                     if (newName.isNotBlank()) {
-                                                                        onPlaylistRename(
-                                                                            playlist,
-                                                                            newName.trim()
-                                                                        )
+                                                                        onPlaylistRename(playlist, newName.trim())
                                                                         showRenameDialog = false
                                                                     }
                                                                 }
-                                                                .padding(
-                                                                    horizontal = 20.dp,
-                                                                    vertical = 8.dp
-                                                                )
+                                                                .padding(horizontal = 20.dp, vertical = 8.dp)
                                                         ) {
                                                             Text(
                                                                 text = "Enregistrer",
@@ -764,108 +768,14 @@ fun LibraryTab(
                             }
                         }
 
-                        // Dialog créer playlist
-                        if (showCreateDialog) {
-                            var playlistName by remember { mutableStateOf("") }
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = 0.7f)),
-                                contentAlignment = Alignment.BottomCenter
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp)
-                                        .navigationBarsPadding()
-                                        .background(
-                                            Brush.verticalGradient(listOf(SurfaceOverlay.copy(0.98f), CardSurface)),
-                                            RoundedCornerShape(28.dp)
-                                        )
-                                        .border(1.dp, GlassBorder, RoundedCornerShape(28.dp))
-                                        .padding(22.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(42.dp)
-                                            .height(4.dp)
-                                            .background(GlassBorder, RoundedCornerShape(2.dp))
-                                            .align(Alignment.CenterHorizontally)
-                                    )
-                                    Spacer(modifier = Modifier.height(18.dp))
-                                    Text(
-                                        text = "Créer une playlist",
-                                        color = TextPrimary,
-                                        fontSize = 20.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "Donne-lui un nom, tu pourras ajouter des titres ensuite.",
-                                        color = TextSecondary,
-                                        fontSize = 13.sp
-                                    )
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    androidx.compose.material3.OutlinedTextField(
-                                        value = playlistName,
-                                        onValueChange = { playlistName = it },
-                                        placeholder = { Text("Nom de la playlist", color = TextSecondary) },
-                                        shape = RoundedCornerShape(16.dp),
-                                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = accentColor,
-                                            unfocusedBorderColor = GlassBorder,
-                                            focusedTextColor = TextPrimary,
-                                            unfocusedTextColor = TextPrimary,
-                                            cursorColor = accentColor,
-                                            focusedContainerColor = GlassSurface,
-                                            unfocusedContainerColor = GlassSurface
-                                        ),
-                                        modifier = Modifier.fillMaxWidth(),
-                                        singleLine = true
-                                    )
-                                    Spacer(modifier = Modifier.height(24.dp))
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(48.dp)
-                                                .clip(RoundedCornerShape(16.dp))
-                                                .background(GlassSurface)
-                                                .clickable { showCreateDialog = false }
-                                                .border(1.dp, GlassBorder, RoundedCornerShape(16.dp)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text("Annuler", color = TextSecondary, fontWeight = FontWeight.Bold)
-                                        }
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(48.dp)
-                                                .clip(RoundedCornerShape(16.dp))
-                                                .background(
-                                                    if (playlistName.isNotBlank()) Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor)))
-                                                    else Brush.horizontalGradient(listOf(TextSecondary.copy(alpha = 0.35f), TextSecondary.copy(alpha = 0.25f)))
-                                                )
-                                                .clickable {
-                                                    if (playlistName.isNotBlank()) {
-                                                        onPlaylistCreate(playlistName.trim())
-                                                        showCreateDialog = false
-                                                        playlistName = ""
-                                                    }
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = "Créer",
-                                                color = Color.White,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
+                        if (showCreateSheet) {
+                            com.credo.soundgroove.ui.components.CreatePlaylistSheet(
+                                onDismiss = { showCreateSheet = false },
+                                onCreate = { name ->
+                                    onPlaylistCreate(name)
+                                    showCreateSheet = false
                                 }
-                            }
+                            )
                         }
                     }
                 }

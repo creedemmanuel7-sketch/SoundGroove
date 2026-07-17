@@ -528,7 +528,7 @@ fun MainScreen(
             appVersion = appVersion,
             songCount = songs.size,
             favoriteCount = favoriteSongs.size,
-            playlistCount = playlists.size,
+            playlistCount = playlists.count { !it.isSmart },
             listeningTimeLabel = listeningTimeLabel,
             sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
             onBack = { showSettings = false },

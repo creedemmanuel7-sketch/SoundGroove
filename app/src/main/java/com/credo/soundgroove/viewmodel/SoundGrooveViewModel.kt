@@ -12,7 +12,9 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.credo.soundgroove.PlaybackService
 import com.credo.soundgroove.SoundGrooveDatabase
+import com.credo.soundgroove.data.SmartPlaylistBuilder
 import com.credo.soundgroove.data.model.Playlist
+import com.credo.soundgroove.data.model.SmartPlaylistIds
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.data.repository.DatabaseRepository
 import com.credo.soundgroove.data.repository.ListeningStats
@@ -106,6 +108,9 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _recentlyPlayed = MutableStateFlow<List<Song>>(emptyList())
     val recentlyPlayed: StateFlow<List<Song>> = _recentlyPlayed.asStateFlow()
+
+    private val _playlistMessage = MutableStateFlow<String?>(null)
+    val playlistMessage: StateFlow<String?> = _playlistMessage.asStateFlow()
 
     private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
     val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
@@ -464,11 +469,18 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             combine(
                 dbRepository.getAllPlaylists(),
+                dbRepository.getRecentlyPlayed(),
+                dbRepository.getOftenPlayed(),
                 _metadataOverrides
-            ) { playlists, _ ->
-                playlists.map { playlist ->
-                    playlist.copy(songs = playlist.songs.map { applyMetadataOverride(it) })
-                }
+            ) { manualPlaylists, recent, often, overrides ->
+                val applyOverride: (Song) -> Song = { applyMetadataOverride(it) }
+                SmartPlaylistBuilder.merge(
+                    manualPlaylists = manualPlaylists.map { playlist ->
+                        playlist.copy(songs = playlist.songs.map(applyOverride))
+                    },
+                    recentlyPlayed = recent.map(applyOverride),
+                    oftenPlayed = often.map(applyOverride)
+                )
             }.collect { _playlists.value = it }
         }
         viewModelScope.launch {
@@ -766,29 +778,40 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     fun createPlaylist(name: String) {
         viewModelScope.launch {
-            dbRepository.createPlaylist(name)
+            val trimmed = name.trim()
+            if (trimmed.isBlank()) return@launch
+            dbRepository.createPlaylist(trimmed)
+            _playlistMessage.value = "Playlist « $trimmed » créée"
         }
     }
 
+    fun clearPlaylistMessage() {
+        _playlistMessage.value = null
+    }
+
     fun deletePlaylist(playlistId: Long) {
+        if (SmartPlaylistIds.isSmart(playlistId)) return
         viewModelScope.launch {
             dbRepository.deletePlaylist(playlistId)
         }
     }
 
     fun addSongToPlaylist(playlistId: Long, song: Song, position: Int = 0) {
+        if (SmartPlaylistIds.isSmart(playlistId)) return
         viewModelScope.launch {
             dbRepository.addSongToPlaylist(playlistId, song, position)
         }
     }
 
     fun removeSongFromPlaylist(playlistId: Long, songId: Long) {
+        if (SmartPlaylistIds.isSmart(playlistId)) return
         viewModelScope.launch {
             dbRepository.removeSongFromPlaylist(playlistId, songId)
         }
     }
 
     fun renamePlaylist(playlistId: Long, newName: String) {
+        if (SmartPlaylistIds.isSmart(playlistId)) return
         viewModelScope.launch {
             dbRepository.renamePlaylist(playlistId, newName)
         }

@@ -1,19 +1,21 @@
 package com.credo.soundgroove.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,8 +30,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.GpsOff
 import androidx.compose.material.icons.filled.Lyrics
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -38,7 +42,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -49,10 +52,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -62,11 +67,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.Player
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.lyrics.LyricLine
 import com.credo.soundgroove.lyrics.LyricsContent
-import com.credo.soundgroove.lyrics.LyricsSearchHelper
 import com.credo.soundgroove.lyrics.LyricsViewModel
 import com.credo.soundgroove.ui.theme.BorderSubtle
 import com.credo.soundgroove.ui.theme.GlassBorder
@@ -77,11 +83,14 @@ import com.credo.soundgroove.ui.theme.SurfaceElevated
 import com.credo.soundgroove.ui.theme.TextPrimary
 import com.credo.soundgroove.ui.theme.TextSecondary
 import com.credo.soundgroove.ui.theme.TextTertiary
-import com.credo.soundgroove.ui.theme.sgSheetGradientBrush
+import com.credo.soundgroove.util.PlayerGuards
+import com.credo.soundgroove.util.rememberLyricsPalette
 import kotlinx.coroutines.launch
 
 /**
- * Écran/overlay Paroles — bottom sheet 3/4+ ouvert depuis le PlayerScreen.
+ * Écran Paroles — immersif plein écran, au même niveau que [PlayerScreen] : on
+ * bascule entre les deux via un swipe (horizontal ou vertical) ou le bouton
+ * dédié, jamais via un simple "pity popup" en bottom sheet.
  *
  * États : synchronisé (.lrc), texte simple (.txt), saisie manuelle, et vide.
  * Cache local prioritaire pour un affichage instantané au retour sur un morceau.
@@ -93,10 +102,26 @@ fun LyricsScreen(
     playbackPosition: Long,
     accentColor: Color,
     onClose: () -> Unit,
+    onOpenWebSearch: () -> Unit,
+    pendingPasteText: String? = null,
+    onPendingPasteConsumed: () -> Unit = {},
     viewModel: LyricsViewModel = viewModel()
 ) {
     val context = LocalContext.current
     var verticalDragOffset by remember { mutableStateOf(0f) }
+    var horizontalDragOffset by remember { mutableStateOf(0f) }
+    var autoScrollEnabled by remember { mutableStateOf(true) }
+
+    // Bouton "toggle" clair vers le Player (icône) + geste natif : back système
+    // et swipe (bas ou droite) doivent produire exactement le même résultat.
+    BackHandler(onBack = onClose)
+
+    LaunchedEffect(pendingPasteText) {
+        pendingPasteText?.let { text ->
+            viewModel.startEditing(text)
+            onPendingPasteConsumed()
+        }
+    }
 
     LaunchedEffect(song.id) {
         viewModel.loadLyricsForSong(song)
@@ -111,18 +136,22 @@ fun LyricsScreen(
     val isEditing by viewModel.isEditing.collectAsState()
     val isSaving by viewModel.isSaving.collectAsState()
     val saveError by viewModel.saveError.collectAsState()
+    val editingDraft by viewModel.editingDraft.collectAsState()
+
+    // Palette dérivée de la pochette (cf. AlbumArtPalette.rememberLyricsPalette) :
+    // fond sombre premium + accent garanti lisible, cohérent avec le Player mais
+    // pensé pour un long temps de lecture (contraste texte renforcé).
+    val palette = rememberLyricsPalette(song.albumArtUri, accentColor)
+    val effectiveAccent = palette.activeText
 
     Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxHeight(0.92f)
-            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .background(sgSheetGradientBrush())
+            .fillMaxSize()
             .pointerInput(Unit) { detectTapGestures { } }
             .pointerInput(Unit) {
                 detectVerticalDragGestures(
                     onDragEnd = {
-                        if (verticalDragOffset > 150f) onClose()
+                        if (verticalDragOffset > 120f) onClose()
                         verticalDragOffset = 0f
                     },
                     onDragCancel = { verticalDragOffset = 0f },
@@ -132,22 +161,62 @@ fun LyricsScreen(
                     }
                 )
             }
+            .pointerInput(Unit) {
+                // Swipe droite = retour au Player, symétrique du swipe gauche qui
+                // ouvre les Paroles depuis PlayerScreen (cf. PlayerScreen.kt).
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (horizontalDragOffset > 120f) onClose()
+                        horizontalDragOffset = 0f
+                    },
+                    onDragCancel = { horizontalDragOffset = 0f },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        horizontalDragOffset += dragAmount
+                    }
+                )
+            }
     ) {
+        // Fond immersif : pochette floutée + gradient sombre premium. Le flou est
+        // plus marqué que sur le Player (46dp vs 20dp) car ici le texte doit rester
+        // lisible pendant toute la durée du morceau, pas juste en coup d'œil.
+        if (song.albumArtUri != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(song.albumArtUri)
+                    .size(480, 960)
+                    .crossfade(SgMotion.MediumMs)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(46.dp)
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            palette.backgroundTop.copy(alpha = 0.92f),
+                            palette.backgroundCenter.copy(alpha = 0.95f),
+                            palette.backgroundBottom.copy(alpha = 0.97f)
+                        )
+                    )
+                )
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 20.dp)
         ) {
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Box(
-                modifier = Modifier
-                    .width(40.dp)
-                    .height(4.dp)
-                    .background(GlassBorder, RoundedCornerShape(2.dp))
-                    .align(Alignment.CenterHorizontally)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
+            // Même respiration en haut d'écran que PlayerScreen : les deux écrans
+            // doivent se sentir comme deux faces d'un même objet, pas deux styles.
+            Spacer(modifier = Modifier.height(40.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -164,7 +233,7 @@ fun LyricsScreen(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_close_down),
-                        contentDescription = "Fermer",
+                        contentDescription = "Revenir au lecteur",
                         tint = TextPrimary,
                         modifier = Modifier.size(28.dp)
                     )
@@ -182,13 +251,31 @@ fun LyricsScreen(
                     )
                     Text(
                         text = song.title,
-                        color = accentColor,
+                        color = effectiveAccent,
                         fontSize = 13.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Spacer(modifier = Modifier.size(40.dp))
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(GlassSurface, CircleShape)
+                        .border(1.dp, GlassBorder, CircleShape)
+                        .clickable { autoScrollEnabled = !autoScrollEnabled },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (autoScrollEnabled) Icons.Filled.GpsFixed else Icons.Filled.GpsOff,
+                        contentDescription = if (autoScrollEnabled) {
+                            "Désactiver le défilement automatique"
+                        } else {
+                            "Activer le défilement automatique"
+                        },
+                        tint = if (autoScrollEnabled) effectiveAccent else TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -201,28 +288,29 @@ fun LyricsScreen(
                 when {
                     isEditing -> PasteLyricsEditor(
                         song = song,
-                        accentColor = accentColor,
+                        accentColor = effectiveAccent,
+                        initialDraft = editingDraft,
                         isSaving = isSaving,
                         saveError = saveError,
                         onCancel = { viewModel.cancelEditing() },
                         onSave = { raw -> viewModel.saveLyrics(song, raw) }
                     )
-                    content is LyricsContent.Loading -> LoadingLyricsState(accentColor)
-                    content is LyricsContent.SearchingOnline -> SearchingOnlineLyricsState(accentColor)
+                    content is LyricsContent.Loading -> LoadingLyricsState(effectiveAccent)
+                    content is LyricsContent.SearchingOnline -> SearchingOnlineLyricsState(effectiveAccent)
                     content is LyricsContent.Synced -> SyncedLyricsList(
                         lines = (content as LyricsContent.Synced).lines,
                         currentLineIndex = currentLineIndex,
-                        accentColor = accentColor,
-                        onLineClick = { timeMs -> player.seekTo(timeMs) }
+                        accentColor = effectiveAccent,
+                        inactiveColor = palette.inactiveText,
+                        autoScrollEnabled = autoScrollEnabled,
+                        onLineClick = { timeMs -> PlayerGuards.safeSeekToPosition(player, timeMs) }
                     )
                     content is LyricsContent.PlainText -> PlainTextLyrics(
                         text = (content as LyricsContent.PlainText).text
                     )
                     else -> EmptyLyricsState(
-                        accentColor = accentColor,
-                        onOpenSearch = {
-                            LyricsSearchHelper.openGoogleLyricsSearch(context, song)
-                        },
+                        accentColor = effectiveAccent,
+                        onSearchOnline = onOpenWebSearch,
                         onPasteLyrics = { viewModel.startEditing() }
                     )
                 }
@@ -243,12 +331,13 @@ fun LyricsScreen(
 private fun PasteLyricsEditor(
     song: Song,
     accentColor: Color,
+    initialDraft: String,
     isSaving: Boolean,
     saveError: String?,
     onCancel: () -> Unit,
     onSave: (String) -> Unit
 ) {
-    var draft by remember(song.id) { mutableStateOf("") }
+    var draft by remember(song.id, initialDraft) { mutableStateOf(initialDraft) }
 
     Column(
         modifier = Modifier
@@ -356,13 +445,15 @@ private fun SyncedLyricsList(
     lines: List<LyricLine>,
     currentLineIndex: Int,
     accentColor: Color,
+    inactiveColor: Color,
+    autoScrollEnabled: Boolean,
     onLineClick: (Long) -> Unit
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(currentLineIndex, lines.size) {
-        if (currentLineIndex >= 0 && lines.isNotEmpty()) {
+    LaunchedEffect(currentLineIndex, lines.size, autoScrollEnabled) {
+        if (autoScrollEnabled && currentLineIndex >= 0 && lines.isNotEmpty()) {
             val targetIndex = (currentLineIndex - 2).coerceIn(0, lines.lastIndex)
             scope.launch {
                 runCatching { listState.animateScrollToItem(targetIndex) }
@@ -373,7 +464,7 @@ private fun SyncedLyricsList(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+        contentPadding = PaddingValues(
             vertical = 140.dp,
             horizontal = 8.dp
         ),
@@ -386,8 +477,8 @@ private fun SyncedLyricsList(
             val color by animateColorAsState(
                 targetValue = when {
                     isActive -> accentColor
-                    isPast -> TextTertiary
-                    else -> TextSecondary
+                    isPast -> inactiveColor.copy(alpha = 0.42f)
+                    else -> inactiveColor
                 },
                 animationSpec = SgMotion.tweenMediumOf(),
                 label = "lyricLineColor"
@@ -477,7 +568,7 @@ private fun SearchingOnlineLyricsState(accentColor: Color) {
 @Composable
 private fun EmptyLyricsState(
     accentColor: Color,
-    onOpenSearch: () -> Unit,
+    onSearchOnline: () -> Unit,
     onPasteLyrics: () -> Unit
 ) {
     Column(
@@ -519,7 +610,7 @@ private fun EmptyLyricsState(
         Spacer(modifier = Modifier.height(28.dp))
 
         Button(
-            onClick = onOpenSearch,
+            onClick = onSearchOnline,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(SgRadius.pill),
             colors = ButtonDefaults.buttonColors(
@@ -528,12 +619,12 @@ private fun EmptyLyricsState(
             )
         ) {
             Icon(
-                imageVector = Icons.Filled.OpenInNew,
+                imageVector = Icons.Filled.Search,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Ouvrir un site de paroles", fontWeight = FontWeight.SemiBold)
+            Text("Chercher en ligne", fontWeight = FontWeight.SemiBold)
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -548,13 +639,5 @@ private fun EmptyLyricsState(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-
-        TextButton(onClick = onOpenSearch) {
-            Text(
-                text = "Recherche Google : titre + artiste + lyrics",
-                color = TextTertiary,
-                fontSize = 12.sp
-            )
-        }
     }
 }

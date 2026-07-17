@@ -18,6 +18,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.credo.soundgroove.ui.screens.LyricsScreen
+import com.credo.soundgroove.ui.screens.LyricsWebSearchScreen
 import com.credo.soundgroove.ui.screens.PlayerScreen
 import com.credo.soundgroove.ui.screens.QueueScreen
 import com.credo.soundgroove.data.model.Playlist
@@ -75,6 +76,8 @@ fun AppNavigation(
 
     var showQueue by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
+    var showLyricsWebSearch by remember { mutableStateOf(false) }
+    var lyricsWebSearchDraft by remember { mutableStateOf<String?>(null) }
     var showSongInfo by remember { mutableStateOf(false) }
     var showPlaybackSpeedSheet by remember { mutableStateOf(false) }
     var showEditMetadata by remember { mutableStateOf(false) }
@@ -93,6 +96,7 @@ fun AppNavigation(
     LaunchedEffect(currentRoute) {
         if (currentRoute != Routes.PLAYER) {
             showLyrics = false
+            showLyricsWebSearch = false
             showQueue = false
         }
     }
@@ -377,25 +381,43 @@ fun AppNavigation(
             }
         }
 
-        if (showLyrics && currentRoute == Routes.PLAYER) {
+        // Paroles = écran plein écran "pair" du Player (pas un bottom sheet) : la
+        // transition emprunte donc un glissement horizontal SgMotion.lyricsEnter/Exit,
+        // symétrique du swipe qui bascule entre les deux (cf. PlayerScreen/LyricsScreen).
+        AnimatedVisibility(
+            visible = showLyrics && currentRoute == Routes.PLAYER,
+            enter = SgMotion.lyricsEnter(),
+            exit = SgMotion.lyricsExit()
+        ) {
             val song = currentSong
             val player = controller
             if (song != null && player != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.22f))
-                        .pointerInput(Unit) { detectTapGestures { showLyrics = false } },
-                    contentAlignment = Alignment.BottomCenter
-                ) {
-                    LyricsScreen(
-                        song = song,
-                        player = player,
-                        playbackPosition = playbackPosition,
-                        accentColor = accentColor,
-                        onClose = { showLyrics = false }
-                    )
-                }
+                LyricsScreen(
+                    song = song,
+                    player = player,
+                    playbackPosition = playbackPosition,
+                    accentColor = accentColor,
+                    onClose = { showLyrics = false },
+                    onOpenWebSearch = { showLyricsWebSearch = true },
+                    pendingPasteText = lyricsWebSearchDraft,
+                    onPendingPasteConsumed = { lyricsWebSearchDraft = null }
+                )
+            }
+        }
+
+        if (showLyricsWebSearch && currentRoute == Routes.PLAYER) {
+            val song = currentSong
+            if (song != null) {
+                LyricsWebSearchScreen(
+                    song = song,
+                    accentColor = accentColor,
+                    onClose = { showLyricsWebSearch = false },
+                    onPasteFromClipboard = { text ->
+                        showLyricsWebSearch = false
+                        lyricsWebSearchDraft = text
+                        showLyrics = true
+                    }
+                )
             }
         }
 

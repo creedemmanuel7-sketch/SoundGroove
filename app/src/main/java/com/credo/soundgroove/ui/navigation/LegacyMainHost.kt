@@ -54,6 +54,7 @@ fun LegacyMainHost(
     val hiddenFolders by viewModel.hiddenFolders.collectAsState()
     val playbackQueue by viewModel.playbackQueue.collectAsState()
     val backupMessage by viewModel.backupMessage.collectAsState()
+    val playlistMessage by viewModel.playlistMessage.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -61,6 +62,13 @@ fun LegacyMainHost(
         backupMessage?.let { message ->
             snackbarHostState.showSnackbar(message)
             viewModel.clearBackupMessage()
+        }
+    }
+
+    LaunchedEffect(playlistMessage) {
+        playlistMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearPlaylistMessage()
         }
     }
 

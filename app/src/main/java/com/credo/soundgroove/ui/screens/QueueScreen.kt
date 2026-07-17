@@ -1,46 +1,54 @@
 package com.credo.soundgroove.ui.screens
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.net.Uri
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -50,27 +58,30 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
-import androidx.media3.session.MediaController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.R
-import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
-import com.credo.soundgroove.ui.components.formatDuration
-import com.credo.soundgroove.ui.theme.*
-import com.credo.soundgroove.util.PlayerGuards
-import com.credo.soundgroove.util.blendWithAlbumArt
-import com.credo.soundgroove.util.rememberAlbumArtAccentColor
+import com.credo.soundgroove.ui.theme.ErrorRed
+import com.credo.soundgroove.ui.theme.GlassBorder
+import com.credo.soundgroove.ui.theme.GlassCard
+import com.credo.soundgroove.ui.theme.GlassSurface
+import com.credo.soundgroove.ui.theme.GraphiteCard
+import com.credo.soundgroove.ui.theme.SgMotion
+import com.credo.soundgroove.ui.theme.SgRadius
+import com.credo.soundgroove.ui.theme.SgSpacing
+import com.credo.soundgroove.ui.theme.SilverAccent
+import com.credo.soundgroove.ui.theme.TextPrimary
+import com.credo.soundgroove.ui.theme.TextSecondary
+import com.credo.soundgroove.ui.theme.sgSheetGradientBrush
 import kotlinx.coroutines.launch
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QueueScreen(
     playlist: List<Song>,
@@ -84,9 +95,10 @@ fun QueueScreen(
     var verticalDragOffset by remember { mutableStateOf(0f) }
     var draggingIndex by remember { mutableStateOf<Int?>(null) }
     var itemDragOffset by remember { mutableStateOf(0f) }
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val safeCurrentIndex = currentIndex.coerceIn(0, (playlist.size - 1).coerceAtLeast(0))
+    val currentSong = playlist.getOrNull(safeCurrentIndex)
 
     LaunchedEffect(playlist.size, safeCurrentIndex) {
         if (playlist.isNotEmpty() && safeCurrentIndex in playlist.indices) {
@@ -98,7 +110,7 @@ fun QueueScreen(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight(0.74f)
-            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+            .clip(RoundedCornerShape(topStart = SgRadius.xl, topEnd = SgRadius.xl))
             .background(sgSheetGradientBrush())
             .pointerInput(Unit) { detectTapGestures { } }
             .pointerInput(Unit) {
@@ -108,7 +120,7 @@ fun QueueScreen(
                         verticalDragOffset = 0f
                     },
                     onDragCancel = { verticalDragOffset = 0f },
-                    onVerticalDrag = { change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Float ->
+                    onVerticalDrag = { change, dragAmount ->
                         change.consume()
                         verticalDragOffset += dragAmount
                     }
@@ -118,11 +130,10 @@ fun QueueScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = SgSpacing.xl)
         ) {
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(SgSpacing.md))
 
-            // Indicateur de drag (pill) en haut
             Box(
                 modifier = Modifier
                     .width(40.dp)
@@ -130,258 +141,621 @@ fun QueueScreen(
                     .background(GlassBorder, RoundedCornerShape(2.dp))
                     .align(Alignment.CenterHorizontally)
             )
-            Spacer(modifier = Modifier.height(12.dp))
 
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Spacer(modifier = Modifier.height(SgSpacing.lg))
+
+            QueueHeader(
+                trackCount = playlist.size,
+                accentColor = accentColor,
+                onClose = onClose
+            )
+
+            AnimatedVisibility(
+                visible = currentSong != null,
+                enter = fadeIn(SgMotion.tweenFastOf()) + scaleIn(
+                    initialScale = 0.96f,
+                    animationSpec = SgMotion.tweenFastOf()
+                ),
+                exit = fadeOut(SgMotion.tweenFastAccelOf()) + scaleOut(
+                    targetScale = 0.96f,
+                    animationSpec = SgMotion.tweenFastAccelOf()
+                )
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(GlassSurface, CircleShape)
-                        .border(1.dp, GlassBorder, CircleShape)
-                        .clickable { onClose() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_close_down),
-                        contentDescription = "Fermer",
-                        tint = TextPrimary,
-                        modifier = Modifier.size(28.dp)
+                currentSong?.let { song ->
+                    Spacer(modifier = Modifier.height(SgSpacing.lg))
+                    QueueNowPlayingBanner(
+                        song = song,
+                        position = safeCurrentIndex + 1,
+                        total = playlist.size,
+                        accentColor = accentColor
                     )
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "FILE D'ATTENTE",
-                        color = TextSecondary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
-                    )
-                    Text(
-                        text = "${playlist.size} chanson(s)",
-                        color = accentColor,
-                        fontSize = 12.sp
-                    )
-                }
-                Spacer(modifier = Modifier.size(40.dp))
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (playlist.isEmpty()) {
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_queue),
-                            contentDescription = null,
-                            tint = TextSecondary,
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text("Aucune chanson en file", color = TextSecondary, fontSize = 14.sp)
-                    }
-                }
-            } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(bottom = 80.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            AnimatedVisibility(
+                visible = playlist.isNotEmpty(),
+                enter = fadeIn(SgMotion.tweenFastOf()),
+                exit = fadeOut(SgMotion.tweenFastAccelOf())
             ) {
-                itemsIndexed(
-                    playlist,
-                    key = { _, song -> song.id }
-                ) { index, song ->
-                    val isCurrent = index == safeCurrentIndex
-                    val isDragging = draggingIndex == index
-                    val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
-                        confirmValueChange = { value ->
-                            if (value != androidx.compose.material3.SwipeToDismissBoxValue.Settled && !isCurrent) {
-                                scope.launch { onRemoveSong(index) }
-                                true
-                            } else {
-                                false
-                            }
-                        }
-                    )
+                Column {
+                    Spacer(modifier = Modifier.height(SgSpacing.md))
+                    QueueHintRow()
+                }
+            }
 
-                    androidx.compose.material3.SwipeToDismissBox(
-                        state = dismissState,
-                        backgroundContent = {
-                            val direction = dismissState.dismissDirection
-                            val color by animateColorAsState(
-                                targetValue = when (dismissState.targetValue) {
-                                    androidx.compose.material3.SwipeToDismissBoxValue.Settled -> Color.Transparent
-                                    else -> ErrorRed.copy(0.8f)
-                                },
-                                label = "swipe_color"
+            Spacer(modifier = Modifier.height(SgSpacing.md))
+
+            Box(modifier = Modifier.weight(1f)) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = playlist.isEmpty(),
+                    enter = fadeIn(SgMotion.tweenMediumOf()) + scaleIn(
+                        initialScale = 0.94f,
+                        animationSpec = SgMotion.tweenMediumOf()
+                    ),
+                    exit = fadeOut(SgMotion.tweenFastAccelOf()) + scaleOut(
+                        targetScale = 0.94f,
+                        animationSpec = SgMotion.tweenFastAccelOf()
+                    ),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    QueueEmptyState(modifier = Modifier.fillMaxSize())
+                }
+
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = playlist.isNotEmpty(),
+                    enter = fadeIn(SgMotion.tweenFastOf()),
+                    exit = fadeOut(SgMotion.tweenFastAccelOf()),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 80.dp),
+                        verticalArrangement = Arrangement.spacedBy(SgSpacing.sm)
+                    ) {
+                        itemsIndexed(
+                            playlist,
+                            key = { _, song -> song.id }
+                        ) { index, song ->
+                            val isCurrent = index == safeCurrentIndex
+                            val isDragging = draggingIndex == index
+                            val dismissState = rememberSwipeToDismissBoxState(
+                                confirmValueChange = { value ->
+                                    if (value != SwipeToDismissBoxValue.Settled && !isCurrent) {
+                                        scope.launch { onRemoveSong(index) }
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
                             )
-                            val alignment = when (direction) {
-                                androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
-                                else -> Alignment.CenterStart
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(color)
-                                    .padding(horizontal = 20.dp),
-                                contentAlignment = alignment
+
+                            SwipeToDismissBox(
+                                state = dismissState,
+                                enableDismissFromStartToEnd = false,
+                                backgroundContent = {
+                                    QueueSwipeBackground(
+                                        dismissState = dismissState,
+                                        isCurrent = isCurrent
+                                    )
+                                }
                             ) {
-                                Icon(
-                                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_trash),
-                                    contentDescription = "Supprimer",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
+                                QueueItemRow(
+                                    song = song,
+                                    index = index,
+                                    isCurrent = isCurrent,
+                                    isDragging = isDragging,
+                                    itemDragOffset = if (isDragging) itemDragOffset else 0f,
+                                    accentColor = accentColor,
+                                    onPlay = { onPlaySong(index) },
+                                    onDragStart = {
+                                        draggingIndex = index
+                                        itemDragOffset = 0f
+                                    },
+                                    onDrag = { amount ->
+                                        itemDragOffset += amount
+                                    },
+                                    onDragEnd = {
+                                        val rowHeightPx = 72f
+                                        val steps = (itemDragOffset / rowHeightPx).toInt()
+                                        val from = index
+                                        val to = (index + steps).coerceIn(0, playlist.lastIndex)
+                                        if (from != to) onMoveSong(from, to)
+                                        draggingIndex = null
+                                        itemDragOffset = 0f
+                                    },
+                                    onDragCancel = {
+                                        draggingIndex = null
+                                        itemDragOffset = 0f
+                                    }
                                 )
                             }
                         }
-                    ) {
-                        GlassCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .offset {
-                                    IntOffset(
-                                        x = 0,
-                                        y = if (isDragging) itemDragOffset.toInt() else 0
-                                    )
-                                },
-                            cornerRadius = 16.dp
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        if (isCurrent)
-                                            Brush.linearGradient(listOf(SilverAccent.copy(0.18f), Color.Transparent))
-                                        else
-                                            Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
-                                    )
-                                    .clickable { onPlaySong(index) }
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Pochette
-                                Box(
-                                    modifier = Modifier
-                                        .size(46.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(GraphiteCard),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (song.albumArtUri != null) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(LocalContext.current)
-                                                .data(song.albumArtUri).crossfade(true).build(),
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    } else {
-                                        Icon(
-                                            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_songs),
-                                            contentDescription = null,
-                                            tint = accentColor,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    if (isCurrent) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .background(Color.Black.copy(0.5f)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                painter = androidx.compose.ui.res.painterResource(R.drawable.ic_play),
-                                                contentDescription = null,
-                                                tint = accentColor,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                // Titre + artiste
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = song.title,
-                                        color = if (isCurrent) accentColor else TextPrimary,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = song.artist,
-                                        color = TextSecondary,
-                                        fontSize = 12.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(8.dp))
-
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .pointerInput(index, playlist.size) {
-                                            detectVerticalDragGestures(
-                                                onDragStart = {
-                                                    scope.launch {
-                                                        draggingIndex = index
-                                                        itemDragOffset = 0f
-                                                    }
-                                                },
-                                                onVerticalDrag = { change, dragAmount ->
-                                                    change.consume()
-                                                    itemDragOffset += dragAmount
-                                                },
-                                                onDragEnd = {
-                                                    val rowHeightPx = 68f
-                                                    val steps = (itemDragOffset / rowHeightPx).toInt()
-                                                    val from = index
-                                                    val to = (index + steps).coerceIn(0, playlist.lastIndex)
-                                                    scope.launch {
-                                                        if (from != to) onMoveSong(from, to)
-                                                        draggingIndex = null
-                                                        itemDragOffset = 0f
-                                                    }
-                                                },
-                                                onDragCancel = {
-                                                    scope.launch {
-                                                        draggingIndex = null
-                                                        itemDragOffset = 0f
-                                                    }
-                                                }
-                                            )
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_drag),
-                                        contentDescription = "Déplacer",
-                                        tint = if (isDragging) accentColor else TextSecondary.copy(alpha = 0.75f),
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
-            }
             }
         }
     }
 }
 
+@Composable
+private fun QueueHeader(
+    trackCount: Int,
+    accentColor: Color,
+    onClose: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(GlassSurface, CircleShape)
+                .border(1.dp, GlassBorder, CircleShape)
+                .clickable { onClose() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_close_down),
+                contentDescription = "Fermer",
+                tint = TextPrimary,
+                modifier = Modifier.size(28.dp)
+            )
+        }
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = "File d'attente",
+                color = TextPrimary,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(SgSpacing.xs))
+            AnimatedContent(
+                targetState = trackCount,
+                transitionSpec = {
+                    fadeIn(SgMotion.tweenFastOf()) togetherWith fadeOut(SgMotion.tweenFastAccelOf())
+                },
+                label = "queue_count"
+            ) { count ->
+                Text(
+                    text = queueCountLabel(count),
+                    color = accentColor,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.size(40.dp))
+    }
+}
+
+@Composable
+private fun QueueNowPlayingBanner(
+    song: Song,
+    position: Int,
+    total: Int,
+    accentColor: Color
+) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = SgRadius.md,
+        accentColor = accentColor
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(accentColor.copy(alpha = 0.22f), Color.Transparent)
+                    )
+                )
+                .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm + 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(SgRadius.sm))
+                    .background(GraphiteCard),
+                contentAlignment = Alignment.Center
+            ) {
+                if (song.albumArtUri != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(song.albumArtUri)
+                            .crossfade(SgMotion.MediumMs)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_songs),
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.45f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_play),
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(SgSpacing.md))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "EN COURS · $position / $total",
+                    color = accentColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = song.title,
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = song.artist,
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QueueHintRow() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(SgRadius.sm))
+            .background(GlassSurface.copy(alpha = 0.5f))
+            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_trash),
+            contentDescription = null,
+            tint = TextSecondary.copy(alpha = 0.7f),
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(modifier = Modifier.width(SgSpacing.xs))
+        Text(
+            text = "Glisser vers la gauche pour retirer",
+            color = TextSecondary,
+            style = MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.Center
+        )
+        Text(
+            text = " · ",
+            color = TextSecondary.copy(alpha = 0.5f),
+            style = MaterialTheme.typography.labelSmall
+        )
+        Icon(
+            painter = painterResource(R.drawable.ic_drag),
+            contentDescription = null,
+            tint = TextSecondary.copy(alpha = 0.7f),
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(modifier = Modifier.width(SgSpacing.xs))
+        Text(
+            text = "Poignée pour réordonner",
+            color = TextSecondary,
+            style = MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun QueueEmptyState(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(horizontal = SgSpacing.xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .background(GlassSurface, CircleShape)
+                .border(1.dp, GlassBorder, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_queue),
+                contentDescription = null,
+                tint = TextSecondary,
+                modifier = Modifier.size(32.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(SgSpacing.lg))
+        Text(
+            text = "File d'attente vide",
+            color = TextPrimary,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(SgSpacing.xs))
+        Text(
+            text = "Lance une lecture depuis la bibliothèque ou une playlist pour remplir la file.",
+            color = TextSecondary,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun QueueSwipeBackground(
+    dismissState: androidx.compose.material3.SwipeToDismissBoxState,
+    isCurrent: Boolean
+) {
+    val color by animateColorAsState(
+        targetValue = when {
+            isCurrent -> Color.Transparent
+            dismissState.targetValue != SwipeToDismissBoxValue.Settled -> ErrorRed.copy(alpha = 0.85f)
+            else -> Color.Transparent
+        },
+        animationSpec = SgMotion.tweenFastOf(),
+        label = "swipe_color"
+    )
+    val iconScale by animateFloatAsState(
+        targetValue = if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) 1f else 0.7f,
+        animationSpec = SgMotion.SpringSnappy,
+        label = "swipe_icon_scale"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(SgRadius.md))
+            .background(color)
+            .padding(horizontal = SgSpacing.xl),
+        contentAlignment = Alignment.CenterEnd
+    ) {
+        if (!isCurrent) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.graphicsLayer {
+                    scaleX = iconScale
+                    scaleY = iconScale
+                }
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_trash),
+                    contentDescription = "Retirer",
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(SgSpacing.sm))
+                Text(
+                    text = "Retirer",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QueueItemRow(
+    song: Song,
+    index: Int,
+    isCurrent: Boolean,
+    isDragging: Boolean,
+    itemDragOffset: Float,
+    accentColor: Color,
+    onPlay: () -> Unit,
+    onDragStart: () -> Unit,
+    onDrag: (Float) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val borderColor by animateColorAsState(
+        targetValue = when {
+            isDragging -> accentColor.copy(alpha = 0.55f)
+            isCurrent -> accentColor.copy(alpha = 0.35f)
+            else -> GlassBorder.copy(alpha = 0.6f)
+        },
+        animationSpec = SgMotion.tweenFastOf(),
+        label = "item_border"
+    )
+    val dragScale by animateFloatAsState(
+        targetValue = if (isDragging) 1.02f else 1f,
+        animationSpec = SgMotion.SpringSoft,
+        label = "drag_scale"
+    )
+    val dragElevation by animateFloatAsState(
+        targetValue = if (isDragging) 6f else 0f,
+        animationSpec = SgMotion.tweenFastOf(),
+        label = "drag_elevation"
+    )
+
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = dragScale
+                scaleY = dragScale
+                shadowElevation = dragElevation
+            }
+            .offset { IntOffset(x = 0, y = itemDragOffset.toInt()) },
+        cornerRadius = SgRadius.md,
+        accentColor = accentColor
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    width = if (isCurrent || isDragging) 1.dp else 0.dp,
+                    color = borderColor,
+                    shape = RoundedCornerShape(SgRadius.md)
+                )
+                .background(
+                    if (isCurrent) {
+                        Brush.linearGradient(
+                            listOf(accentColor.copy(alpha = 0.14f), Color.Transparent)
+                        )
+                    } else {
+                        Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+                    }
+                )
+                .clickable { onPlay() }
+                .padding(start = SgSpacing.md, top = SgSpacing.sm + 2.dp, bottom = SgSpacing.sm + 2.dp, end = SgSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${index + 1}",
+                color = if (isCurrent) accentColor else TextSecondary.copy(alpha = 0.65f),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.width(24.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(SgRadius.sm))
+                    .background(GraphiteCard),
+                contentAlignment = Alignment.Center
+            ) {
+                if (song.albumArtUri != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(song.albumArtUri)
+                            .crossfade(SgMotion.MediumMs)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_songs),
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                if (isCurrent) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.5f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_play),
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(SgSpacing.md))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = song.title,
+                    color = if (isCurrent) accentColor else TextPrimary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = song.artist,
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(width = 44.dp, height = 48.dp)
+                    .clip(RoundedCornerShape(SgRadius.sm))
+                    .background(
+                        if (isDragging) accentColor.copy(alpha = 0.18f)
+                        else GlassSurface.copy(alpha = 0.65f)
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = if (isDragging) accentColor.copy(alpha = 0.35f) else GlassBorder.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(SgRadius.sm)
+                    )
+                    .pointerInput(index) {
+                        detectVerticalDragGestures(
+                            onDragStart = { scope.launch { onDragStart() } },
+                            onVerticalDrag = { change, dragAmount ->
+                                change.consume()
+                                onDrag(dragAmount)
+                            },
+                            onDragEnd = { scope.launch { onDragEnd() } },
+                            onDragCancel = { scope.launch { onDragCancel() } }
+                        )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    repeat(3) {
+                        Box(
+                            modifier = Modifier
+                                .width(16.dp)
+                                .height(2.dp)
+                                .clip(RoundedCornerShape(1.dp))
+                                .background(
+                                    if (isDragging) accentColor
+                                    else TextSecondary.copy(alpha = 0.55f)
+                                )
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun queueCountLabel(count: Int): String = when (count) {
+    0 -> "Aucun titre"
+    1 -> "1 titre"
+    else -> "$count titres"
+}

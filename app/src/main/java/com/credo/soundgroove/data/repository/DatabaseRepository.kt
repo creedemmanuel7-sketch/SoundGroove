@@ -8,6 +8,7 @@ import com.credo.soundgroove.PlaylistEntity
 import com.credo.soundgroove.PlaylistSongEntity
 import com.credo.soundgroove.RecentlyPlayedDao
 import com.credo.soundgroove.data.model.Playlist
+import com.credo.soundgroove.data.model.SmartPlaylistIds
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.toFavoriteEntity
 import com.credo.soundgroove.toRecentlyPlayedEntity
@@ -45,8 +46,21 @@ class DatabaseRepository(
         list.map { it.toSong() }
     }
 
+    fun getOftenPlayed(): Flow<List<Song>> = recentlyPlayedDao.getOftenPlayed().map { list ->
+        list.map { it.toSong() }
+    }
+
     suspend fun addRecentlyPlayed(song: Song) {
-        recentlyPlayedDao.insert(song.toRecentlyPlayedEntity())
+        val existing = recentlyPlayedDao.getBySongId(song.id)
+        val entity = if (existing != null) {
+            song.toRecentlyPlayedEntity().copy(
+                playedAt = System.currentTimeMillis(),
+                playCount = existing.playCount + 1
+            )
+        } else {
+            song.toRecentlyPlayedEntity()
+        }
+        recentlyPlayedDao.insert(entity)
         recentlyPlayedDao.trimToLimit()
     }
 
@@ -99,21 +113,25 @@ class DatabaseRepository(
         }
     }
 
-    suspend fun createPlaylist(name: String) {
+    suspend fun createPlaylist(name: String): Long {
         val id = System.currentTimeMillis()
         playlistDao.insertPlaylist(PlaylistEntity(id, name))
+        return id
     }
 
     suspend fun deletePlaylist(playlistId: Long) {
+        if (SmartPlaylistIds.isSmart(playlistId)) return
         playlistDao.clearPlaylist(playlistId)
         playlistDao.deletePlaylist(playlistId)
     }
 
     suspend fun renamePlaylist(playlistId: Long, newName: String) {
+        if (SmartPlaylistIds.isSmart(playlistId)) return
         playlistDao.renamePlaylist(playlistId, newName)
     }
 
     suspend fun addSongToPlaylist(playlistId: Long, song: Song, position: Int) {
+        if (SmartPlaylistIds.isSmart(playlistId)) return
         playlistDao.insertSong(
             PlaylistSongEntity(
                 playlistId = playlistId,
@@ -128,6 +146,7 @@ class DatabaseRepository(
     }
 
     suspend fun removeSongFromPlaylist(playlistId: Long, songId: Long) {
+        if (SmartPlaylistIds.isSmart(playlistId)) return
         playlistDao.removeSong(playlistId, songId)
     }
 

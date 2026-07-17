@@ -173,6 +173,20 @@ object SgMotion {
         slideOutVertically(targetOffsetY = { it / 2 }, animationSpec = tweenFastAccelOf()) +
             fadeOut(tweenFastAccelOf())
 
+    // ── Paroles (Player ↔ Lyrics) ───────────────────────────────────────────
+    // Écrans "pairs" plein écran : glissement horizontal (pas vertical, pour ne
+    // pas se confondre avec l'ouverture/fermeture du Player lui-même) — cohérent
+    // avec le swipe horizontal qui bascule entre les deux (cf. PlayerScreen /
+    // LyricsScreen).
+
+    fun lyricsEnter(): EnterTransition =
+        slideInHorizontally(initialOffsetX = { it }, animationSpec = tweenSlowOf()) +
+            fadeIn(tweenMediumOf())
+
+    fun lyricsExit(): ExitTransition =
+        slideOutHorizontally(targetOffsetX = { it }, animationSpec = tweenMediumAccelOf()) +
+            fadeOut(tweenFastAccelOf())
+
     // ── Tab / chip content ──────────────────────────────────────────────────
 
     fun tabContentEnter(): EnterTransition =

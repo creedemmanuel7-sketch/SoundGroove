@@ -161,36 +161,38 @@ fun PlaylistDetailScreen(
                             )
                         }
 
-                        Box {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(Color.Black.copy(0.4f), CircleShape)
-                                    .clickable { showOptionsMenu = true },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_options),
-                                    contentDescription = "Options",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = showOptionsMenu,
-                                onDismissRequest = { showOptionsMenu = false },
-                                modifier = Modifier.background(SurfaceElevated)
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Renommer", color = TextPrimary) },
-                                    onClick = { showOptionsMenu = false; showRenameSheet = true },
-                                    leadingIcon = { Icon(painter = painterResource(R.drawable.ic_sort), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp)) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Supprimer la playlist", color = ErrorRed) },
-                                    onClick = { showOptionsMenu = false; showDeleteDialog = true },
-                                    leadingIcon = { Icon(painter = painterResource(R.drawable.ic_favorite_outline), contentDescription = null, tint = ErrorRed, modifier = Modifier.size(18.dp)) }
-                                )
+                        if (!playlist.isSmart) {
+                            Box {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(Color.Black.copy(0.4f), CircleShape)
+                                        .clickable { showOptionsMenu = true },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_options),
+                                        contentDescription = "Options",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showOptionsMenu,
+                                    onDismissRequest = { showOptionsMenu = false },
+                                    modifier = Modifier.background(SurfaceElevated)
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Renommer", color = TextPrimary) },
+                                        onClick = { showOptionsMenu = false; showRenameSheet = true },
+                                        leadingIcon = { Icon(painter = painterResource(R.drawable.ic_sort), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp)) }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Supprimer la playlist", color = ErrorRed) },
+                                        onClick = { showOptionsMenu = false; showDeleteDialog = true },
+                                        leadingIcon = { Icon(painter = painterResource(R.drawable.ic_trash), contentDescription = null, tint = ErrorRed, modifier = Modifier.size(18.dp)) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -201,14 +203,32 @@ fun PlaylistDetailScreen(
                             .align(Alignment.BottomStart)
                             .padding(horizontal = 16.dp, vertical = 18.dp)
                     ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                text = playlist.name,
+                                color = Color.White,
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            if (playlist.isSmart) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(accentColor.copy(0.25f), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text("Auto", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
                         Text(
-                            text = playlist.name,
-                            color = Color.White,
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "${playlist.songs.size} chanson(s)",
+                            text = when {
+                                playlist.songs.isEmpty() && playlist.isSmart -> "Se remplit automatiquement"
+                                else -> "${playlist.songs.size} chanson(s)"
+                            },
                             color = Color.White.copy(0.7f),
                             fontSize = 14.sp
                         )
@@ -218,22 +238,23 @@ fun PlaylistDetailScreen(
 
             // ── Actions Bar ───────────────────────────────────────────────────
             item {
+                val hasSongs = playlist.songs.isNotEmpty()
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Play button
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp)
+                            .height(50.dp)
                             .background(
-                                Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor))),
+                                if (hasSongs) Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor)))
+                                else Brush.horizontalGradient(listOf(GlassSurface, GlassSurface)),
                                 RoundedCornerShape(14.dp)
                             )
-                            .clickable { playlist.songs.firstOrNull()?.let { onPlaySong(it) } },
+                            .clickable(enabled = hasSongs) { playlist.songs.firstOrNull()?.let { onPlaySong(it) } },
                         contentAlignment = Alignment.Center
                     ) {
                         Row(
@@ -243,33 +264,42 @@ fun PlaylistDetailScreen(
                             Icon(
                                 painter = painterResource(R.drawable.ic_play),
                                 contentDescription = null,
-                                tint = Color.White,
+                                tint = if (hasSongs) Color.White else TextSecondary,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text("Lecture", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(
+                                "Tout lire",
+                                color = if (hasSongs) Color.White else TextSecondary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
                         }
                     }
 
-                    // Shuffle button
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp)
+                            .height(50.dp)
                             .background(GlassSurface, RoundedCornerShape(14.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(
-                            modifier = Modifier.clickable { onShufflePlay() },
+                            modifier = Modifier.clickable(enabled = hasSongs) { onShufflePlay() },
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_shuffle),
                                 contentDescription = null,
-                                tint = accentColor,
+                                tint = if (hasSongs) accentColor else TextSecondary,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text("Aléatoire", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(
+                                "Aléatoire",
+                                color = if (hasSongs) accentColor else TextSecondary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
                         }
                     }
                 }
@@ -281,41 +311,47 @@ fun PlaylistDetailScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(40.dp),
+                            .padding(horizontal = 24.dp, vertical = 48.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_songs),
+                                painter = painterResource(
+                                    if (playlist.isSmart) R.drawable.ic_shuffle else R.drawable.ic_songs
+                                ),
                                 contentDescription = null,
                                 tint = TextSecondary,
-                                modifier = Modifier.size(48.dp)
+                                modifier = Modifier.size(52.dp)
                             )
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                "Cette playlist est vide",
-                                color = TextSecondary,
-                                fontSize = 16.sp
+                                if (playlist.isSmart) "Playlist vide pour l'instant" else "Cette playlist est vide",
+                                color = TextPrimary,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.SemiBold
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                "Appuyez sur ⋮ sur une chanson pour l'ajouter",
-                                color = TextSecondary.copy(0.7f),
-                                fontSize = 13.sp
+                                if (playlist.isSmart) {
+                                    "Écoute de la musique pour remplir cette playlist automatiquement."
+                                } else {
+                                    "Appuie sur ⋮ sur une chanson pour l'ajouter ici."
+                                },
+                                color = TextSecondary.copy(0.85f),
+                                fontSize = 14.sp
                             )
                         }
                     }
                 }
             } else {
                 itemsIndexed(playlist.songs) { index, song ->
-                    val isFav = favoriteSongs.any { it.id == song.id }
                     val isCurrent = song.id == currentSong?.id
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onPlaySong(song) }
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {

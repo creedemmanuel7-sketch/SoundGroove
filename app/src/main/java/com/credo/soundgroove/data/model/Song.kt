@@ -17,5 +17,6 @@ data class Song(
 data class Playlist(
     val id: Long = System.currentTimeMillis(),
     val name: String,
-    val songs: List<Song> = emptyList()
+    val songs: List<Song> = emptyList(),
+    val isSmart: Boolean = false
 )

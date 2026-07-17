@@ -24,7 +24,8 @@ data class RecentlyPlayedEntity(
     val artist: String,
     val uri: String,
     val albumArtUri: String?,
-    val playedAt: Long = System.currentTimeMillis()
+    val playedAt: Long = System.currentTimeMillis(),
+    val playCount: Int = 1
 )
 
 @Entity(tableName = "playlists")
@@ -84,6 +85,12 @@ interface FavoriteDao {
 interface RecentlyPlayedDao {
     @Query("SELECT * FROM recently_played ORDER BY playedAt DESC LIMIT 70")
     fun getAll(): Flow<List<RecentlyPlayedEntity>>
+
+    @Query("SELECT * FROM recently_played ORDER BY playCount DESC, playedAt DESC LIMIT 50")
+    fun getOftenPlayed(): Flow<List<RecentlyPlayedEntity>>
+
+    @Query("SELECT * FROM recently_played WHERE songId = :songId LIMIT 1")
+    suspend fun getBySongId(songId: Long): RecentlyPlayedEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(song: RecentlyPlayedEntity)
@@ -159,7 +166,7 @@ interface MetadataOverrideDao {
         PlaylistSongEntity::class,
         MetadataOverrideEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class SoundGrooveDatabase : RoomDatabase() {
@@ -195,6 +202,14 @@ abstract class SoundGrooveDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE recently_played ADD COLUMN playCount INTEGER NOT NULL DEFAULT 1"
+                )
+            }
+        }
+
         fun getInstance(context: Context): SoundGrooveDatabase {
             return INSTANCE ?: synchronized(this) {
                 Room.databaseBuilder(
@@ -202,7 +217,7 @@ abstract class SoundGrooveDatabase : RoomDatabase() {
                     SoundGrooveDatabase::class.java,
                     "soundgroove.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build().also { INSTANCE = it }
             }
         }
