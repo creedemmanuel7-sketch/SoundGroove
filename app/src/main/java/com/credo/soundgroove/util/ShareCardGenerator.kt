@@ -385,7 +385,7 @@ object ShareCardGenerator {
         format: ShareCardFormat,
     ) {
         val logoSize = if (format == ShareCardFormat.SQUARE) 52 else 56
-        val logoBitmap = ContextCompat.getDrawable(context, R.drawable.ic_brand_note)
+        val logoBitmap = ContextCompat.getDrawable(context, R.drawable.ic_brand_waveform)
             ?.toBitmap(logoSize, logoSize)
 
         val brandTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
