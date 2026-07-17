@@ -87,45 +87,45 @@ fun BottomNavBar(selectedTab: Int, accentColor: Color, onTabSelected: (Int) -> U
             .padding(horizontal = SgSpacing.sm, vertical = SgSpacing.xs)
     ) {
         GlassCard(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(SgSpacing.navHeight),
             cornerRadius = SgRadius.pill,
             accentColor = accentColor
         ) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SgSpacing.xs, vertical = 6.dp),
+                    .fillMaxSize()
+                    .padding(horizontal = SgSpacing.xs),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val reducedMotion = rememberSgReducedMotion()
+                val pillSpec = if (reducedMotion) {
+                    androidx.compose.animation.core.snap()
+                } else {
+                    SgMotion.tweenFastOf<Color>()
+                }
                 tabs.forEachIndexed { index, item ->
                     val selected = selectedTab == index
+                    // Pill sélection : couleurs FastMs (Mode perf = snap).
                     val tabBg by animateColorAsState(
-                        targetValue = if (selected) accentColor.copy(alpha = 0.18f) else Color.Transparent,
-                        animationSpec = SgMotion.tweenFastOf(),
+                        targetValue = if (selected) accentColor.copy(alpha = 0.20f) else Color.Transparent,
+                        animationSpec = pillSpec,
                         label = "navTabBg"
                     )
                     val iconTint by animateColorAsState(
                         targetValue = if (selected) accentColor else TextTertiary,
-                        animationSpec = SgMotion.tweenFastOf(),
+                        animationSpec = pillSpec,
                         label = "navIconTint"
-                    )
-                    val tabScale by animateFloatAsState(
-                        targetValue = if (selected) 1.04f else 1f,
-                        animationSpec = SgMotion.SpringSoft,
-                        label = "navTabScale"
                     )
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .graphicsLayer {
-                                scaleX = tabScale
-                                scaleY = tabScale
-                            }
                             .clip(RoundedCornerShape(SgRadius.pill))
                             .background(tabBg)
                             .clickable { onTabSelected(index) }
-                            .padding(vertical = 7.dp, horizontal = SgSpacing.xs),
+                            .padding(vertical = SgSpacing.sm, horizontal = SgSpacing.xs),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -133,7 +133,7 @@ fun BottomNavBar(selectedTab: Int, accentColor: Color, onTabSelected: (Int) -> U
                                 painter = androidx.compose.ui.res.painterResource(item.iconRes),
                                 contentDescription = item.label,
                                 tint = iconTint,
-                                modifier = Modifier.size(21.dp)
+                                modifier = Modifier.size(SgSpacing.iconSize)
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(

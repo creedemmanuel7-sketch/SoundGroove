@@ -10,12 +10,23 @@ data class ListeningStats(
     val monthSeconds: Long,
     val streakDays: Int,
     val totalSeconds: Long,
-    // Ajouté pour les jalons discrets du Profil (cf. gamification légère) : temps
-    // d'écoute du jour, sans nouvelle structure de données — juste exposer une
-    // valeur déjà calculée en interne (`daily[todayKey]`).
+    // Jalons discrets Profil : temps d'écoute du jour (`daily[todayKey]`).
     val todaySeconds: Long = 0L
 )
 
+/**
+ * Source de vérité unique des stats d'écoute.
+ *
+ * - **Semaine / mois** : fenêtres **calendaires** (début de semaine locale → aujourd'hui,
+ *   1er du mois → aujourd'hui), sommées depuis `daily_listening_json`.
+ * - **Total** : compteur lifetime `total_listening_seconds` (prefs), borné au moins
+ *   à la somme journalière retenue (migration / écarts).
+ *
+ * Important : une semaine calendaire n'est **pas** un sous-ensemble du mois calendaire
+ * (ex. début juillet qui inclut fin juin). On ne force donc plus mois ≥ semaine —
+ * l'ancien `coerceAtLeast(week)` collapsait mois (= semaine) puis souvent total
+ * quand l'historique récent dominait, d'où trois pastilles identiques.
+ */
 class ListeningStatsRepository(context: Context) {
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -58,23 +69,47 @@ class ListeningStatsRepository(context: Context) {
 
     private fun computeStats(daily: Map<String, Long>, totalSeconds: Long): ListeningStats {
         val today = Calendar.getInstance()
-        val weekSeconds = sumForDays(today, daily, 7)
-        val monthSeconds = sumForDays(today, daily, 30)
+        val weekSeconds = sumCalendarWeek(today, daily)
+        val monthSeconds = sumCalendarMonth(today, daily)
+        val dailySum = daily.values.sum()
+        // Lifetime : prefs ; floor sur la carte journalière si elle est en avance
+        // (pas de plafond sur semaine/mois — fenêtres indépendantes).
+        val resolvedTotal = maxOf(totalSeconds.coerceAtLeast(0L), dailySum)
         return ListeningStats(
             weekSeconds = weekSeconds,
             monthSeconds = monthSeconds,
             streakDays = calculateStreak(daily, today),
-            totalSeconds = totalSeconds,
+            totalSeconds = resolvedTotal,
             todaySeconds = daily[dateKey(today)] ?: 0L
         )
     }
 
-    private fun sumForDays(from: Calendar, daily: Map<String, Long>, dayCount: Int): Long {
+    /** Du premier jour de la semaine locale jusqu'à aujourd'hui inclus. */
+    private fun sumCalendarWeek(today: Calendar, daily: Map<String, Long>): Long {
+        val start = today.clone() as Calendar
+        val firstDay = start.firstDayOfWeek
+        while (start.get(Calendar.DAY_OF_WEEK) != firstDay) {
+            start.add(Calendar.DAY_OF_YEAR, -1)
+        }
+        return sumInclusiveRange(start, today, daily)
+    }
+
+    /** Du 1er du mois calendaire jusqu'à aujourd'hui inclus. */
+    private fun sumCalendarMonth(today: Calendar, daily: Map<String, Long>): Long {
+        val start = today.clone() as Calendar
+        start.set(Calendar.DAY_OF_MONTH, 1)
+        return sumInclusiveRange(start, today, daily)
+    }
+
+    private fun sumInclusiveRange(from: Calendar, to: Calendar, daily: Map<String, Long>): Long {
         var total = 0L
         val cursor = from.clone() as Calendar
-        repeat(dayCount) {
+        // Garde-fou : max 62 jours (semaine chevauchante + mois)
+        var guard = 0
+        while (!cursor.after(to) && guard < 62) {
             total += daily[dateKey(cursor)] ?: 0L
-            cursor.add(Calendar.DAY_OF_YEAR, -1)
+            cursor.add(Calendar.DAY_OF_YEAR, 1)
+            guard++
         }
         return total
     }

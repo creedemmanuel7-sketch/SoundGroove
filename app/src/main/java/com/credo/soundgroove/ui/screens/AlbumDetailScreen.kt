@@ -26,7 +26,10 @@ import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.AlbumArtThumb
+import com.credo.soundgroove.ui.components.DualCtaBar
 import com.credo.soundgroove.ui.components.SgEmptyState
+import com.credo.soundgroove.util.displayArtist
+import com.credo.soundgroove.util.displayTitle
 import com.credo.soundgroove.ui.components.EditMetadataBottomSheet
 import com.credo.soundgroove.ui.components.SongContextMenuSheet
 import com.credo.soundgroove.ui.components.SongInfoBottomSheet
@@ -58,7 +61,7 @@ fun AlbumDetailScreen(
     val context = LocalContext.current
     val launchCoverPicker = rememberSongCoverArtPicker(onCoverSelected = onSetCoverArt)
     val albumCover = songs.firstOrNull { it.albumArtUri != null }?.albumArtUri
-    val artistName = songs.firstOrNull()?.artist ?: "Inconnu"
+    val artistName = com.credo.soundgroove.util.SongDisplay.artist(songs.firstOrNull()?.artist)
 
     Box(
         modifier = Modifier
@@ -74,26 +77,34 @@ fun AlbumDetailScreen(
                         .fillMaxWidth()
                         .height(300.dp)
                 ) {
-                    if (albumCover != null) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current).data(albumCover).crossfade(true).build(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(sgHeroPlaceholderBrush()),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_songs),
+                    // SharedBounds avec la tile Bibliothèque (SgRadius.xl ≈ 24dp).
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .sgSharedBounds(key = sgAlbumCoverSharedKey(albumName))
+                            .clip(RoundedCornerShape(SgRadius.xl))
+                    ) {
+                        if (albumCover != null) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current).data(albumCover).crossfade(true).build(),
                                 contentDescription = null,
-                                tint = accentColor.copy(alpha = 0.5f),
-                                modifier = Modifier.size(80.dp)
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
                             )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(sgHeroPlaceholderBrush()),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_songs),
+                                    contentDescription = null,
+                                    tint = accentColor.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(80.dp)
+                                )
+                            }
                         }
                     }
 
@@ -137,7 +148,7 @@ fun AlbumDetailScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "$artistName • ${songs.size} chanson(s)",
+                            text = "$artistName • ${com.credo.soundgroove.ui.util.songsCountLabel(songs.size)}",
                             color = Color.White.copy(0.7f),
                             fontSize = 14.sp
                         )
@@ -147,65 +158,13 @@ fun AlbumDetailScreen(
 
             // ── Actions Bar ───────────────────────────────────────────────────
             item {
-                val hasSongs = songs.isNotEmpty()
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                            .background(
-                                if (hasSongs) Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor)))
-                                else Brush.horizontalGradient(listOf(GlassSurface, GlassSurface)),
-                                RoundedCornerShape(14.dp)
-                            )
-                            .clickable(enabled = hasSongs) { songs.firstOrNull()?.let { onPlaySong(it) } },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_play),
-                                contentDescription = null,
-                                tint = if (hasSongs) Color.White else TextSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                "Tout lire",
-                                color = if (hasSongs) Color.White else TextSecondary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                            .background(GlassSurface, RoundedCornerShape(14.dp))
-                            .clickable(enabled = hasSongs) { onShufflePlay() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_shuffle),
-                                contentDescription = null,
-                                tint = if (hasSongs) accentColor else TextSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                "Aléatoire",
-                                color = if (hasSongs) accentColor else TextSecondary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
-                }
+                DualCtaBar(
+                    accentColor = accentColor,
+                    enabled = songs.isNotEmpty(),
+                    onPlay = { songs.firstOrNull()?.let { onPlaySong(it) } },
+                    onShuffle = onShufflePlay,
+                    modifier = Modifier.padding(horizontal = SgSpacing.lg, vertical = SgSpacing.md)
+                )
             }
 
             // ── Song List ────────────────────────────────────────────────────
@@ -249,8 +208,8 @@ fun AlbumDetailScreen(
                     )
 
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(song.title, color = if (isCurrent) accentColor else TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(song.artist, color = TextSecondary, fontSize = 12.sp, maxLines = 1)
+                        Text(song.displayTitle(), color = if (isCurrent) accentColor else TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(song.displayArtist(), color = TextSecondary, fontSize = 12.sp, maxLines = 1)
                     }
 
                     Icon(

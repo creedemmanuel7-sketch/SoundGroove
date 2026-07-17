@@ -70,12 +70,17 @@ import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.SgSeekBar
 import com.credo.soundgroove.ui.components.formatDuration
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.util.PlaybackPreferences
 import com.credo.soundgroove.util.PlayerGuards
 import com.credo.soundgroove.util.blendWithAlbumArt
+import com.credo.soundgroove.util.displayArtist
+import com.credo.soundgroove.util.displayTitle
+import com.credo.soundgroove.util.ensureContrast
 import com.credo.soundgroove.util.rememberAlbumArtAccentColor
+import com.credo.soundgroove.util.rememberAlbumArtRolePalette
 import com.credo.soundgroove.util.rememberPlayerAmbiencePalette
 import kotlinx.coroutines.launch
 
@@ -117,13 +122,30 @@ fun PlayerScreen(
     vinylModeEnabled: Boolean = false,
     albumCoverAccentEnabled: Boolean = false,
 ) {
-    val albumAccent = rememberAlbumArtAccentColor(song.albumArtUri, accentColor)
+    val surfaceBg = MaterialTheme.colorScheme.background
+    val rolePalette = rememberAlbumArtRolePalette(
+        albumArtUri = song.albumArtUri,
+        defaultColor = accentColor,
+        surfaceBackground = surfaceBg,
+        isLightTheme = IsLightTheme,
+    )
+    val albumAccent = rolePalette.primary
     val displayAccent = if (albumCoverAccentEnabled) {
         accentColor
     } else {
         blendWithAlbumArt(accentColor, albumAccent)
     }
-    val displaySecondaryAccent = themeSecondaryAccent(displayAccent)
+    val displaySecondaryAccent = if (albumCoverAccentEnabled) {
+        rolePalette.secondary
+    } else {
+        themeSecondaryAccent(displayAccent)
+    }
+    val fileActionColor = if (albumCoverAccentEnabled) {
+        rolePalette.onSurface
+    } else {
+        TextPrimary
+    }
+    val lyricsActionColor = ensureContrast(displayAccent, surfaceBg, minRatio = 4.5f)
     val secondaryAccent = themeSecondaryAccent(accentColor)
     // Ambiance dérivée de la pochette pour la couche d'assombrissement du fond :
     // contrairement à Paroles (fond toujours sombre), le Player garde le fond du
@@ -477,17 +499,14 @@ fun PlayerScreen(
         // Fond flouté — image sous-échantillonnée avant le flou (perf : un flou sur
         // une image déjà petite coûte beaucoup moins cher qu'un flou 100dp sur la
         // résolution native, surtout en fallback logiciel sous Android 12/API 31).
-        // La couleur dominante (Palette, cf. displayAccent) porte l'essentiel de
-        // l'ambiance visuelle ; le flou n'est qu'un appoint discret.
-        if (song.albumArtUri != null) {
+        // Mode perf / reduced motion : pas de blur — Palette plate uniquement.
+        val coilCrossfadeMs = sgCoilCrossfadeMs(SgMotion.FastMs)
+        if (!reducedMotion && song.albumArtUri != null) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(song.albumArtUri)
                     .size(480, 960)
-                    // Durée calée sur le token M3 "Medium" (SgMotion) : le fond change au
-                    // même rythme que la pochette pour rester perçu comme un seul morph,
-                    // pas deux animations désynchronisées (cf. UX_MOTION_GUIDELINES.md).
-                    .crossfade(SgMotion.FastMs)
+                    .crossfade(coilCrossfadeMs)
                     .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
@@ -647,7 +666,7 @@ fun PlayerScreen(
             ) {
                 Crossfade(
                     targetState = vinylModeEnabled,
-                    animationSpec = SgMotion.tweenMediumOf(),
+                    animationSpec = if (reducedMotion) snap() else SgMotion.tweenMediumOf(),
                     label = "vinylMode"
                 ) { vinylOn ->
                     if (vinylOn) {
@@ -670,7 +689,7 @@ fun PlayerScreen(
                                 AsyncImage(
                                     model = ImageRequest.Builder(LocalContext.current)
                                         .data(song.albumArtUri)
-                                        .crossfade(SgMotion.FastMs)
+                                        .crossfade(coilCrossfadeMs)
                                         .build(),
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
@@ -725,7 +744,7 @@ fun PlayerScreen(
                             )
                     ) {
                         Text(
-                            text = song.title,
+                            text = song.displayTitle(),
                             color = TextPrimary,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
@@ -734,12 +753,25 @@ fun PlayerScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = song.artist,
-                            color = displayAccent,
+                            text = song.displayArtist(),
+                            color = ensureContrast(displayAccent, surfaceBg, minRatio = 4.5f),
                             fontSize = 14.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                    }
+                    // Cœur : fill + pulse 1→1.12→1 une seule fois (SpringSoft) ; pas de particules.
+                    val favoriteScale = remember { Animatable(1f) }
+                    var wasFavorite by remember { mutableStateOf(isFavorite) }
+                    LaunchedEffect(isFavorite) {
+                        if (isFavorite && !wasFavorite && !reducedMotion) {
+                            favoriteScale.snapTo(1f)
+                            favoriteScale.animateTo(1.12f, SgMotion.SpringSoft)
+                            favoriteScale.animateTo(1f, SgMotion.SpringSoft)
+                        } else if (!isFavorite) {
+                            favoriteScale.snapTo(1f)
+                        }
+                        wasFavorite = isFavorite
                     }
                     Icon(
                         painter = painterResource(if (isFavorite) R.drawable.ic_favorite_filled else R.drawable.ic_favorite_outline),
@@ -747,6 +779,10 @@ fun PlayerScreen(
                         tint = if (isFavorite) FavoritePink else TextSecondary,
                         modifier = Modifier
                             .size(28.dp)
+                            .graphicsLayer {
+                                scaleX = favoriteScale.value
+                                scaleY = favoriteScale.value
+                            }
                             .clickable { onToggleFavorite() }
                     )
                 }
@@ -770,11 +806,11 @@ fun PlayerScreen(
             )
 
             Spacer(modifier = Modifier.height(8.dp))
-            // Slider
+            // Seek : thumb 16, track 4, hitSlop 44 (SgSeekBar custom).
             var isSeeking by remember { mutableStateOf(false) }
             var seekPosition by remember { mutableStateOf(0f) }
 
-            androidx.compose.material3.Slider(
+            SgSeekBar(
                 value = if (isSeeking) seekPosition else progress.coerceIn(0f, 1f),
                 onValueChange = { value ->
                     isSeeking = true
@@ -784,14 +820,9 @@ fun PlayerScreen(
                     player.seekTo((seekPosition * duration).toLong())
                     isSeeking = false
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(12.dp),   // ← réduit la taille du slider
-                colors = androidx.compose.material3.SliderDefaults.colors(
-                    thumbColor = displayAccent,
-                    activeTrackColor = displayAccent,
-                    inactiveTrackColor = CardSurface
-                )
+                accentColor = displayAccent,
+                inactiveTrackColor = CardSurface,
+                modifier = Modifier.fillMaxWidth()
             )
 
             Row(
@@ -808,7 +839,19 @@ fun PlayerScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Contrôles
+            // Contrôles — tint FastMs (pas de rotation 360°) ; play = morph icône + press.
+            val controlTintSpec = if (reducedMotion) snap() else SgMotion.tweenFastOf<Color>()
+            val shuffleTint by animateColorAsState(
+                targetValue = if (isShuffled) displayAccent else TextSecondary,
+                animationSpec = controlTintSpec,
+                label = "shuffleTint"
+            )
+            val repeatTint by animateColorAsState(
+                targetValue = if (repeatMode > 0) displayAccent else TextSecondary,
+                animationSpec = controlTintSpec,
+                label = "repeatTint"
+            )
+            val playInteraction = remember { MutableInteractionSource() }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -825,7 +868,7 @@ fun PlayerScreen(
                     Icon(
                         painter = painterResource(R.drawable.ic_shuffle),
                         contentDescription = "Shuffle",
-                        tint = if (isShuffled) displayAccent else TextSecondary,
+                        tint = shuffleTint,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -847,19 +890,36 @@ fun PlayerScreen(
                 Box(
                     modifier = Modifier
                         .size(68.dp)
+                        .then(
+                            if (hasRealSharedTransition && !interactiveDismissActive) {
+                                Modifier.sgSharedBounds(key = sgPlayControlSharedKey(song.id))
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .sgPressScale(playInteraction)
                         .background(
                             Brush.radialGradient(listOf(displayAccent, displaySecondaryAccent)),
                             CircleShape
                         )
-                        .clickable { onPlayPause() },
+                        .clickable(
+                            interactionSource = playInteraction,
+                            indication = null
+                        ) { onPlayPause() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
-                        contentDescription = if (isPlaying) "Pause" else "Lecture",
-                        tint = Color.White,
-                        modifier = Modifier.size(36.dp)
-                    )
+                    Crossfade(
+                        targetState = isPlaying,
+                        animationSpec = if (reducedMotion) snap() else SgMotion.tweenFastOf(),
+                        label = "playPauseIcon"
+                    ) { playing ->
+                        Icon(
+                            painter = painterResource(if (playing) R.drawable.ic_pause else R.drawable.ic_play),
+                            contentDescription = if (playing) "Pause" else "Lecture",
+                            tint = Color.White,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
                 }
 
                 Box(
@@ -889,7 +949,7 @@ fun PlayerScreen(
                     Icon(
                         painter = painterResource(if (repeatMode == 2) R.drawable.ic_repeat_one else R.drawable.ic_repeat),
                         contentDescription = "Répéter",
-                        tint = if (repeatMode > 0) displayAccent else TextSecondary,
+                        tint = repeatTint,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -908,24 +968,30 @@ fun PlayerScreen(
                     onClick = onOpenQueue,
                     modifier = Modifier.weight(0.35f)
                 ) {
+                    // Outline + surface-elevated + onSurface palette (≥ 4.5:1 sur fond lecteur)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(SgRadius.pill))
-                            .background(GlassSurface.copy(alpha = 0.55f))
-                            .border(1.dp, GlassBorder.copy(alpha = 0.35f), RoundedCornerShape(SgRadius.pill))
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                            .background(SurfaceElevated)
+                            .border(1.dp, fileActionColor.copy(alpha = 0.35f), RoundedCornerShape(SgRadius.pill))
+                            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm + 2.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_queue),
                             contentDescription = "File d'attente",
-                            tint = TextSecondary,
+                            tint = fileActionColor,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("File", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            "File",
+                            color = fileActionColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
                 SgTapTarget(
@@ -936,8 +1002,8 @@ fun PlayerScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(SgRadius.pill))
-                            .background(displayAccent.copy(alpha = 0.18f))
-                            .border(1.dp, displayAccent.copy(alpha = 0.4f), RoundedCornerShape(SgRadius.pill))
+                            .background(lyricsActionColor.copy(alpha = 0.18f))
+                            .border(1.dp, lyricsActionColor.copy(alpha = 0.45f), RoundedCornerShape(SgRadius.pill))
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
@@ -945,11 +1011,11 @@ fun PlayerScreen(
                         Icon(
                             imageVector = Icons.Filled.Lyrics,
                             contentDescription = "Paroles",
-                            tint = displayAccent,
+                            tint = lyricsActionColor,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Paroles", color = displayAccent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Paroles", color = lyricsActionColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -1085,7 +1151,7 @@ private fun VinylDisc(
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(song.albumArtUri)
-                        .crossfade(SgMotion.FastMs)
+                        .crossfade(sgCoilCrossfadeMs(SgMotion.FastMs))
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,

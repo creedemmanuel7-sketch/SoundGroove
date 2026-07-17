@@ -82,6 +82,8 @@ import com.credo.soundgroove.ui.theme.SilverAccent
 import com.credo.soundgroove.ui.theme.TextPrimary
 import com.credo.soundgroove.ui.theme.TextSecondary
 import com.credo.soundgroove.ui.theme.sgSheetGradientBrush
+import com.credo.soundgroove.util.displayArtist
+import com.credo.soundgroove.util.displayTitle
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -442,7 +444,7 @@ private fun QueueNowPlayingBanner(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = song.title,
+                    text = song.displayTitle(),
                     color = TextPrimary,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
@@ -450,7 +452,7 @@ private fun QueueNowPlayingBanner(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = song.artist,
+                    text = song.displayArtist(),
                     color = TextSecondary,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
@@ -685,7 +687,7 @@ private fun QueueItemRow(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = song.title,
+                    text = song.displayTitle(),
                     color = if (isCurrent) accentColor else TextPrimary,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
@@ -693,7 +695,7 @@ private fun QueueItemRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = song.artist,
+                    text = song.displayArtist(),
                     color = TextSecondary,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
@@ -824,7 +826,7 @@ fun PlayerQueueBanner(
                 Spacer(modifier = Modifier.width(SgSpacing.md))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = song.title,
+                        text = song.displayTitle(),
                         color = TextPrimary,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Bold,
@@ -832,7 +834,7 @@ fun PlayerQueueBanner(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = song.artist,
+                        text = song.displayArtist(),
                         color = TextSecondary,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,

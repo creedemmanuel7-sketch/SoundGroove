@@ -2,6 +2,7 @@ package com.credo.soundgroove.ui.theme
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import com.credo.soundgroove.util.ensureContrast
 
 /**
  * Accents utilisateur — orthogonaux aux thèmes clair/sombre (Noir / Graphite / Argent).
@@ -132,12 +133,18 @@ fun deriveAccentVariants(base: Color): DynamicAccentVariants = DynamicAccentVari
     soft = lerp(base, Color.White, 0.38f),
 )
 
-/** Accent effectif issu de la palette pochette, adapté au thème actif. */
+/** Accent effectif issu de la palette pochette, adapté au thème actif + contraste fond. */
 fun resolveDynamicAccent(appTheme: AppTheme, albumColor: Color): Color {
     val variants = deriveAccentVariants(albumColor)
-    return when (appTheme) {
+    val background = when (appTheme) {
+        AppTheme.NOIR_ABSOLU -> AbsoluteBlackBg
+        AppTheme.GRAPHITE -> GraphiteAbyss
+        AppTheme.ARGENT_CLAIR -> ArgentClairBg
+    }
+    val candidate = when (appTheme) {
         AppTheme.NOIR_ABSOLU -> variants.primary
         AppTheme.ARGENT_CLAIR -> variants.deep
         AppTheme.GRAPHITE -> variants.muted
     }
+    return ensureContrast(candidate, background, minRatio = 4.5f)
 }

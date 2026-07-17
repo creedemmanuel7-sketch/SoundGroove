@@ -39,6 +39,7 @@ import com.credo.soundgroove.ui.screens.ArtistDetailScreen
 import com.credo.soundgroove.ui.screens.FolderDetailContent
 import com.credo.soundgroove.ui.screens.PlaylistDetailScreen
 import com.credo.soundgroove.ui.theme.LocalSgAnimatedVisibilityScope
+import com.credo.soundgroove.ui.theme.LocalSgPerformanceMode
 import com.credo.soundgroove.ui.theme.LocalSharedTransitionScope
 import com.credo.soundgroove.ui.theme.SgMotion
 import com.credo.soundgroove.ui.theme.rememberSgReducedMotion
@@ -88,10 +89,76 @@ fun AppNavigation(
     val metadataEditMessage by viewModel.metadataEditMessage.collectAsState()
     val playbackQueue by viewModel.playbackQueue.collectAsState()
     val playbackQueueIndex by viewModel.playbackQueueIndex.collectAsState()
+    val performanceModeEnabled by viewModel.performanceModeEnabled.collectAsState()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Fournit le flag prefs AVANT rememberSgReducedMotion (OR logique).
+    CompositionLocalProvider(LocalSgPerformanceMode provides performanceModeEnabled) {
+    AppNavigationContent(
+        viewModel = viewModel,
+        accentColor = accentColor,
+        navController = navController,
+        playlists = playlists,
+        songs = songs,
+        currentSong = currentSong,
+        isPlaying = isPlaying,
+        playbackPosition = playbackPosition,
+        favoriteSongs = favoriteSongs,
+        recentSearches = recentSearches,
+        controller = controller,
+        playbackSpeed = playbackSpeed,
+        playbackPitch = playbackPitch,
+        gaplessEnabled = gaplessEnabled,
+        crossfadeDurationMs = crossfadeDurationMs,
+        sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
+        vinylModeEnabled = vinylModeEnabled,
+        albumCoverAccentEnabled = albumCoverAccentEnabled,
+        equalizerEnabled = equalizerEnabled,
+        equalizerPreset = equalizerPreset,
+        equalizerBands = equalizerBands,
+        metadataEditMessage = metadataEditMessage,
+        playbackQueue = playbackQueue,
+        playbackQueueIndex = playbackQueueIndex,
+        currentRoute = currentRoute,
+        context = context,
+        scope = scope
+    )
+    }
+}
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun AppNavigationContent(
+    viewModel: SoundGrooveViewModel,
+    accentColor: Color,
+    navController: androidx.navigation.NavHostController,
+    playlists: List<Playlist>,
+    songs: List<com.credo.soundgroove.data.model.Song>,
+    currentSong: com.credo.soundgroove.data.model.Song?,
+    isPlaying: Boolean,
+    playbackPosition: Long,
+    favoriteSongs: List<com.credo.soundgroove.data.model.Song>,
+    recentSearches: List<String>,
+    controller: androidx.media3.session.MediaController?,
+    playbackSpeed: Float,
+    playbackPitch: Float,
+    gaplessEnabled: Boolean,
+    crossfadeDurationMs: Int,
+    sleepTimerRemainingSeconds: Int?,
+    vinylModeEnabled: Boolean,
+    albumCoverAccentEnabled: Boolean,
+    equalizerEnabled: Boolean,
+    equalizerPreset: com.credo.soundgroove.util.EqualizerPreset,
+    equalizerBands: List<com.credo.soundgroove.util.EqualizerBandInfo>,
+    metadataEditMessage: String?,
+    playbackQueue: List<com.credo.soundgroove.data.model.Song>,
+    playbackQueueIndex: Int,
+    currentRoute: String?,
+    context: android.content.Context,
+    scope: kotlinx.coroutines.CoroutineScope
+) {
     val reducedMotion = rememberSgReducedMotion()
 
     // File d'attente : PAS un overlay qui cache le Player (cf. correction utilisateur) —
@@ -153,7 +220,8 @@ fun AppNavigation(
         lyricsMounted = true
         scope.launch {
             if (reducedMotion) lyricsPeekProgress.snapTo(1f)
-            else lyricsPeekProgress.animateTo(1f, animationSpec = tween(SgMotion.MediumMs, easing = SgMotion.EmphasizedDecelerate))
+            // Aligné lyricsEnter : slide H SlowMs (porteur) — peek progress unique.
+            else lyricsPeekProgress.animateTo(1f, animationSpec = tween(SgMotion.SlowMs, easing = SgMotion.EmphasizedDecelerate))
         }
     }
 
@@ -233,12 +301,42 @@ fun AppNavigation(
         NavHost(
             navController = navController,
             startDestination = Routes.HOME,
-            enterTransition = { SgMotion.navForwardEnter() },
-            exitTransition = { SgMotion.navForwardExit() },
-            popEnterTransition = { SgMotion.navPopEnter() },
-            popExitTransition = { SgMotion.navPopExit() }
+            enterTransition = {
+                if (reducedMotion) SgMotion.navSnapEnter() else SgMotion.navForwardEnter()
+            },
+            exitTransition = {
+                if (reducedMotion) SgMotion.navSnapExit() else SgMotion.navForwardExit()
+            },
+            popEnterTransition = {
+                if (reducedMotion) SgMotion.navSnapEnter() else SgMotion.navPopEnter()
+            },
+            popExitTransition = {
+                if (reducedMotion) SgMotion.navSnapExit() else SgMotion.navPopExit()
+            }
         ) {
-            composable(Routes.HOME) {
+            composable(
+                route = Routes.HOME,
+                // Vers album/artiste : fade (pas de slide H) — le sharedBounds porte le morph.
+                exitTransition = {
+                    val target = targetState.destination.route
+                    when {
+                        reducedMotion -> SgMotion.navSnapExit()
+                        target == Routes.ALBUM_DETAIL || target == Routes.ARTIST_DETAIL ->
+                            SgMotion.fadeExit()
+                        else -> SgMotion.navForwardExit()
+                    }
+                },
+                popEnterTransition = {
+                    val initial = initialState.destination.route
+                    when {
+                        reducedMotion -> SgMotion.navSnapEnter()
+                        initial == Routes.ALBUM_DETAIL || initial == Routes.ARTIST_DETAIL ->
+                            SgMotion.fadeEnter()
+                        else -> SgMotion.navPopEnter()
+                    }
+                }
+            ) {
+                CompositionLocalProvider(LocalSgAnimatedVisibilityScope provides this@composable) {
                 LegacyMainHost(
                     viewModel = viewModel,
                     accentColor = accentColor,
@@ -258,15 +356,39 @@ fun AppNavigation(
                         navController.navigate(Routes.PLAYER)
                     }
                 )
+                }
             }
 
             composable(
                 route = Routes.SEARCH,
-                enterTransition = { SgMotion.fadeEnter() },
-                exitTransition = { SgMotion.fadeExit() },
-                popEnterTransition = { SgMotion.fadeEnter() },
-                popExitTransition = { SgMotion.fadeExit() }
+                enterTransition = {
+                    if (reducedMotion) SgMotion.navSnapEnter() else SgMotion.fadeEnter()
+                },
+                // Vers album/artiste : fade (déjà le défaut SEARCH) — sharedBounds porte le morph.
+                exitTransition = {
+                    val target = targetState.destination.route
+                    when {
+                        reducedMotion -> SgMotion.navSnapExit()
+                        target == Routes.ALBUM_DETAIL || target == Routes.ARTIST_DETAIL ->
+                            SgMotion.fadeExit()
+                        else -> SgMotion.fadeExit()
+                    }
+                },
+                popEnterTransition = {
+                    // Retour depuis album/artiste : fade (symétrique HOME) pour le sharedBounds.
+                    val initial = initialState.destination.route
+                    when {
+                        reducedMotion -> SgMotion.navSnapEnter()
+                        initial == Routes.ALBUM_DETAIL || initial == Routes.ARTIST_DETAIL ->
+                            SgMotion.fadeEnter()
+                        else -> SgMotion.fadeEnter()
+                    }
+                },
+                popExitTransition = {
+                    if (reducedMotion) SgMotion.navSnapExit() else SgMotion.fadeExit()
+                }
             ) {
+                CompositionLocalProvider(LocalSgAnimatedVisibilityScope provides this@composable) {
                 com.credo.soundgroove.ui.screens.SearchScreen(
                     allSongs = songs,
                     playlists = playlists,
@@ -275,7 +397,10 @@ fun AppNavigation(
                     accentColor = accentColor,
                     recentSearches = recentSearches,
                     onBack = { navController.popBackStack() },
-                    onPlaySong = { song, queue -> viewModel.playSongs(queue, song) },
+                    onPlaySong = { song, queue ->
+                        viewModel.playSongs(queue, song)
+                        navController.navigate(Routes.PLAYER)
+                    },
                     onAlbumClick = { albumName -> navController.navigate(Routes.albumDetail(albumName)) },
                     onArtistClick = { artistName -> navController.navigate(Routes.artistDetail(artistName)) },
                     onPlaylistClick = { playlistId -> navController.navigate(Routes.playlistDetail(playlistId)) },
@@ -284,6 +409,7 @@ fun AppNavigation(
                     onSearchSubmitted = { viewModel.addRecentSearch(it) },
                     onClearSearchHistory = { viewModel.clearSearchHistory() }
                 )
+                }
             }
 
             composable(
@@ -291,10 +417,19 @@ fun AppNavigation(
                 // Mêmes courbes que l'overlay Player interne (MainScreen) : le lecteur doit
                 // s'animer à l'identique quelle que soit la façon dont on y accède, sinon on
                 // perçoit un "saut" en changeant de point d'entrée.
-                enterTransition = { SgMotion.playerEnter() },
-                exitTransition = { SgMotion.playerExit() },
-                popEnterTransition = { SgMotion.playerPopEnter() },
-                popExitTransition = { SgMotion.playerPopExit() }
+                // playerEnter = fade FastMs only (pas de slide) — shared art porte le morph.
+                enterTransition = {
+                    if (reducedMotion) SgMotion.navSnapEnter() else SgMotion.playerEnter()
+                },
+                exitTransition = {
+                    if (reducedMotion) SgMotion.navSnapExit() else SgMotion.playerExit()
+                },
+                popEnterTransition = {
+                    if (reducedMotion) SgMotion.navSnapEnter() else SgMotion.playerPopEnter()
+                },
+                popExitTransition = {
+                    if (reducedMotion) SgMotion.navSnapExit() else SgMotion.playerPopExit()
+                }
             ) {
                 val song = currentSong
                 val player = controller
@@ -431,11 +566,27 @@ fun AppNavigation(
                 }
             }
 
-            composable(Routes.ALBUM_DETAIL) { backStackEntry ->
+            composable(
+                route = Routes.ALBUM_DETAIL,
+                // Fade only — sharedBounds grille → hero porte le morph (évite double slide H).
+                enterTransition = {
+                    if (reducedMotion) SgMotion.navSnapEnter() else SgMotion.fadeEnter()
+                },
+                exitTransition = {
+                    if (reducedMotion) SgMotion.navSnapExit() else SgMotion.fadeExit()
+                },
+                popEnterTransition = {
+                    if (reducedMotion) SgMotion.navSnapEnter() else SgMotion.fadeEnter()
+                },
+                popExitTransition = {
+                    if (reducedMotion) SgMotion.navSnapExit() else SgMotion.fadeExit()
+                }
+            ) { backStackEntry ->
                 val encodedName = backStackEntry.arguments?.getString("albumName") ?: ""
                 val albumName = Uri.decode(encodedName)
                 val albumSongs = songs.filter { it.albumName == albumName }
 
+                CompositionLocalProvider(LocalSgAnimatedVisibilityScope provides this@composable) {
                 AlbumDetailScreen(
                     albumName = albumName,
                     songs = albumSongs,
@@ -459,13 +610,29 @@ fun AppNavigation(
                     },
                     onSetCoverArt = { song, uri -> viewModel.saveSongCoverArt(song, uri) }
                 )
+                }
             }
 
-            composable(Routes.ARTIST_DETAIL) { backStackEntry ->
+            composable(
+                route = Routes.ARTIST_DETAIL,
+                enterTransition = {
+                    if (reducedMotion) SgMotion.navSnapEnter() else SgMotion.fadeEnter()
+                },
+                exitTransition = {
+                    if (reducedMotion) SgMotion.navSnapExit() else SgMotion.fadeExit()
+                },
+                popEnterTransition = {
+                    if (reducedMotion) SgMotion.navSnapEnter() else SgMotion.fadeEnter()
+                },
+                popExitTransition = {
+                    if (reducedMotion) SgMotion.navSnapExit() else SgMotion.fadeExit()
+                }
+            ) { backStackEntry ->
                 val encodedName = backStackEntry.arguments?.getString("artistName") ?: ""
                 val artistName = Uri.decode(encodedName)
                 val artistSongs = songs.filter { it.artist == artistName }
 
+                CompositionLocalProvider(LocalSgAnimatedVisibilityScope provides this@composable) {
                 ArtistDetailScreen(
                     artistName = artistName,
                     songs = artistSongs,
@@ -489,6 +656,7 @@ fun AppNavigation(
                     },
                     onSetCoverArt = { song, uri -> viewModel.saveSongCoverArt(song, uri) }
                 )
+                }
             }
         }
 

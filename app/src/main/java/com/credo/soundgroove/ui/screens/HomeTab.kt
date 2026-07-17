@@ -53,12 +53,17 @@ import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.theme.CardSurface
 import com.credo.soundgroove.ui.theme.GlassBorder
 import com.credo.soundgroove.ui.theme.GlassCard
+import com.credo.soundgroove.ui.theme.SgIconButton
 import com.credo.soundgroove.ui.theme.SgRadius
 import com.credo.soundgroove.ui.theme.SgSpacing
 import com.credo.soundgroove.ui.theme.TextPrimary
 import com.credo.soundgroove.ui.theme.TextSecondary
 import com.credo.soundgroove.ui.theme.TextTertiary
 import com.credo.soundgroove.ui.theme.themeSecondaryAccent
+import com.credo.soundgroove.ui.util.tracksCountLabel
+import com.credo.soundgroove.util.displayArtist
+import com.credo.soundgroove.util.displayTitle
+import com.credo.soundgroove.util.ensureContrast
 import com.credo.soundgroove.viewmodel.ContinueListening
 import com.credo.soundgroove.viewmodel.HomeViewModel
 import java.util.Calendar
@@ -142,6 +147,7 @@ fun HomeTab(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = SgSpacing.screenHorizontal),
+        contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom),
         verticalArrangement = Arrangement.spacedBy(SgSpacing.sectionGap)
     ) {
         item {
@@ -164,14 +170,14 @@ fun HomeTab(
                         color = TextSecondary
                     )
                 }
-                Icon(
-                    painter = painterResource(R.drawable.ic_settings),
-                    contentDescription = "Paramètres",
-                    tint = TextPrimary,
-                    modifier = Modifier
-                        .size(22.dp)
-                        .clickable { onOpenSettings() }
-                )
+                SgIconButton(onClick = onOpenSettings) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_settings),
+                        contentDescription = "Paramètres",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(SgSpacing.iconSize)
+                    )
+                }
             }
         }
 
@@ -253,7 +259,7 @@ fun HomeTab(
                 QuickAccessSection(
                     accentColor = accentColor,
                     favoritesCount = favoriteSongs.size,
-                    playlistsCount = playlists.size,
+                    playlistsCount = playlists.count { !it.isSmart },
                     foldersCount = foldersCount,
                     onNavigateToLibrarySection = onNavigateToLibrarySection
                 )
@@ -308,7 +314,7 @@ fun HomeTab(
                 item {
                     DiscoverySectionHeader(
                         title = "RADIO LOCALE",
-                        subtitle = "File aléatoire · ${homeState.localRadio.size} titres",
+                        subtitle = "File aléatoire · ${tracksCountLabel(homeState.localRadio.size)}",
                         actionLabel = "Lancer",
                         accentColor = accentColor,
                         onAction = {
@@ -463,7 +469,7 @@ private fun ContinueListeningSection(
                     Spacer(modifier = Modifier.width(SgSpacing.md))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = session.song.title,
+                            text = session.song.displayTitle(),
                             color = TextPrimary,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
@@ -472,8 +478,8 @@ private fun ContinueListeningSection(
                         )
                         Spacer(modifier = Modifier.height(SgSpacing.xs))
                         Text(
-                            text = session.song.artist,
-                            color = accentColor,
+                            text = session.song.displayArtist(),
+                            color = ensureContrast(accentColor, CardSurface, minRatio = 4.5f),
                             fontSize = 13.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -509,29 +515,20 @@ private fun ContinueListeningSection(
                 }
 
                 Spacer(modifier = Modifier.height(SgSpacing.md))
-                Row(horizontalArrangement = Arrangement.spacedBy(SgSpacing.sm)) {
-                    ResumeButton(
-                        label = when {
-                            session.isActiveSession && session.isPlaying -> "Ouvrir le lecteur"
-                            session.isActiveSession -> "Reprendre"
-                            else -> "Rejouer"
-                        },
-                        accentColor = accentColor,
-                        filled = true,
-                        onClick = {
-                            if (session.isActiveSession && session.isPlaying) onOpenPlayer()
-                            else onResumeListening()
-                        }
-                    )
-                    if (session.isActiveSession) {
-                        ResumeButton(
-                            label = "Lecteur",
-                            accentColor = accentColor,
-                            filled = false,
-                            onClick = onOpenPlayer
-                        )
-                    }
-                }
+                ResumeButton(
+                    label = when {
+                        session.isActiveSession && session.isPlaying -> "Ouvrir le lecteur"
+                        session.isActiveSession -> "Reprendre"
+                        else -> "Rejouer"
+                    },
+                    accentColor = accentColor,
+                    filled = true,
+                    onClick = {
+                        if (session.isActiveSession && session.isPlaying) onOpenPlayer()
+                        else onResumeListening()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -542,33 +539,32 @@ private fun ResumeButton(
     label: String,
     accentColor: Color,
     filled: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val bg = if (filled) accentColor.copy(alpha = 0.28f) else Color.Transparent
+    // CTA primary fill unique (pas de ghost / label nu secondaire)
     Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(SgRadius.pill))
-            .background(bg)
+        modifier = modifier
+            .height(SgSpacing.buttonHeight)
+            .clip(RoundedCornerShape(SgRadius.lg))
+            .background(if (filled) accentColor else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = SgSpacing.md + 2.dp, vertical = SgSpacing.sm),
+            .padding(horizontal = SgSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(SgSpacing.xs)
+        horizontalArrangement = Arrangement.Center
     ) {
-        if (filled) {
-            Icon(
-                painter = painterResource(R.drawable.ic_play),
-                contentDescription = null,
-                tint = accentColor,
-                modifier = Modifier.size(14.dp)
-            )
-        }
+        Icon(
+            painter = painterResource(R.drawable.ic_play),
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(SgSpacing.sm))
         Text(
             text = label,
-            color = accentColor,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier
-                .clip(RoundedCornerShape(SgRadius.pill))
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
         )
     }
 }
@@ -586,7 +582,7 @@ private fun QuickAccessSection(
         Spacer(modifier = Modifier.height(SgSpacing.sm))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(SgSpacing.sm)
+            horizontalArrangement = Arrangement.spacedBy(SgSpacing.md)
         ) {
             QuickAccessChip(
                 label = "Favoris",
@@ -627,7 +623,7 @@ private fun QuickAccessChip(
 ) {
     GlassCard(
         modifier = modifier.clickable(onClick = onClick),
-        cornerRadius = SgRadius.md,
+        cornerRadius = SgRadius.lg,
         accentColor = accentColor
     ) {
         Column(
@@ -640,7 +636,7 @@ private fun QuickAccessChip(
                 painter = painterResource(iconRes),
                 contentDescription = null,
                 tint = accentColor,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(SgSpacing.iconSize)
             )
             Spacer(modifier = Modifier.height(SgSpacing.xs))
             Text(
@@ -754,15 +750,15 @@ private fun DailyMixHero(
                         )
                         Spacer(modifier = Modifier.height(SgSpacing.xs))
                         Text(
-                            text = featured.artist,
-                            color = accentColor,
+                            text = featured.displayArtist(),
+                            color = ensureContrast(accentColor, CardSurface, minRatio = 4.5f),
                             fontSize = 13.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.height(SgSpacing.sm))
                         Text(
-                            text = "${songs.size} titres · votre sélection du jour",
+                            text = "${tracksCountLabel(songs.size)} · votre sélection du jour",
                             color = TextSecondary,
                             fontSize = 12.sp
                         )
@@ -863,7 +859,7 @@ private fun LocalRadioRow(
                     }
                     Column(modifier = Modifier.padding(SgSpacing.sm)) {
                         Text(
-                            text = song.title,
+                            text = song.displayTitle(),
                             color = TextPrimary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -871,7 +867,7 @@ private fun LocalRadioRow(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = song.artist,
+                            text = song.displayArtist(),
                             color = TextSecondary,
                             fontSize = 10.sp,
                             maxLines = 1,
@@ -935,7 +931,7 @@ private fun MixSuggestionsRow(
                     }
                     Column(modifier = Modifier.padding(SgSpacing.sm)) {
                         Text(
-                            text = song.title,
+                            text = song.displayTitle(),
                             color = TextPrimary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -943,7 +939,7 @@ private fun MixSuggestionsRow(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = song.artist,
+                            text = song.displayArtist(),
                             color = TextSecondary,
                             fontSize = 11.sp,
                             maxLines = 1,
@@ -990,7 +986,7 @@ private fun RecentSongTile(
                     )
             )
             Text(
-                text = song.title,
+                text = song.displayTitle(),
                 color = TextPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,

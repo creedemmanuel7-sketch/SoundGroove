@@ -16,7 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -26,6 +25,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.credo.soundgroove.R
+import com.credo.soundgroove.ui.components.SgSwitch
+import com.credo.soundgroove.ui.components.ThemePicker
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.util.AudioFormatInfo
 import com.credo.soundgroove.util.PlaybackPreferences
@@ -52,6 +53,8 @@ fun SettingsScreen(
     favoriteCount: Int,
     playlistCount: Int,
     listeningTimeLabel: String = "0 min",
+    listeningWeekLabel: String? = null,
+    listeningMonthLabel: String? = null,
     sleepTimerRemainingSeconds: Int?,
     playbackSpeed: Float,
     playbackPitch: Float = 1f,
@@ -116,9 +119,10 @@ fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp)
+                        .padding(horizontal = SgSpacing.gutter)
+                        .padding(bottom = SgSpacing.contentInsetBottom)
                 ) {
-            Spacer(modifier = Modifier.height(38.dp))
+            Spacer(modifier = Modifier.height(SgSpacing.screenTop))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -157,44 +161,15 @@ fun SettingsScreen(
                     fontSize = 13.sp,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ThemeOptionRow(
-                        title = "Noir Absolu",
-                        description = "Noir profond, contraste maximal",
-                        previewColor = themePreviewColor(AppTheme.NOIR_ABSOLU),
-                        isSelected = currentTheme == AppTheme.NOIR_ABSOLU,
-                        selectedAccent = accentColor,
-                        onClick = { origin ->
-                            launchThemeReveal(
-                                revealState, scope, AppTheme.NOIR_ABSOLU, currentTheme, origin, onThemeSelected
-                            )
-                        }
-                    )
-                    ThemeOptionRow(
-                        title = "Clair Argent",
-                        description = "Fond clair, lisibilité WCAG",
-                        previewColor = themePreviewColor(AppTheme.ARGENT_CLAIR),
-                        isSelected = currentTheme == AppTheme.ARGENT_CLAIR,
-                        selectedAccent = accentColor,
-                        onClick = { origin ->
-                            launchThemeReveal(
-                                revealState, scope, AppTheme.ARGENT_CLAIR, currentTheme, origin, onThemeSelected
-                            )
-                        }
-                    )
-                    ThemeOptionRow(
-                        title = "Graphite",
-                        description = "Graphite mat, touches argent",
-                        previewColor = themePreviewColor(AppTheme.GRAPHITE),
-                        isSelected = currentTheme == AppTheme.GRAPHITE,
-                        selectedAccent = accentColor,
-                        onClick = { origin ->
-                            launchThemeReveal(
-                                revealState, scope, AppTheme.GRAPHITE, currentTheme, origin, onThemeSelected
-                            )
-                        }
-                    )
-                }
+                ThemePicker(
+                    currentTheme = currentTheme,
+                    selectedRingColor = accentColor,
+                    onThemeClick = { theme, origin ->
+                        launchThemeReveal(
+                            revealState, scope, theme, currentTheme, origin, onThemeSelected
+                        )
+                    }
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -206,7 +181,7 @@ fun SettingsScreen(
                 )
                 AccentSwatchRow(
                     currentAccent = currentAccent,
-                    selectedRingColor = accentColor,
+                    selectedRingColor = TextPrimary,
                     manualSelectionEnabled = !albumCoverAccentEnabled,
                     onAccentSelected = onAccentSelected
                 )
@@ -304,34 +279,11 @@ fun SettingsScreen(
                 HorizontalDivider(color = GlassBorder.copy(alpha = 0.4f))
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpenPlaybackSpeed() }
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(accentColor.copy(alpha = 0.2f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Speed,
-                            contentDescription = null,
-                            tint = accentColor,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Vitesse et tonalité",
-                            color = TextPrimary,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                // NavigationRow plates (pas de fill accent sur les wells)
+                SettingsNavRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Vitesse et tonalité",
+                    subtitle = run {
                         val speedLabel = if (playbackSpeed == playbackSpeed.toLong().toFloat()) {
                             "${playbackSpeed.toLong()}x"
                         } else {
@@ -342,80 +294,28 @@ fun SettingsScreen(
                         } else {
                             "${playbackPitch}x"
                         }
-                        Text(
-                            text = "Vitesse : $speedLabel · Tonalité : $pitchLabel",
-                            color = accentColor,
-                            fontSize = 12.sp
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.Filled.ChevronRight,
-                        contentDescription = null,
-                        tint = TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                        "Vitesse : $speedLabel · Tonalité : $pitchLabel"
+                    },
+                    onClick = onOpenPlaybackSpeed
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider(color = GlassBorder.copy(alpha = 0.4f))
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpenEqualizer() }
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(accentColor.copy(alpha = 0.2f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.GraphicEq,
-                            contentDescription = null,
-                            tint = accentColor,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Égaliseur",
-                            color = TextPrimary,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = if (equalizerEnabled) equalizerPresetLabel else "Désactivé",
-                            color = accentColor,
-                            fontSize = 12.sp
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.Filled.ChevronRight,
-                        contentDescription = null,
-                        tint = TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                com.credo.soundgroove.ui.components.PlaybackModeIndicator(
-                    gaplessEnabled = gaplessEnabled,
-                    crossfadeMs = crossfadeDurationMs,
-                    accentColor = accentColor
+                SettingsNavRow(
+                    icon = Icons.Filled.GraphicEq,
+                    title = "Égaliseur",
+                    subtitle = if (equalizerEnabled) equalizerPresetLabel else "Désactivé",
+                    onClick = onOpenEqualizer
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 SettingsToggleRow(
                     icon = Icons.Filled.SkipNext,
-                    title = "Lecture gapless",
-                    description = "Enchaînement fluide entre les pistes (ExoPlayer/Media3)",
+                    title = "Enchaînement sans coupure",
+                    description = "Passe d'un morceau à l'autre sans silence",
                     checked = gaplessEnabled,
                     accentColor = accentColor,
                     onCheckedChange = onGaplessChange
@@ -433,14 +333,14 @@ fun SettingsScreen(
                     Box(
                         modifier = Modifier
                             .size(40.dp)
-                            .background(accentColor.copy(alpha = 0.2f), CircleShape),
+                            .background(SurfaceElevated, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Filled.BlurLinear,
                             contentDescription = null,
-                            tint = accentColor,
-                            modifier = Modifier.size(20.dp)
+                            tint = TextSecondary,
+                            modifier = Modifier.size(SgSpacing.iconSize)
                         )
                     }
                     Spacer(modifier = Modifier.width(14.dp))
@@ -574,7 +474,15 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(10.dp))
                 StatRowIcon(R.drawable.ic_playlists, "Playlists", "$playlistCount")
                 Spacer(modifier = Modifier.height(10.dp))
-                StatRowIcon(R.drawable.ic_play, "Heures d'écoute", listeningTimeLabel)
+                listeningWeekLabel?.let { weekLabel ->
+                    StatRowIcon(R.drawable.ic_play, "Cette semaine", weekLabel)
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+                listeningMonthLabel?.let { monthLabel ->
+                    StatRowIcon(R.drawable.ic_play, "Ce mois", monthLabel)
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+                StatRowIcon(R.drawable.ic_play, "Total d'écoute", listeningTimeLabel)
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -798,7 +706,7 @@ private fun AccentSwatchRow(
                     Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = accent.label,
-                        tint = if (accent == AppAccent.FROST || accent == AppAccent.AMBER) {
+                        tint = if (com.credo.soundgroove.util.relativeLuminance(accent.primary) > 0.55f) {
                             Color(0xFF1A1D23)
                         } else {
                             Color.White
@@ -807,60 +715,6 @@ private fun AccentSwatchRow(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun ThemeOptionRow(
-    title: String,
-    description: String,
-    previewColor: Color,
-    selectedAccent: Color,
-    isSelected: Boolean,
-    onClick: (Offset) -> Unit
-) {
-    var revealOrigin by remember { mutableStateOf(Offset.Zero) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .sgThemeRevealOrigin { revealOrigin = it }
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (isSelected) selectedAccent.copy(alpha = 0.11f) else GlassSurface.copy(alpha = 0.28f))
-            .border(
-                width = 1.dp,
-                color = if (isSelected) selectedAccent.copy(alpha = 0.45f) else GlassBorder.copy(alpha = 0.26f),
-                shape = RoundedCornerShape(14.dp)
-            )
-            .clickable { onClick(revealOrigin) }
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .background(previewColor.copy(alpha = 0.85f), CircleShape)
-                .border(1.dp, GlassBorder.copy(alpha = 0.4f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(14.dp)
-                    .background(previewColor, CircleShape)
-            )
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            Text(description, color = TextSecondary, fontSize = 11.sp)
-        }
-        if (isSelected) {
-            Icon(
-                imageVector = Icons.Filled.CheckCircle,
-                contentDescription = "Sélectionné",
-                tint = selectedAccent,
-                modifier = Modifier.size(22.dp)
-            )
         }
     }
 }
@@ -877,22 +731,24 @@ private fun SettingsToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = SgSpacing.listRowHeight, max = SgSpacing.listRowTall)
             .clip(RoundedCornerShape(14.dp))
             .clickable { onCheckedChange(!checked) }
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // IconWell : surface-2 + icon secondary
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .background(accentColor.copy(alpha = 0.18f), CircleShape),
+                .background(SurfaceElevated, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = accentColor,
-                modifier = Modifier.size(20.dp)
+                tint = TextSecondary,
+                modifier = Modifier.size(SgSpacing.iconSize)
             )
         }
         Spacer(modifier = Modifier.width(14.dp))
@@ -900,15 +756,10 @@ private fun SettingsToggleRow(
             Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
             Text(description, color = TextSecondary, fontSize = 12.sp)
         }
-        Switch(
+        SgSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = accentColor,
-                uncheckedThumbColor = TextSecondary,
-                uncheckedTrackColor = GlassSurface
-            )
+            accentColor = accentColor
         )
     }
 }
@@ -918,7 +769,7 @@ private fun SettingsActionRow(
     iconRes: Int,
     title: String,
     description: String,
-    accentColor: Color,
+    @Suppress("UNUSED_PARAMETER") accentColor: Color,
     onClick: () -> Unit
 ) {
     Row(
@@ -932,14 +783,14 @@ private fun SettingsActionRow(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .background(accentColor.copy(alpha = 0.18f), CircleShape),
+                .background(SurfaceElevated, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 painter = painterResource(iconRes),
                 contentDescription = null,
-                tint = accentColor,
-                modifier = Modifier.size(20.dp)
+                tint = TextSecondary,
+                modifier = Modifier.size(SgSpacing.iconSize)
             )
         }
         Spacer(modifier = Modifier.width(14.dp))
@@ -974,22 +825,73 @@ private fun StatRow(
 }
 
 @Composable
+private fun SettingsNavRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = SgSpacing.listRowTall)
+            .clickable(onClick = onClick)
+            .padding(vertical = SgSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(SurfaceElevated, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = TextSecondary,
+                modifier = Modifier.size(SgSpacing.iconSize)
+            )
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(subtitle, color = TextSecondary, fontSize = 12.sp)
+        }
+        Icon(
+            imageVector = Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = TextSecondary,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
 private fun StatRowIcon(
     iconRes: Int,
     label: String,
     value: String
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = SgSpacing.listRowHeight),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            painter = painterResource(iconRes),
-            contentDescription = null,
-            tint = TextSecondary,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(modifier = Modifier.width(12.dp))
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(SurfaceElevated, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                tint = TextSecondary,
+                modifier = Modifier.size(SgSpacing.iconSize)
+            )
+        }
+        Spacer(modifier = Modifier.width(SgSpacing.md))
         Text(label, color = TextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
         Text(value, color = TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }

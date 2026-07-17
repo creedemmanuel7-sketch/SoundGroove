@@ -67,8 +67,12 @@ import com.credo.soundgroove.ui.components.SongItem
 import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.components.formatDuration
 import com.credo.soundgroove.ui.theme.*
+import com.credo.soundgroove.ui.util.songsCountLabel
+import com.credo.soundgroove.ui.util.tracksCountLabel
 import com.credo.soundgroove.util.PlayerGuards
 import com.credo.soundgroove.util.blendWithAlbumArt
+import com.credo.soundgroove.util.displayArtist
+import com.credo.soundgroove.util.displayTitle
 import com.credo.soundgroove.util.rememberAlbumArtAccentColor
 import kotlinx.coroutines.launch
 
@@ -171,77 +175,84 @@ fun LibraryTab(
             val tabsListState = androidx.compose.foundation.lazy.rememberLazyListState()
             val scope = rememberCoroutineScope()
             val activeTab = pagerState.currentPage.coerceIn(0, tabs.lastIndex)
+            // Chips : couleurs FastMs ; Mode perf = snap. Pas de scale/stagger grille.
+            val reducedMotion = rememberSgReducedMotion()
+            val chipSpec = if (reducedMotion) {
+                androidx.compose.animation.core.snap()
+            } else {
+                SgMotion.tweenFastOf<Color>()
+            }
 
             LaunchedEffect(selectedTab) {
                 val target = selectedTab.coerceIn(0, tabs.lastIndex)
                 if (pagerState.currentPage != target) {
-                    pagerState.animateScrollToPage(target)
+                    if (reducedMotion) pagerState.scrollToPage(target)
+                    else pagerState.animateScrollToPage(target)
                 }
             }
             LaunchedEffect(activeTab) {
                 if (selectedTab != activeTab) {
                     onSelectedTabChange(activeTab)
                 }
-                tabsListState.animateScrollToItem(activeTab)
+                if (reducedMotion) tabsListState.scrollToItem(activeTab)
+                else tabsListState.animateScrollToItem(activeTab)
             }
 
             androidx.compose.foundation.lazy.LazyRow(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .sgChipRowEdgeFade(),
                 state = tabsListState,
+                contentPadding = PaddingValues(end = SgSpacing.chipEdgeFade),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(tabs.size) { index ->
                     val selected = activeTab == index
                     val iconRes = if (index == 5 && selected) R.drawable.ic_favorite_filled else tabIcons.getOrElse(index) { R.drawable.ic_songs }
                     val chipBg by animateColorAsState(
-                        targetValue = if (selected) accentColor else GlassSurface,
-                        animationSpec = SgMotion.tweenFastOf(),
+                        targetValue = if (selected) accentColor.copy(alpha = 0.20f) else SurfaceElevated.copy(alpha = 0.55f),
+                        animationSpec = chipSpec,
                         label = "libChipBg"
                     )
                     val chipBorder by animateColorAsState(
-                        targetValue = if (selected) accentColor.copy(0.5f) else GlassBorder,
-                        animationSpec = SgMotion.tweenFastOf(),
+                        targetValue = if (selected) accentColor.copy(alpha = 0.45f) else TextPrimary.copy(alpha = 0.08f),
+                        animationSpec = chipSpec,
                         label = "libChipBorder"
                     )
-                    val chipScale by animateFloatAsState(
-                        targetValue = if (selected) 1.03f else 1f,
-                        animationSpec = SgMotion.SpringSoft,
-                        label = "libChipScale"
-                    )
+                    val chipContent = if (selected) accentColor else TextSecondary
                     Row(
                         modifier = Modifier
-                            .graphicsLayer {
-                                scaleX = chipScale
-                                scaleY = chipScale
-                            }
+                            .heightIn(min = SgSpacing.chipHeight)
                             .clip(RoundedCornerShape(SgRadius.pill))
-                            .background(
-                                if (selected) Brush.horizontalGradient(listOf(chipBg, themeSecondaryAccent(accentColor)))
-                                else Brush.horizontalGradient(listOf(chipBg, chipBg))
-                            )
+                            .background(chipBg)
                             .border(1.dp, chipBorder, RoundedCornerShape(SgRadius.pill))
                             .clickable {
                                 onSelectedTabChange(index)
                                 scope.launch {
-                                    pagerState.animateScrollToPage(index)
-                                    tabsListState.animateScrollToItem(index)
+                                    if (reducedMotion) {
+                                        pagerState.scrollToPage(index)
+                                        tabsListState.scrollToItem(index)
+                                    } else {
+                                        pagerState.animateScrollToPage(index)
+                                        tabsListState.animateScrollToItem(index)
+                                    }
                                 }
                             }
-                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(SgSpacing.sm)
                     ) {
                         Icon(
                             painter = androidx.compose.ui.res.painterResource(iconRes),
                             contentDescription = null,
-                            tint = if (selected) Color.White else TextSecondary,
+                            tint = chipContent,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
                             text = tabs[index],
-                            color = if (selected) Color.White else TextSecondary,
+                            color = chipContent,
                             fontSize = 12.sp,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
                         )
                     }
                 }
@@ -267,29 +278,31 @@ fun LibraryTab(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "${songs.size} titre(s)",
+                                    text = tracksCountLabel(songs.size),
                                     color = TextSecondary,
                                     fontSize = 13.sp
                                 )
+                                // Chip Tri = utility (surface-2 + text-secondary)
                                 Row(
                                     modifier = Modifier
+                                        .heightIn(min = SgSpacing.chipHeight)
                                         .clip(RoundedCornerShape(SgRadius.pill))
-                                        .background(GlassSurface)
-                                        .border(1.dp, GlassBorder, RoundedCornerShape(SgRadius.pill))
+                                        .background(SurfaceElevated)
+                                        .border(1.dp, TextPrimary.copy(alpha = 0.10f), RoundedCornerShape(SgRadius.pill))
                                         .clickable { showSortSheet = true }
-                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(SgSpacing.sm)
                                 ) {
                                     Icon(
                                         painter = androidx.compose.ui.res.painterResource(R.drawable.ic_sort),
                                         contentDescription = "Trier",
-                                        tint = accentColor,
-                                        modifier = Modifier.size(16.dp)
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                     Text(
                                         text = sortLabels[sortMode],
-                                        color = accentColor,
+                                        color = TextSecondary,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium
                                     )
@@ -324,7 +337,7 @@ fun LibraryTab(
                                     modifier = Modifier.fillMaxSize(),
                                     state = songsListState,
                                     verticalArrangement = Arrangement.spacedBy(SgSpacing.listItemGap),
-                                    contentPadding = PaddingValues(vertical = SgSpacing.xs)
+                                    contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)
                                 ) {
                                     items(displaySongs, key = { it.id }) { song ->
                                         com.credo.soundgroove.ui.components.SongListItem(
@@ -380,20 +393,24 @@ fun LibraryTab(
                         }
                     }
 
-                1 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                1 -> LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(SgSpacing.md),
+                    contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)
+                ) {
                     val rows = albums.chunked(2)
                     items(rows, key = { row -> row.joinToString("|") { it.first } }) { rowAlbums ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(SgSpacing.md)
                         ) {
                             rowAlbums.forEach { (albumName, albumSongs) ->
                                 GlassCard(
                                     modifier = Modifier
                                         .weight(1f)
                                         .aspectRatio(1f)
+                                        .sgSharedBounds(key = sgAlbumCoverSharedKey(albumName))
                                         .clickable { onNavigateToAlbum(albumName) },
-                                    cornerRadius = 16.dp
+                                    cornerRadius = SgRadius.xl
                                 ) {
                                     Box(
                                         modifier = Modifier.fillMaxSize(),
@@ -426,19 +443,22 @@ fun LibraryTab(
                                                 )
                                             }
                                         }
+                                        // Scrim bas 40–56 %
                                         Box(
                                             modifier = Modifier
-                                                .fillMaxSize()
+                                                .fillMaxWidth()
+                                                .fillMaxHeight(0.52f)
+                                                .align(Alignment.BottomCenter)
                                                 .background(
                                                     Brush.verticalGradient(
                                                         listOf(
                                                             Color.Transparent,
-                                                            Color.Black.copy(0.8f)
+                                                            Color.Black.copy(alpha = 0.48f)
                                                         )
                                                     )
                                                 )
                                         )
-                                        Column(modifier = Modifier.padding(8.dp)) {
+                                        Column(modifier = Modifier.padding(SgSpacing.md)) {
                                             Text(
                                                 text = albumName,
                                                 color = TextPrimary,
@@ -448,7 +468,7 @@ fun LibraryTab(
                                                 overflow = TextOverflow.Ellipsis
                                             )
                                             Text(
-                                                text = "${albumSongs.size} titres",
+                                                text = tracksCountLabel(albumSongs.size),
                                                 color = TextSecondary,
                                                 fontSize = 10.sp
                                             )
@@ -459,41 +479,47 @@ fun LibraryTab(
                             if (rowAlbums.size == 1) Spacer(modifier = Modifier.weight(1f))
                         }
                     }
-                    item { Spacer(modifier = Modifier.height(16.dp)) }
                 }
 
-                2 -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                2 -> LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(SgSpacing.sm),
+                    contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)
+                ) {
                     items(artists, key = { it }) { artist ->
                         val artistSongs = songs.filter { it.artist == artist }
                         GlassCard(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .height(72.dp)
                                 .clickable { onNavigateToArtist(artist) },
-                            cornerRadius = 14.dp
+                            cornerRadius = SgRadius.md
                         ) {
                             Row(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
+                                    .fillMaxSize()
+                                    .padding(horizontal = SgSpacing.md),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
-                                    modifier = Modifier.size(46.dp),
+                                    modifier = Modifier.size(48.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     val coverSong =
                                         artistSongs.firstOrNull { it.albumArtUri != null }
                                     com.credo.soundgroove.ui.components.ArtistAvatarView(
                                         albumArtUri = coverSong?.albumArtUri,
-                                        artistName = artist,
-                                        size = 46.dp,
-                                        accentColor = accentColor
+                                        artistName = com.credo.soundgroove.util.SongDisplay.artist(artist),
+                                        size = 48.dp,
+                                        accentColor = accentColor,
+                                        modifier = Modifier.sgSharedBounds(
+                                            key = sgArtistAvatarSharedKey(artist)
+                                        )
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
+                                Spacer(modifier = Modifier.width(SgSpacing.md))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = artist,
+                                        text = com.credo.soundgroove.util.SongDisplay.artist(artist),
                                         color = TextPrimary,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Medium,
@@ -501,7 +527,7 @@ fun LibraryTab(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = "${artistSongs.size} chanson(s)",
+                                        text = songsCountLabel(artistSongs.size),
                                         color = TextSecondary,
                                         fontSize = 12.sp
                                     )
@@ -568,7 +594,7 @@ fun LibraryTab(
                                     modifier = Modifier.fillMaxSize()
                                 )
                             } else {
-                                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)) {
                                     items(playlists, key = { it.id }) { playlist ->
                                         var showMenu by remember { mutableStateOf(false) }
                                         var showRenameDialog by remember { mutableStateOf(false) }
@@ -655,7 +681,7 @@ fun LibraryTab(
                                                     text = if (playlist.songs.isEmpty()) {
                                                         if (playlist.isSmart) "Se remplit en écoutant" else "Vide"
                                                     } else {
-                                                        "${playlist.songs.size} chanson(s)"
+                                                        songsCountLabel(playlist.songs.size)
                                                     },
                                                     color = TextSecondary,
                                                     fontSize = 12.sp
@@ -845,7 +871,10 @@ fun LibraryTab(
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(SgSpacing.listItemGap)) {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(SgSpacing.listItemGap),
+                            contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)
+                        ) {
                             if (hiddenFolders.isNotEmpty()) {
                                 item {
                                     Text(
@@ -927,7 +956,7 @@ fun LibraryTab(
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
-                                            Text("${folderSongs.size} chanson(s)", color = TextSecondary, fontSize = 12.sp)
+                                            Text(songsCountLabel(folderSongs.size), color = TextSecondary, fontSize = 12.sp)
                                         }
                                         Icon(painter = painterResource(R.drawable.ic_back), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
                                     }
@@ -948,7 +977,10 @@ fun LibraryTab(
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(SgSpacing.listItemGap)) {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(SgSpacing.listItemGap),
+                            contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)
+                        ) {
                             items(favoriteSongs, key = { it.id }) { song ->
                                 GlassCard(
                                     modifier = Modifier
@@ -995,7 +1027,7 @@ fun LibraryTab(
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
-                                                text = song.title,
+                                                text = song.displayTitle(),
                                                 color = TextPrimary,
                                                 fontSize = 14.sp,
                                                 fontWeight = FontWeight.Medium,
@@ -1003,7 +1035,7 @@ fun LibraryTab(
                                                 overflow = TextOverflow.Ellipsis
                                             )
                                             Text(
-                                                text = song.artist,
+                                                text = song.displayArtist(),
                                                 color = TextSecondary,
                                                 fontSize = 12.sp,
                                                 maxLines = 1
@@ -1133,7 +1165,7 @@ fun FolderDetailContent(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${folderSongs.size} chanson(s)",
+                    text = songsCountLabel(folderSongs.size),
                     color = TextSecondary,
                     fontSize = 13.sp,
                     maxLines = 1,
@@ -1166,7 +1198,7 @@ fun FolderDetailContent(
         LazyColumn(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(vertical = 4.dp)
+            contentPadding = PaddingValues(top = 4.dp, bottom = SgSpacing.contentInsetBottom)
         ) {
             items(folderSongs, key = { it.id }) { song ->
                 com.credo.soundgroove.ui.components.SongListItem(

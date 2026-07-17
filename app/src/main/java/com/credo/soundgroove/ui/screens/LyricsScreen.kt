@@ -79,8 +79,16 @@ import com.credo.soundgroove.lyrics.LyricsContent
 import com.credo.soundgroove.lyrics.LyricsViewModel
 import com.credo.soundgroove.ui.theme.SgMotion
 import com.credo.soundgroove.ui.theme.SgRadius
+import com.credo.soundgroove.ui.theme.SgSpacing
+import com.credo.soundgroove.ui.theme.rememberSgReducedMotion
+import com.credo.soundgroove.ui.theme.sgCoilCrossfadeMs
+import androidx.compose.animation.core.snap
+import androidx.compose.foundation.gestures.animateScrollBy
+import com.credo.soundgroove.util.LyricsChromePrimaryText
 import com.credo.soundgroove.util.LyricsPalette
 import com.credo.soundgroove.util.PlayerGuards
+import com.credo.soundgroove.util.displayArtist
+import com.credo.soundgroove.util.displayTitle
 import com.credo.soundgroove.util.rememberLyricsPalette
 import kotlinx.coroutines.launch
 
@@ -191,15 +199,15 @@ fun LyricsScreen(
                 )
             }
     ) {
-        // Fond immersif : pochette floutée + gradient sombre premium. Le flou est
-        // plus marqué que sur le Player (46dp vs 20dp) car ici le texte doit rester
-        // lisible pendant toute la durée du morceau, pas juste en coup d'œil.
-        if (song.albumArtUri != null) {
+        // Fond immersif : pochette floutée + gradient. Mode perf : Palette plate, blur=0.
+        val reducedMotion = rememberSgReducedMotion()
+        val coilCrossfadeMs = sgCoilCrossfadeMs(SgMotion.FastMs)
+        if (!reducedMotion && song.albumArtUri != null) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
                     .data(song.albumArtUri)
                     .size(480, 960)
-                    .crossfade(SgMotion.MediumMs)
+                    .crossfade(coilCrossfadeMs)
                     .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
@@ -264,7 +272,7 @@ fun LyricsScreen(
                         letterSpacing = 2.sp
                     )
                     Text(
-                        text = song.title,
+                        text = song.displayTitle(),
                         color = effectiveAccent,
                         fontSize = 13.sp,
                         maxLines = 1,
@@ -390,6 +398,7 @@ private fun LyricsPlaybackBar(
         animationSpec = SgMotion.tweenProgress(),
         label = "lyricsBarProgress"
     )
+    val coilCrossfadeMs = sgCoilCrossfadeMs(SgMotion.FastMs)
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(SgRadius.xl))
@@ -424,7 +433,7 @@ private fun LyricsPlaybackBar(
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(song.albumArtUri)
-                                .crossfade(SgMotion.FastMs)
+                                .crossfade(coilCrossfadeMs)
                                 .build(),
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
@@ -441,7 +450,7 @@ private fun LyricsPlaybackBar(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = song.title,
+                        text = song.displayTitle(),
                         color = palette.primaryText,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -449,7 +458,7 @@ private fun LyricsPlaybackBar(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = song.artist,
+                        text = song.displayArtist(),
                         color = palette.secondaryText,
                         fontSize = 11.sp,
                         maxLines = 1,
@@ -632,12 +641,32 @@ private fun SyncedLyricsList(
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val reducedMotion = rememberSgReducedMotion()
+    var lastScrolledLine by remember { mutableStateOf(-1) }
 
-    LaunchedEffect(currentLineIndex, lines.size, autoScrollEnabled) {
+    LaunchedEffect(currentLineIndex, lines.size, autoScrollEnabled, reducedMotion) {
         if (autoScrollEnabled && currentLineIndex >= 0 && lines.isNotEmpty()) {
             val targetIndex = (currentLineIndex - 2).coerceIn(0, lines.lastIndex)
+            val gap = if (lastScrolledLine < 0) 0 else kotlin.math.abs(currentLineIndex - lastScrolledLine)
             scope.launch {
-                runCatching { listState.animateScrollToItem(targetIndex) }
+                runCatching {
+                    // Snap si Mode perf / reduced motion, ou saut > 3 lignes (R7).
+                    if (reducedMotion || gap > 3) {
+                        listState.scrollToItem(targetIndex)
+                    } else {
+                        val visible = listState.layoutInfo.visibleItemsInfo
+                            .firstOrNull { it.index == targetIndex }
+                        if (visible != null) {
+                            listState.animateScrollBy(
+                                visible.offset.toFloat(),
+                                animationSpec = SgMotion.tweenMedium()
+                            )
+                        } else {
+                            listState.animateScrollToItem(targetIndex)
+                        }
+                    }
+                }
+                lastScrolledLine = currentLineIndex
             }
         }
     }
@@ -655,54 +684,68 @@ private fun SyncedLyricsList(
             val isActive = index == currentLineIndex
             val isPast = index < currentLineIndex
 
+            // Actif : couleur MediumMs + scale 1.06 SpringSoft + halo 0.14
+            // Mode perf : color swap only (pas de scale/halo animé).
+            val colorSpec = if (reducedMotion) snap() else SgMotion.tweenMediumOf<Color>()
             val color by animateColorAsState(
                 targetValue = when {
-                    isActive -> accentColor
+                    isActive -> LyricsChromePrimaryText
                     isPast -> inactiveColor.copy(alpha = 0.42f)
                     else -> inactiveColor
                 },
-                animationSpec = SgMotion.tweenMediumOf(),
+                animationSpec = colorSpec,
                 label = "lyricLineColor"
             )
             val scale by animateFloatAsState(
-                targetValue = if (isActive) 1.06f else 1f,
-                animationSpec = SgMotion.SpringSoft,
+                targetValue = if (isActive && !reducedMotion) SgMotion.LyricsActiveScale else 1f,
+                animationSpec = if (reducedMotion) snap() else SgMotion.SpringSoft,
                 label = "lyricLineScale"
             )
-            // Halo doux derrière la ligne "en cours" — visible pour guider l'œil
-            // pendant le défilement automatique, mais assez discret (alpha ~0.14)
-            // pour ne jamais rivaliser avec le texte lui-même.
             val highlightAlpha by animateFloatAsState(
                 targetValue = if (isActive) 1f else 0f,
-                animationSpec = SgMotion.tweenMediumOf(),
+                animationSpec = if (reducedMotion) snap() else SgMotion.tweenMediumOf(),
                 label = "lyricLineHighlight"
             )
+            val haloAlpha = if (reducedMotion) {
+                if (isActive) SgMotion.LyricsHaloAlpha else 0f
+            } else {
+                SgMotion.LyricsHaloAlpha * highlightAlpha
+            }
 
-            Box(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .graphicsLayer {
                         scaleX = scale
                         scaleY = scale
                     }
+                    .clip(RoundedCornerShape(SgRadius.md))
                     .background(
-                        accentColor.copy(alpha = 0.14f * highlightAlpha),
-                        RoundedCornerShape(SgRadius.md)
+                        if (haloAlpha > 0f) accentColor.copy(alpha = haloAlpha)
+                        else Color.Transparent
                     )
-                    .clickable {
-                        runCatching { onLineClick(line.timeMs) }
-                    }
-                    .padding(horizontal = 24.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center
+                    .clickable { runCatching { onLineClick(line.timeMs) } }
+                    .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .height(22.dp)
+                        .clip(RoundedCornerShape(SgRadius.pill))
+                        .background(accentColor.copy(alpha = if (reducedMotion) {
+                            if (isActive) 1f else 0f
+                        } else highlightAlpha))
+                )
+                Spacer(modifier = Modifier.width(SgSpacing.md))
                 Text(
                     text = line.text.ifBlank { "···" },
                     color = color,
-                    fontSize = if (isActive) 19.sp else 16.sp,
+                    fontSize = if (isActive) 18.sp else 16.sp,
                     fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                    textAlign = TextAlign.Center,
+                    textAlign = TextAlign.Start,
                     lineHeight = 24.sp,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.weight(1f)
                 )
             }
         }

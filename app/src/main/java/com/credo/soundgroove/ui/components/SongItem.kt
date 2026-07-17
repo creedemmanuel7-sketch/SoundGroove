@@ -63,10 +63,12 @@ import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
-import com.credo.soundgroove.ui.components.formatDuration
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.util.PlayerGuards
+import com.credo.soundgroove.util.SongDisplay
 import com.credo.soundgroove.util.blendWithAlbumArt
+import com.credo.soundgroove.util.displayArtist
+import com.credo.soundgroove.util.displayTitle
 import com.credo.soundgroove.util.rememberAlbumArtAccentColor
 import kotlinx.coroutines.launch
 
@@ -150,7 +152,7 @@ fun SongItem(
                         NowPlayingBadge(isPlaying = true, accentColor = accentColor)
                     }
                     Text(
-                        text = song.title,
+                        text = song.displayTitle(),
                         color = if (isPlaying) accentColor else TextPrimary,
                         fontSize = 14.sp,
                         fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Normal,
@@ -160,7 +162,7 @@ fun SongItem(
                     )
                 }
                 Text(
-                    text = song.artist,
+                    text = song.displayArtist(),
                     color = TextSecondary,
                     fontSize = 12.sp,
                     maxLines = 1,
@@ -168,11 +170,13 @@ fun SongItem(
                 )
             }
 
-            Text(
-                text = formatDuration(song.duration),
-                color = TextTertiary.copy(alpha = 0.7f),
-                fontSize = 11.sp
-            )
+            SongDisplay.formatDurationOrNull(song.duration)?.let { durationLabel ->
+                Text(
+                    text = durationLabel,
+                    color = TextTertiary.copy(alpha = 0.7f),
+                    fontSize = 11.sp
+                )
+            }
 
             if (showMenu) {
                 Box {

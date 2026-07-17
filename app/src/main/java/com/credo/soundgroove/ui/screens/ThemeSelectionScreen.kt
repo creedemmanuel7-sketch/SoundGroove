@@ -27,6 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.credo.soundgroove.ui.components.SoundGrooveLogo
+import com.credo.soundgroove.ui.components.ThemePicker
+import com.credo.soundgroove.ui.components.themeFullLabel
 import com.credo.soundgroove.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -238,47 +240,16 @@ private fun OnboardingThemeStep(
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(SgSpacing.lg))
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(SgSpacing.md)
-        ) {
-            ThemeCard(
-                title = "Noir Absolu",
-                description = "Noir profond, contraste maximal.",
-                accentColor = resolveAccentColor(AppTheme.NOIR_ABSOLU, AppAccent.VIOLET),
-                bgColor = AbsoluteBlackSurface,
-                isSelected = selectedTheme == AppTheme.NOIR_ABSOLU,
-                onClick = { origin ->
-                    launchThemeReveal(
-                        revealState, scope, AppTheme.NOIR_ABSOLU, selectedTheme, origin
-                    ) { onThemeChange(it) }
-                }
-            )
-            ThemeCard(
-                title = "Clair Argent",
-                description = "Fond clair, lisibilité WCAG.",
-                accentColor = resolveAccentColor(AppTheme.ARGENT_CLAIR, AppAccent.VIOLET),
-                bgColor = ArgentClairSurface,
-                isSelected = selectedTheme == AppTheme.ARGENT_CLAIR,
-                onClick = { origin ->
-                    launchThemeReveal(
-                        revealState, scope, AppTheme.ARGENT_CLAIR, selectedTheme, origin
-                    ) { onThemeChange(it) }
-                }
-            )
-            ThemeCard(
-                title = "Graphite",
-                description = "Graphite mat et touches argent.",
-                accentColor = resolveAccentColor(AppTheme.GRAPHITE, AppAccent.VIOLET),
-                bgColor = GraphiteCard,
-                isSelected = selectedTheme == AppTheme.GRAPHITE,
-                onClick = { origin ->
-                    launchThemeReveal(
-                        revealState, scope, AppTheme.GRAPHITE, selectedTheme, origin
-                    ) { onThemeChange(it) }
-                }
-            )
-        }
+        ThemePicker(
+            currentTheme = selectedTheme,
+            selectedRingColor = resolveAccentColor(selectedTheme, AppAccent.VIOLET),
+            onThemeClick = { theme, origin ->
+                launchThemeReveal(
+                    revealState, scope, theme, selectedTheme, origin
+                ) { onThemeChange(it) }
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -288,11 +259,7 @@ private fun OnboardingReadyStep(
     accentColor: Color,
     modifier: Modifier = Modifier
 ) {
-    val themeLabel = when (selectedTheme) {
-        AppTheme.NOIR_ABSOLU -> "Noir Absolu"
-        AppTheme.ARGENT_CLAIR -> "Clair Argent"
-        AppTheme.GRAPHITE -> "Graphite"
-    }
+    val themeLabel = themeFullLabel(selectedTheme)
     val iconScale by animateFloatAsState(
         targetValue = 1f,
         animationSpec = tween(SgMotion.SlowMs, easing = SgMotion.EaseOut),

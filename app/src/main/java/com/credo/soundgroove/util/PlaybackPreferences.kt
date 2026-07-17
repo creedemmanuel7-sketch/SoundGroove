@@ -81,8 +81,8 @@ object PlaybackPreferences {
     }
 
     fun playbackModeLabel(gapless: Boolean, crossfadeMs: Int): String = when {
-        crossfadeMs > 0 -> "Crossfade ${crossfadeLabel(crossfadeMs).lowercase()}"
-        gapless -> "Gapless actif"
+        crossfadeMs > 0 -> "Fondu ${crossfadeLabel(crossfadeMs).lowercase()}"
+        gapless -> "Enchaînement sans coupure"
         else -> "Pause entre pistes"
     }
 }

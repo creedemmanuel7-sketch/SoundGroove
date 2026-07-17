@@ -34,8 +34,13 @@ import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.data.repository.ListeningStats
+import com.credo.soundgroove.ui.components.SgSwitch
 import com.credo.soundgroove.ui.components.SongItem
+import com.credo.soundgroove.ui.components.ThemePicker
+import com.credo.soundgroove.ui.components.themeFullLabel
 import com.credo.soundgroove.ui.theme.*
+import com.credo.soundgroove.ui.util.playlistsCountLabel
+import com.credo.soundgroove.ui.util.tracksCountLabel
 
 @Composable
 fun ProfileTab(
@@ -101,6 +106,7 @@ fun ProfileTab(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = SgSpacing.screenHorizontal),
+        contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom),
         verticalArrangement = Arrangement.spacedBy(SgSpacing.sectionGap)
     ) {
         item {
@@ -108,7 +114,7 @@ fun ProfileTab(
             ProfileIdentityCard(
                 userName = userName,
                 avatarUri = avatarUri,
-                themeLabel = themeDisplayName(currentTheme),
+                themeLabel = themeFullLabel(currentTheme),
                 accentColor = accentColor,
                 onEditClick = { showEditDialog = true },
                 onAvatarClick = { avatarPicker.launch("image/*") }
@@ -139,7 +145,7 @@ fun ProfileTab(
                     value = "${favoriteSongs.size}",
                     label = "Favoris",
                     iconRes = R.drawable.ic_favorite_filled,
-                    tint = FavoritePink,
+                    tint = accentColor,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -161,15 +167,15 @@ fun ProfileTab(
                 ) {
                     ProfileShortcut(
                         title = "Favoris",
-                        subtitle = "${favoriteSongs.size} titres",
+                        subtitle = tracksCountLabel(favoriteSongs.size),
                         iconRes = R.drawable.ic_favorite_filled,
-                        tint = FavoritePink,
+                        tint = accentColor,
                         modifier = Modifier.weight(1f),
                         onClick = onOpenFavorites
                     )
                     ProfileShortcut(
                         title = "Playlists",
-                        subtitle = "${playlists.size} listes",
+                        subtitle = playlistsCountLabel(playlists.count { !it.isSmart }),
                         iconRes = R.drawable.ic_playlists,
                         tint = accentColor,
                         modifier = Modifier.weight(1f),
@@ -243,7 +249,7 @@ fun ProfileTab(
                         modifier = Modifier.weight(1f),
                         accentColor = accentColor
                     )
-                    Text(
+                    if (count > 1) Text(
                         text = "×$count",
                         color = accentColor,
                         fontSize = 13.sp,
@@ -651,21 +657,11 @@ private fun ProfileQuickPreferences(
                 fontSize = 12.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                AppTheme.entries.forEach { theme ->
-                    ProfileThemeChip(
-                        label = themeShortName(theme),
-                        accent = themePreviewColor(theme),
-                        selected = currentTheme == theme,
-                        selectedRing = accentColor,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onThemeSelected(theme) }
-                    )
-                }
-            }
+            ThemePicker(
+                currentTheme = currentTheme,
+                selectedRingColor = accentColor,
+                onThemeClick = { theme, _ -> onThemeSelected(theme) }
+            )
             Spacer(modifier = Modifier.height(14.dp))
             ProfileToggleRow(
                 icon = Icons.Filled.Notifications,
@@ -689,44 +685,6 @@ private fun ProfileQuickPreferences(
 }
 
 @Composable
-private fun ProfileThemeChip(
-    label: String,
-    accent: Color,
-    selected: Boolean,
-    selectedRing: Color = accent,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val bg = if (selected) selectedRing.copy(alpha = 0.14f) else GlassSurface.copy(alpha = 0.32f)
-    val borderColor = if (selected) selectedRing.copy(alpha = 0.5f) else GlassBorder.copy(alpha = 0.3f)
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(bg)
-            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
-            .clickable { onClick() }
-            .padding(vertical = 10.dp, horizontal = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(14.dp)
-                .background(accent, CircleShape)
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = label,
-            color = if (selected) TextPrimary else TextSecondary,
-            fontSize = 10.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
 private fun ProfileToggleRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
@@ -738,6 +696,7 @@ private fun ProfileToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = SgSpacing.listRowHeight, max = SgSpacing.listRowTall)
             .clip(RoundedCornerShape(14.dp))
             .clickable { onCheckedChange(!checked) }
             .padding(vertical = 4.dp),
@@ -761,15 +720,10 @@ private fun ProfileToggleRow(
             Text(title, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             Text(description, color = TextSecondary, fontSize = 11.sp)
         }
-        Switch(
+        SgSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = accentColor,
-                uncheckedThumbColor = TextSecondary,
-                uncheckedTrackColor = GlassSurface
-            )
+            accentColor = accentColor
         )
     }
 }
@@ -1001,14 +955,3 @@ private fun ProfileShortcut(
     }
 }
 
-private fun themeDisplayName(theme: AppTheme): String = when (theme) {
-    AppTheme.NOIR_ABSOLU -> "Noir Absolu"
-    AppTheme.ARGENT_CLAIR -> "Clair Argent"
-    AppTheme.GRAPHITE -> "Graphite"
-}
-
-private fun themeShortName(theme: AppTheme): String = when (theme) {
-    AppTheme.NOIR_ABSOLU -> "Noir"
-    AppTheme.ARGENT_CLAIR -> "Clair"
-    AppTheme.GRAPHITE -> "Graphite"
-}

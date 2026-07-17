@@ -1,5 +1,6 @@
 package com.credo.soundgroove.ui.theme
 
+import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -14,6 +15,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+
+/** Clé sharedBounds grille album → hero détail (`Uri.encode` = route Nav). */
+fun sgAlbumCoverSharedKey(albumName: String): String =
+    "album_cover_${Uri.encode(albumName)}"
+
+/** Clé sharedBounds liste artiste → avatar hero détail. */
+fun sgArtistAvatarSharedKey(artistName: String): String =
+    "artist_avatar_${Uri.encode(artistName)}"
+
+/** Clé sharedBounds bouton play mini-player ↔ Player plein écran. */
+fun sgPlayControlSharedKey(songId: Long): String = "play_control_$songId"
 
 /**
  * Durées et courbes partagées pour une motion cohérente dans toute l'app,
@@ -264,7 +276,32 @@ object SgMotion {
             scaleOut(targetScale = 0.985f, animationSpec = tweenFastAccelOf())
         return enter togetherWith exit
     }
+
+    /**
+     * Variante Mode perf / reduced motion : fade only (ou snap via durée 0),
+     * sans slide ni scale — un seul porteur, le plus léger possible.
+     */
+    fun tabNavTransitionReduced(): ContentTransform =
+        fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+
+    /** Nav forward/back snap (Mode perf) — état final immédiat. */
+    fun navSnapEnter(): EnterTransition = EnterTransition.None
+    fun navSnapExit(): ExitTransition = ExitTransition.None
+
+    // ── Paroles (highlight) ─────────────────────────────────────────────────
+    /** Scale ligne active — SpringSoft, une fois (pas de bounce répété). */
+    const val LyricsActiveScale = 1.06f
+
+    /** Halo accent derrière la ligne active. */
+    const val LyricsHaloAlpha = 0.14f
 }
+
+/**
+ * Flag prefs « Mode performance » (Profil / Paramètres). Fourni par
+ * [AppNavigation] ; combiné en OR avec le réglage système dans
+ * [rememberSgReducedMotion].
+ */
+val LocalSgPerformanceMode = staticCompositionLocalOf { false }
 
 /**
  * Équivalent Android du réglage "Reduce Motion" des Apple HIG
@@ -275,14 +312,15 @@ object SgMotion {
  * à 0 par l'utilisateur via Accessibilité → Suppression des animations, ou par
  * les options développeur ("Échelle des animations" → Désactivée).
  *
+ * Aussi `true` si [LocalSgPerformanceMode] est actif (prefs Mode performance) —
+ * checklist Perf du plan motion : même traitement snap / effets off.
+ *
  * Usage : `if (rememberSgReducedMotion()) { /* état final immédiat */ } else { /* animer */ }`
- * Volontairement pas branché partout dans cette passe (risque de régression
- * hors du périmètre de cet agent) — voir docs/UX_MOTION_GUIDELINES.md.
  */
 @Composable
 fun rememberSgReducedMotion(): Boolean {
     val context = LocalContext.current
-    return remember {
+    val systemReduced = remember(context) {
         try {
             android.provider.Settings.Global.getFloat(
                 context.contentResolver,
@@ -293,6 +331,18 @@ fun rememberSgReducedMotion(): Boolean {
             false
         }
     }
+    val performanceMode = LocalSgPerformanceMode.current
+    return systemReduced || performanceMode
+}
+
+/**
+ * Durée Coil crossfade : 0 en Mode perf / reduced motion, sinon [defaultMs]
+ * plafonnée à [SgMotion.FastMs] (checklist Perf — pas de morph image long).
+ */
+@Composable
+fun sgCoilCrossfadeMs(defaultMs: Int = SgMotion.FastMs): Int {
+    val reduced = rememberSgReducedMotion()
+    return if (reduced) 0 else defaultMs.coerceAtMost(SgMotion.FastMs)
 }
 
 /** Scale léger au press pour boutons play / chips. */
@@ -300,6 +350,8 @@ fun Modifier.sgPressScale(
     interactionSource: MutableInteractionSource,
     pressedScale: Float = 0.92f
 ): Modifier = composed {
+    val reducedMotion = rememberSgReducedMotion()
+    if (reducedMotion) return@composed this
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) pressedScale else 1f,
@@ -319,15 +371,17 @@ fun animateChipColors(
     accentColor: Color,
     unselectedBg: Color? = null
 ): Pair<Color, Color> {
+    val reducedMotion = rememberSgReducedMotion()
+    val colorSpec = if (reducedMotion) snap() else SgMotion.tweenFastOf<Color>()
     val defaultUnselected = unselectedBg ?: SurfaceElevated.copy(alpha = 0.28f)
     val bg by animateColorAsState(
         targetValue = if (selected) accentColor.copy(alpha = 0.24f) else defaultUnselected,
-        animationSpec = SgMotion.tweenFastOf(),
+        animationSpec = colorSpec,
         label = "chipBg"
     )
     val border by animateColorAsState(
         targetValue = if (selected) accentColor.copy(alpha = 0.42f) else BorderSubtle.copy(alpha = 0.35f),
-        animationSpec = SgMotion.tweenFastOf(),
+        animationSpec = colorSpec,
         label = "chipBorder"
     )
     return bg to border
@@ -369,8 +423,12 @@ val LocalSgAnimatedVisibilityScope = staticCompositionLocalOf<AnimatedVisibility
  */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun rememberSgSharedElementActive(): Boolean =
-    LocalSharedTransitionScope.current != null && LocalSgAnimatedVisibilityScope.current != null
+fun rememberSgSharedElementActive(): Boolean {
+    // Mode perf / reduced motion : snap immédiat, pas de morph shared.
+    if (rememberSgReducedMotion()) return false
+    return LocalSharedTransitionScope.current != null &&
+        LocalSgAnimatedVisibilityScope.current != null
+}
 
 /**
  * Applique un vrai `Modifier.sharedElement` (pochette mini-player ↔ Player plein
@@ -381,10 +439,13 @@ fun rememberSgSharedElementActive(): Boolean =
  * `PlayerScreen` de rester utilisables hors SharedTransitionLayout (previews,
  * futurs call sites non encore raccordés) — dans ce cas, `PlayerScreen` retombe
  * sur son morph manuel scale+position existant (cf. `runEnterAnimation`).
+ *
+ * Mode perf / reduced motion : no-op (snap, pas de morph).
  */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun Modifier.sgSharedAlbumArt(key: String): Modifier {
+    if (rememberSgReducedMotion()) return this
     val sharedTransitionScope = LocalSharedTransitionScope.current ?: return this
     val animatedVisibilityScope = LocalSgAnimatedVisibilityScope.current ?: return this
     return with(sharedTransitionScope) {
@@ -404,11 +465,12 @@ fun Modifier.sgSharedAlbumArt(key: String): Modifier {
  * https://developer.android.com/develop/ui/compose/animation/shared-elements
  *
  * Même filet de sécurité que [sgSharedAlbumArt] : no-op hors contexte
- * `SharedTransitionLayout`/`AnimatedVisibilityScope`.
+ * `SharedTransitionLayout`/`AnimatedVisibilityScope`. Mode perf : no-op.
  */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun Modifier.sgSharedBounds(key: String): Modifier {
+    if (rememberSgReducedMotion()) return this
     val sharedTransitionScope = LocalSharedTransitionScope.current ?: return this
     val animatedVisibilityScope = LocalSgAnimatedVisibilityScope.current ?: return this
     return with(sharedTransitionScope) {

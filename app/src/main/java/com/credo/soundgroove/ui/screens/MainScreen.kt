@@ -72,6 +72,9 @@ import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.util.MediaPermissions
 import com.credo.soundgroove.util.PlayerGuards
 import com.credo.soundgroove.util.blendWithAlbumArt
+import com.credo.soundgroove.util.displayAlbum
+import com.credo.soundgroove.util.displayArtist
+import com.credo.soundgroove.util.displayTitle
 import com.credo.soundgroove.util.rememberAlbumArtAccentColor
 import kotlinx.coroutines.launch
 
@@ -340,10 +343,15 @@ fun MainScreen(
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f)) {
+                val reducedMotion = rememberSgReducedMotion()
                 AnimatedContent(
                     targetState = selectedTab,
                     transitionSpec = {
-                        SgMotion.tabNavTransition(initialState, targetState)
+                        if (reducedMotion) {
+                            SgMotion.tabNavTransitionReduced()
+                        } else {
+                            SgMotion.tabNavTransition(initialState, targetState)
+                        }
                     },
                     label = "mainTab"
                 ) { tab ->
@@ -575,7 +583,9 @@ fun MainScreen(
             songCount = songs.size,
             favoriteCount = favoriteSongs.size,
             playlistCount = playlists.count { !it.isSmart },
-            listeningTimeLabel = listeningTimeLabel,
+            listeningTimeLabel = formatListeningTime(listeningStats.totalSeconds),
+            listeningWeekLabel = formatListeningTime(listeningStats.weekSeconds),
+            listeningMonthLabel = formatListeningTime(listeningStats.monthSeconds),
             sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
             onBack = { showSettings = false },
             onThemeSelected = onThemeSelected,
@@ -725,17 +735,17 @@ fun MainScreen(
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(song.title, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(song.displayTitle(), color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(song.artist, color = accentColor, fontSize = 14.sp)
+                            Text(song.displayArtist(), color = accentColor, fontSize = 14.sp)
                         }
                     }
                     Spacer(modifier = Modifier.height(20.dp))
                     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(GlassBorder))
                     Spacer(modifier = Modifier.height(16.dp))
-                    InfoRow(R.drawable.ic_profile, "Artiste", song.artist, accentColor)
-                    InfoRow(R.drawable.ic_songs, "Titre", song.title, accentColor)
-                    InfoRow(R.drawable.ic_playlists, "Album", song.albumName, accentColor)
+                    InfoRow(R.drawable.ic_profile, "Artiste", song.displayArtist(), accentColor)
+                    InfoRow(R.drawable.ic_songs, "Titre", song.displayTitle(), accentColor)
+                    InfoRow(R.drawable.ic_playlists, "Album", song.displayAlbum(), accentColor)
                     InfoRow(R.drawable.ic_play, "Durée", formatDuration(song.duration), accentColor)
                     if (song.folderPath.isNotBlank()) {
                         InfoRow(R.drawable.ic_queue, "Dossier", song.folderPath, accentColor)
@@ -864,7 +874,7 @@ fun MainScreen(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(playlist.name, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                    Text("${playlist.songs.size} chanson(s)", color = TextSecondary, fontSize = 12.sp)
+                                    Text(com.credo.soundgroove.ui.util.songsCountLabel(playlist.songs.size), color = TextSecondary, fontSize = 12.sp)
                                 }
                                 Icon(painter = painterResource(R.drawable.ic_add), contentDescription = null, tint = SilverAccent, modifier = Modifier.size(20.dp))
                             }

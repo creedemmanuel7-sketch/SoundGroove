@@ -30,12 +30,15 @@ import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.AlbumArtThumb
+import com.credo.soundgroove.ui.components.DualCtaBar
 import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.components.EditMetadataBottomSheet
 import com.credo.soundgroove.ui.components.SongContextMenuSheet
 import com.credo.soundgroove.ui.components.SongInfoBottomSheet
 import com.credo.soundgroove.ui.components.rememberSongCoverArtPicker
 import com.credo.soundgroove.ui.theme.*
+import com.credo.soundgroove.util.displayArtist
+import com.credo.soundgroove.util.displayTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -228,7 +231,7 @@ fun PlaylistDetailScreen(
                         Text(
                             text = when {
                                 playlist.songs.isEmpty() && playlist.isSmart -> "Se remplit automatiquement"
-                                else -> "${playlist.songs.size} chanson(s)"
+                                else -> com.credo.soundgroove.ui.util.songsCountLabel(playlist.songs.size)
                             },
                             color = Color.White.copy(0.7f),
                             fontSize = 14.sp
@@ -239,71 +242,13 @@ fun PlaylistDetailScreen(
 
             // ── Actions Bar ───────────────────────────────────────────────────
             item {
-                val hasSongs = playlist.songs.isNotEmpty()
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                            .background(
-                                if (hasSongs) Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor)))
-                                else Brush.horizontalGradient(listOf(GlassSurface, GlassSurface)),
-                                RoundedCornerShape(14.dp)
-                            )
-                            .clickable(enabled = hasSongs) { playlist.songs.firstOrNull()?.let { onPlaySong(it) } },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_play),
-                                contentDescription = null,
-                                tint = if (hasSongs) Color.White else TextSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                "Tout lire",
-                                color = if (hasSongs) Color.White else TextSecondary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                            .background(GlassSurface, RoundedCornerShape(14.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            modifier = Modifier.clickable(enabled = hasSongs) { onShufflePlay() },
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_shuffle),
-                                contentDescription = null,
-                                tint = if (hasSongs) accentColor else TextSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                "Aléatoire",
-                                color = if (hasSongs) accentColor else TextSecondary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
-                }
+                DualCtaBar(
+                    accentColor = accentColor,
+                    enabled = playlist.songs.isNotEmpty(),
+                    onPlay = { playlist.songs.firstOrNull()?.let { onPlaySong(it) } },
+                    onShuffle = onShufflePlay,
+                    modifier = Modifier.padding(horizontal = SgSpacing.lg, vertical = SgSpacing.md)
+                )
             }
 
             // ── Song List ────────────────────────────────────────────────────
@@ -367,7 +312,7 @@ fun PlaylistDetailScreen(
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                song.title,
+                                song.displayTitle(),
                                 color = if (isCurrent) accentColor else TextPrimary,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
@@ -375,7 +320,7 @@ fun PlaylistDetailScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                song.artist,
+                                song.displayArtist(),
                                 color = TextSecondary,
                                 fontSize = 12.sp,
                                 maxLines = 1

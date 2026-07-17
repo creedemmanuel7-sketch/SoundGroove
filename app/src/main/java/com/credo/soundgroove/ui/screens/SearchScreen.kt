@@ -40,10 +40,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.AlbumArtThumb
+import com.credo.soundgroove.ui.components.ArtistAvatarView
 import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.components.SongListItem
 import com.credo.soundgroove.ui.theme.*
+import com.credo.soundgroove.ui.util.songsCountLabel
+import com.credo.soundgroove.ui.util.tracksCountLabel
 import com.credo.soundgroove.util.MediaPermissions
+import com.credo.soundgroove.util.SongDisplay
 import com.credo.soundgroove.viewmodel.SearchFilter
 import com.credo.soundgroove.viewmodel.SearchViewModel
 
@@ -296,7 +301,7 @@ fun SearchScreen(
                     }
 
                     if (showSongs && filteredSongs.isNotEmpty()) {
-                        item { SectionTitle("${filteredSongs.size} chanson(s)") }
+                        item { SectionTitle(songsCountLabel(filteredSongs.size)) }
                         items(filteredSongs, key = { it.id }) { song ->
                             SongListItem(
                                 song = song,
@@ -304,7 +309,8 @@ fun SearchScreen(
                                 isCurrentSong = currentSong?.id == song.id,
                                 accentColor = accentColor,
                                 onClick = { onPlaySong(song, filteredSongs) },
-                                onMenuClick = { onMenuClick(song) }
+                                onMenuClick = { onMenuClick(song) },
+                                enablePlayerSharedElements = true
                             )
                         }
                     }
@@ -312,12 +318,25 @@ fun SearchScreen(
                     if (showAlbums && filteredAlbums.isNotEmpty()) {
                         item { SectionTitle("Albums") }
                         items(filteredAlbums, key = { it.first }) { (albumName, albumSongs) ->
+                            val coverUri =
+                                albumSongs.firstOrNull { it.albumArtUri != null }?.albumArtUri
                             SearchEntityRow(
                                 title = albumName,
-                                subtitle = "${albumSongs.size} titre(s)",
-                                iconRes = R.drawable.ic_playlists,
+                                subtitle = tracksCountLabel(albumSongs.size),
                                 accentColor = accentColor,
-                                onClick = { onAlbumClick(albumName) }
+                                onClick = { onAlbumClick(albumName) },
+                                leadingContent = {
+                                    // Même clé / radius xl que Library → AlbumDetail hero.
+                                    AlbumArtThumb(
+                                        albumArtUri = coverUri,
+                                        size = 46.dp,
+                                        cornerRadius = SgRadius.xl,
+                                        accentColor = accentColor,
+                                        modifier = Modifier.sgSharedBounds(
+                                            key = sgAlbumCoverSharedKey(albumName)
+                                        )
+                                    )
+                                }
                             )
                         }
                     }
@@ -325,12 +344,27 @@ fun SearchScreen(
                     if (showArtists && filteredArtists.isNotEmpty()) {
                         item { SectionTitle("Artistes") }
                         items(filteredArtists, key = { it.first }) { (artistName, songCount) ->
+                            val coverUri = allSongs
+                                .firstOrNull { it.artist == artistName && it.albumArtUri != null }
+                                ?.albumArtUri
+                            val displayName = SongDisplay.artist(artistName)
                             SearchEntityRow(
-                                title = artistName,
-                                subtitle = "$songCount titre(s)",
-                                iconRes = R.drawable.ic_profile,
+                                title = displayName,
+                                subtitle = tracksCountLabel(songCount),
                                 accentColor = accentColor,
-                                onClick = { onArtistClick(artistName) }
+                                onClick = { onArtistClick(artistName) },
+                                leadingContent = {
+                                    // Même clé / CircleShape que Library → ArtistDetail avatar.
+                                    ArtistAvatarView(
+                                        albumArtUri = coverUri,
+                                        artistName = displayName,
+                                        size = 46.dp,
+                                        accentColor = accentColor,
+                                        modifier = Modifier.sgSharedBounds(
+                                            key = sgArtistAvatarSharedKey(artistName)
+                                        )
+                                    )
+                                }
                             )
                         }
                     }
@@ -340,7 +374,7 @@ fun SearchScreen(
                         items(filteredPlaylists, key = { it.id }) { playlist ->
                             SearchEntityRow(
                                 title = playlist.name,
-                                subtitle = "${playlist.songs.size} chanson(s)",
+                                subtitle = songsCountLabel(playlist.songs.size),
                                 iconRes = R.drawable.ic_queue,
                                 accentColor = accentColor,
                                 onClick = { onPlaylistClick(playlist.id) }
@@ -351,10 +385,11 @@ fun SearchScreen(
                     if (showFolders && filteredFolders.isNotEmpty()) {
                         item { SectionTitle("Dossiers") }
                         items(filteredFolders, key = { it.first }) { (folderPath, folderSongs) ->
+                            val folderCountLabel = songsCountLabel(folderSongs.size)
                             SearchEntityRow(
                                 title = folderLabel(folderPath),
                                 subtitle = buildString {
-                                    append("${folderSongs.size} chanson(s)")
+                                    append(folderCountLabel)
                                     if (folderPath.contains('/')) {
                                         append(" · ")
                                         append(folderPath.substringBeforeLast('/'))
@@ -384,7 +419,12 @@ private fun SearchFilterRow(
     LazyRow(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.xs),
+            .sgChipRowEdgeFade()
+            .padding(vertical = SgSpacing.xs),
+        contentPadding = PaddingValues(
+            start = SgSpacing.md,
+            end = SgSpacing.chipEdgeFade
+        ),
         horizontalArrangement = Arrangement.spacedBy(SgSpacing.sm)
     ) {
         item {
@@ -425,7 +465,8 @@ private fun SearchEntityRow(
     accentColor: Color,
     onClick: () -> Unit,
     iconRes: Int? = null,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    leadingContent: (@Composable () -> Unit)? = null
 ) {
     Row(
         modifier = Modifier
@@ -434,20 +475,29 @@ private fun SearchEntityRow(
             .padding(horizontal = SgSpacing.sm, vertical = SgSpacing.sm),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(46.dp)
-                .background(accentColor.copy(alpha = 0.14f), RoundedCornerShape(SgRadius.md)),
-            contentAlignment = Alignment.Center
-        ) {
-            when {
-                icon != null -> Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(22.dp))
-                iconRes != null -> Icon(
-                    painter = painterResource(iconRes),
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(22.dp)
-                )
+        if (leadingContent != null) {
+            leadingContent()
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .background(accentColor.copy(alpha = 0.14f), RoundedCornerShape(SgRadius.md)),
+                contentAlignment = Alignment.Center
+            ) {
+                when {
+                    icon != null -> Icon(
+                        icon,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    iconRes != null -> Icon(
+                        painter = painterResource(iconRes),
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
         }
         Spacer(modifier = Modifier.width(SgSpacing.md))

@@ -216,6 +216,8 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     private val _totalListeningSeconds = MutableStateFlow(prefs.getLong("total_listening_seconds", 0L))
     val totalListeningSeconds: StateFlow<Long> = _totalListeningSeconds.asStateFlow()
 
+    // Source de vérité UI : toujours dérivée de ListeningStatsRepository
+    // (semaine/mois calendaires + total lifetime). Ne pas recalculer ailleurs.
     private val _listeningStats = MutableStateFlow(
         listeningStatsRepository.getStats(_totalListeningSeconds.value)
     )
@@ -228,12 +230,14 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun formatListeningTime(seconds: Long = _totalListeningSeconds.value): String {
-        val hours = seconds / 3600
-        val minutes = (seconds % 3600) / 60
+        val safeSeconds = seconds.coerceAtLeast(0L)
+        val hours = safeSeconds / 3600
+        val minutes = (safeSeconds % 3600) / 60
         return when {
             hours > 0 -> "${hours} h ${minutes.toString().padStart(2, '0')} min"
             minutes > 0 -> "$minutes min"
-            else -> "< 1 min"
+            safeSeconds > 0 -> "< 1 min"
+            else -> "0 min"
         }
     }
 

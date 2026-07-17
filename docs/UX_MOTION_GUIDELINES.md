@@ -117,38 +117,17 @@ Burns / parallax sur ce fond (coûteux en recomposition continue).
 
 ---
 
-## 5. Ce qui reste (shared element mini-player → Player)
+## 5. Shared element mini-player → Player (livré)
 
-Décision déjà prise et documentée par un agent précédent dans
-`docs/FEATURES_C_SHARED_ELEMENT.md` : **pas de vrai
-`SharedTransitionLayout`/`Modifier.sharedElement`** entre le mini-player
-(overlay hors `NavHost`) et `PlayerScreen` (destination `NavHost`), car cela
-exigerait un refactor (déplacer le mini-player dans une route dédiée pour
-obtenir l'`AnimatedVisibilityScope` requis par l'API) avec un risque de
-régression jugé disproportionné par rapport au gain, vu le morph
-pochette-qui-grandit déjà en place (§2, technique Kodeco).
+**Statut à jour** : le vrai `SharedTransitionLayout` / `Modifier.sharedElement`
+est livré — voir `docs/FEATURES_C_SHARED_ELEMENT.md` (clés `album_art_<id>` +
+`track_meta_<id>`). Le morph manuel de `PlayerScreen` ne s'active qu'en fallback
+hors contexte shared.
 
-Cette passe **confirme** cette décision plutôt que de la remettre en cause :
-le morph actuel (grandissement + fondu retardé du chrome) reproduit fidèlement
-la perception de continuité de la transition Apple Music sans le risque
-technique du vrai shared element. Piste toujours valable si un futur agent
-dédie un cycle au refactor de navigation :
-
-1. Envelopper le contenu de `AppNavigation` dans `SharedTransitionLayout`.
-2. Créer une route transparente `mini_player` (ou promouvoir le mini-player en
-   destination `NavHost`) pour qu'il dispose d'un `AnimatedVisibilityScope`.
-3. Clé partagée `rememberSharedContentState("album_art_<songId>")` sur la
-   pochette du mini-player et celle du Player.
-4. Réf. : [Shared element transitions with Navigation Compose](https://developer.android.com/develop/ui/compose/animation/shared-elements/navigation)
-
-Autres pistes non traitées dans le périmètre de cette passe (pour rester
-chirurgical vis-à-vis des autres agents) :
-
-- Brancher `rememberSgReducedMotion()` sur les transitions de `AppNavigation`
-  (nav forward/back) et sur `MiniPlayer` (scale du bouton play) — actuellement
-  seul le morph du Player en tient compte.
-- Revoir le slider de progression du Player avec un token de couleur dédié à
-  l'accessibilité (contraste) — hors motion, plutôt design system couleur.
+`rememberSgReducedMotion()` OR **Mode performance** (prefs) désactive le morph
+shared (snap), le blur immersif, la rotation vinyle, ThemeReveal, les slides
+nav/tabs, `sgPressScale`, et plafonne les crossfades Coil à 0 ms. Source de
+vérité motion : `ui/theme/Motion.kt` + plan canvas motion.
 
 ---
 

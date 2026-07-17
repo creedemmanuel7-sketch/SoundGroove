@@ -1,15 +1,14 @@
 package com.credo.soundgroove.util
 
 /**
- * Documentation des formats audio supportés par SoundGroove via Media3/ExoPlayer.
+ * Formats audio supportés — texte grand public pour l'écran À propos.
  */
 object AudioFormatInfo {
 
-    const val FORMATS_ABOUT_TEXT = "Formats audio (Media3 ExoPlayer) :\n" +
-        "• MP3, AAC, M4A, OGG, Opus, WAV — lecture native\n" +
-        "• FLAC — pris en charge via l'extracteur Media3 (media3-extractor)\n" +
-        "• DSD (DSF/DFF) — non supporté nativement par Media3 ; les fichiers DSD ne seront pas lus\n\n" +
-        "Les métadonnées ID3/Vorbis sont lues via MediaStore à l'import."
+    const val FORMATS_ABOUT_TEXT =
+        "Formats pris en charge : MP3, AAC, M4A, OGG, Opus, WAV et FLAC.\n" +
+            "Le DSD n'est pas lu pour le moment.\n\n" +
+            "SoundGroove lit la musique stockée sur votre appareil."
 
     fun isDsdPath(path: String): Boolean {
         val lower = path.lowercase()

@@ -137,14 +137,17 @@ private fun colorSchemeFor(appTheme: AppTheme, accent: AppAccent) = when (appThe
 
 private fun colorSchemeForDynamic(appTheme: AppTheme, baseColor: Color) = when (appTheme) {
     AppTheme.NOIR_ABSOLU -> {
-        val v = deriveAccentVariants(baseColor)
+        val roles = dynamicRoles(appTheme, baseColor)
+        val v = deriveAccentVariants(roles.primary)
         darkColorScheme(
-            primary = v.primary,
-            onPrimary = Color.White,
+            primary = roles.primary,
+            onPrimary = roles.onPrimary,
             primaryContainer = v.container,
-            onPrimaryContainer = v.soft,
-            secondary = v.muted,
+            onPrimaryContainer = roles.secondary,
+            secondary = roles.secondary,
             onSecondary = Color.White,
+            tertiary = roles.tertiary,
+            onTertiary = Color.White,
             background = AbsoluteBlackBg,
             onBackground = NoirAbsoluSemantic.textPrimary,
             surface = NoirAbsoluSemantic.cardSurface,
@@ -157,14 +160,17 @@ private fun colorSchemeForDynamic(appTheme: AppTheme, baseColor: Color) = when (
         )
     }
     AppTheme.GRAPHITE -> {
-        val v = deriveAccentVariants(baseColor)
+        val roles = dynamicRoles(appTheme, baseColor)
+        val v = deriveAccentVariants(roles.primary)
         darkColorScheme(
-            primary = v.muted,
-            onPrimary = Color.White,
+            primary = roles.primary,
+            onPrimary = roles.onPrimary,
             primaryContainer = v.container,
-            onPrimaryContainer = v.soft,
-            secondary = SilverAccent,
+            onPrimaryContainer = roles.secondary,
+            secondary = roles.secondary,
             onSecondary = Color(0xFF15161A),
+            tertiary = roles.tertiary,
+            onTertiary = Color.White,
             background = GraphiteAbyss,
             onBackground = GraphiteSemantic.textPrimary,
             surface = GraphiteSemantic.cardSurface,
@@ -177,15 +183,16 @@ private fun colorSchemeForDynamic(appTheme: AppTheme, baseColor: Color) = when (
         )
     }
     AppTheme.ARGENT_CLAIR -> {
-        val v = deriveAccentVariants(baseColor)
+        val roles = dynamicRoles(appTheme, baseColor)
+        val v = deriveAccentVariants(roles.primary)
         lightColorScheme(
-            primary = v.deep,
-            onPrimary = Color.White,
+            primary = roles.primary,
+            onPrimary = roles.onPrimary,
             primaryContainer = v.soft.copy(alpha = 0.35f),
             onPrimaryContainer = v.container,
-            secondary = SteelBlue,
+            secondary = roles.secondary,
             onSecondary = Color.White,
-            tertiary = v.primary,
+            tertiary = roles.tertiary,
             onTertiary = Color.White,
             background = ArgentClairBg,
             onBackground = ArgentClairSemantic.textPrimary,
@@ -198,6 +205,20 @@ private fun colorSchemeForDynamic(appTheme: AppTheme, baseColor: Color) = when (
             onError = Color.White,
         )
     }
+}
+
+private fun dynamicRoles(appTheme: AppTheme, baseColor: Color): com.credo.soundgroove.util.AlbumArtRolePalette {
+    val v = deriveAccentVariants(baseColor)
+    return com.credo.soundgroove.util.buildRolePaletteFromCandidates(
+        candidates = listOf(baseColor, v.soft, v.deep, v.muted),
+        surfaceBackground = when (appTheme) {
+            AppTheme.NOIR_ABSOLU -> AbsoluteBlackBg
+            AppTheme.GRAPHITE -> GraphiteAbyss
+            AppTheme.ARGENT_CLAIR -> ArgentClairBg
+        },
+        fallback = resolveDynamicAccent(appTheme, baseColor),
+        isLightTheme = appTheme == AppTheme.ARGENT_CLAIR,
+    )
 }
 
 fun semanticColorsForTheme(appTheme: AppTheme): SgSemanticColors = when (appTheme) {

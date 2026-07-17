@@ -24,9 +24,12 @@ import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.AlbumArtThumb
 import com.credo.soundgroove.ui.components.ArtistAvatarView
+import com.credo.soundgroove.ui.components.DualCtaBar
 import com.credo.soundgroove.ui.components.EditMetadataBottomSheet
 import com.credo.soundgroove.ui.components.SongContextMenuSheet
 import com.credo.soundgroove.ui.components.SongInfoBottomSheet
+import com.credo.soundgroove.util.displayAlbum
+import com.credo.soundgroove.util.displayTitle
 import com.credo.soundgroove.ui.components.rememberSongCoverArtPicker
 import com.credo.soundgroove.ui.theme.*
 
@@ -103,7 +106,10 @@ fun ArtistDetailScreen(
                             albumArtUri = artistCover,
                             artistName = artistName,
                             size = 128.dp,
-                            accentColor = accentColor
+                            accentColor = accentColor,
+                            modifier = Modifier.sgSharedBounds(
+                                key = sgArtistAvatarSharedKey(artistName)
+                            )
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -117,7 +123,7 @@ fun ArtistDetailScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "${songs.size} chanson(s)",
+                            text = com.credo.soundgroove.ui.util.songsCountLabel(songs.size),
                             color = Color.White.copy(0.7f),
                             fontSize = 14.sp
                         )
@@ -126,59 +132,13 @@ fun ArtistDetailScreen(
             }
 
             item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .background(
-                                Brush.horizontalGradient(listOf(accentColor, themeSecondaryAccent(accentColor))),
-                                RoundedCornerShape(14.dp)
-                            )
-                            .clickable { songs.firstOrNull()?.let { onPlaySong(it) } },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_play),
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text("Lecture", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .background(GlassSurface, RoundedCornerShape(14.dp))
-                            .clickable { onShufflePlay() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_shuffle),
-                                contentDescription = null,
-                                tint = accentColor,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text("Aléatoire", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                    }
-                }
+                DualCtaBar(
+                    accentColor = accentColor,
+                    enabled = songs.isNotEmpty(),
+                    onPlay = { songs.firstOrNull()?.let { onPlaySong(it) } },
+                    onShuffle = onShufflePlay,
+                    modifier = Modifier.padding(horizontal = SgSpacing.lg, vertical = SgSpacing.md)
+                )
             }
 
             itemsIndexed(songs) { _, song ->
@@ -219,7 +179,7 @@ fun ArtistDetailScreen(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            song.title,
+                            song.displayTitle(),
                             color = if (isCurrent) accentColor else TextPrimary,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
@@ -227,7 +187,7 @@ fun ArtistDetailScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            song.albumName,
+                            song.displayAlbum(),
                             color = TextSecondary,
                             fontSize = 12.sp,
                             maxLines = 1,

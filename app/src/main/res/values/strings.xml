@@ -15,4 +15,27 @@
     <string name="widget_play_pause">Lecture / Pause</string>
     <string name="widget_previous">Piste précédente</string>
     <string name="widget_next">Piste suivante</string>
+
+    <string name="artist_unknown">Artiste inconnu</string>
+    <string name="title_unknown">Titre inconnu</string>
+    <string name="album_unknown">Album inconnu</string>
+    <string name="gapless_playback_title">Enchaînement sans coupure</string>
+    <string name="gapless_playback_description">Passe d\'un morceau à l\'autre sans silence</string>
+
+    <plurals name="songs_count">
+        <item quantity="one">%d chanson</item>
+        <item quantity="other">%d chansons</item>
+    </plurals>
+    <plurals name="tracks_count">
+        <item quantity="one">%d titre</item>
+        <item quantity="other">%d titres</item>
+    </plurals>
+    <plurals name="playlists_count">
+        <item quantity="one">%d playlist</item>
+        <item quantity="other">%d playlists</item>
+    </plurals>
+    <plurals name="lists_count">
+        <item quantity="one">%d liste</item>
+        <item quantity="other">%d listes</item>
+    </plurals>
 </resources>

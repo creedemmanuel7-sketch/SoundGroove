@@ -17,14 +17,49 @@ import coil.request.ImageRequest
 import coil.request.SuccessResult
 import kotlin.math.pow
 
+/**
+ * Palette hiérarchique extraite d'une pochette : dominant + secondaires,
+ * déjà assignés aux rôles UI selon le contraste sur [surfaceBackground].
+ */
+data class AlbumArtRolePalette(
+    val primary: Color,
+    val secondary: Color,
+    val tertiary: Color,
+    val muted: Color,
+    val onPrimary: Color,
+    /** Texte / icônes secondaires lisibles sur le fond de surface (File, Aléatoire, chrome). */
+    val onSurface: Color,
+    val candidates: List<Color> = emptyList(),
+)
+
 @Composable
 fun rememberAlbumArtAccentColor(albumArtUri: Uri?, defaultColor: Color): Color {
-    val context = LocalContext.current
-    var extractedColor by remember(albumArtUri) { mutableStateOf(defaultColor) }
+    return rememberAlbumArtRolePalette(
+        albumArtUri = albumArtUri,
+        defaultColor = defaultColor,
+        surfaceBackground = Color(0xFF0A0A0C),
+        isLightTheme = false,
+    ).primary
+}
 
-    LaunchedEffect(albumArtUri, defaultColor) {
+@Composable
+fun rememberAlbumArtRolePalette(
+    albumArtUri: Uri?,
+    defaultColor: Color,
+    surfaceBackground: Color,
+    isLightTheme: Boolean,
+): AlbumArtRolePalette {
+    val context = LocalContext.current
+    val fallback = remember(defaultColor, surfaceBackground, isLightTheme) {
+        buildRolePaletteFromCandidates(listOf(defaultColor), surfaceBackground, defaultColor, isLightTheme)
+    }
+    var palette by remember(albumArtUri, defaultColor, surfaceBackground, isLightTheme) {
+        mutableStateOf(fallback)
+    }
+
+    LaunchedEffect(albumArtUri, defaultColor, surfaceBackground, isLightTheme) {
         if (albumArtUri == null) {
-            extractedColor = defaultColor
+            palette = fallback
             return@LaunchedEffect
         }
         try {
@@ -38,28 +73,120 @@ fun rememberAlbumArtAccentColor(albumArtUri: Uri?, defaultColor: Color): Color {
             if (result is SuccessResult) {
                 val drawable = result.drawable
                 if (drawable is BitmapDrawable) {
-                    Palette.from(drawable.bitmap).generate { palette ->
-                        val swatch = palette?.vibrantSwatch
-                            ?: palette?.dominantSwatch
-                            ?: palette?.lightVibrantSwatch
-                        swatch?.rgb?.let { colorInt ->
-                            extractedColor = Color(colorInt)
-                        } ?: run {
-                            extractedColor = defaultColor
-                        }
+                    Palette.from(drawable.bitmap).generate { generated ->
+                        val candidates = generated?.let { collectPaletteCandidates(it) }.orEmpty()
+                        palette = buildRolePaletteFromCandidates(
+                            candidates = candidates,
+                            surfaceBackground = surfaceBackground,
+                            fallback = defaultColor,
+                            isLightTheme = isLightTheme,
+                        )
                     }
                 } else {
-                    extractedColor = defaultColor
+                    palette = fallback
                 }
             } else {
-                extractedColor = defaultColor
+                palette = fallback
             }
         } catch (_: Exception) {
-            extractedColor = defaultColor
+            palette = fallback
         }
     }
 
-    return extractedColor
+    return palette
+}
+
+private fun collectPaletteCandidates(palette: Palette): List<Color> {
+    val ordered = listOfNotNull(
+        palette.vibrantSwatch,
+        palette.lightVibrantSwatch,
+        palette.darkVibrantSwatch,
+        palette.dominantSwatch,
+        palette.mutedSwatch,
+        palette.lightMutedSwatch,
+        palette.darkMutedSwatch,
+    )
+    return ordered.map { Color(it.rgb) }.distinctBy { colorKey(it) }
+}
+
+private fun colorKey(color: Color): Int =
+    (color.red * 255).toInt() shl 16 or
+        ((color.green * 255).toInt() shl 8) or
+        (color.blue * 255).toInt()
+
+/**
+ * Attribue dynamiquement primary / secondary / tertiary selon le contraste WCAG-ish
+ * contre le fond réel — ne force pas le rouge dominant si une secondaire lit mieux.
+ */
+fun buildRolePaletteFromCandidates(
+    candidates: List<Color>,
+    surfaceBackground: Color,
+    fallback: Color,
+    isLightTheme: Boolean,
+    minContrast: Float = 4.5f,
+): AlbumArtRolePalette {
+    val pool = (candidates + fallback).distinctBy { colorKey(it) }
+    fun bestAgainst(background: Color, excluding: Set<Int> = emptySet()): Color {
+        val usable = pool.filter { colorKey(it) !in excluding }.ifEmpty { listOf(fallback) }
+        return usable.maxBy { contrastRatio(it, background) }
+    }
+
+    val primaryRaw = bestAgainst(surfaceBackground)
+    val primary = ensureContrast(primaryRaw, surfaceBackground, minContrast)
+    val secondaryRaw = bestAgainst(surfaceBackground, excluding = setOf(colorKey(primaryRaw)))
+    // Secondary : contraste AA strict + biais lisibilité (pas de teinte trop sombre
+    // sur fond sombre — File / Aléatoire / labels secondaires).
+    val secondary = ensureReadableRole(secondaryRaw, surfaceBackground, minContrast, isLightTheme)
+    val tertiaryRaw = bestAgainst(
+        surfaceBackground,
+        excluding = setOf(colorKey(primaryRaw), colorKey(secondaryRaw)),
+    )
+    val tertiary = ensureReadableRole(
+        tertiaryRaw,
+        surfaceBackground,
+        minContrast * 0.85f,
+        isLightTheme,
+    )
+    val mutedBase = lerp(secondary, if (isLightTheme) Color.Black else Color.White, 0.28f)
+    val muted = ensureReadableRole(mutedBase, surfaceBackground, 3.0f, isLightTheme)
+    val onPrimary = if (relativeLuminance(primary) < 0.45f) Color.White else Color(0xFF121316)
+    val onSurfaceBase = if (isLightTheme) {
+        lerp(secondary, Color.Black, 0.35f)
+    } else {
+        lerp(secondary, Color.White, 0.45f)
+    }
+    val onSurface = ensureContrast(onSurfaceBase, surfaceBackground, minContrast)
+
+    return AlbumArtRolePalette(
+        primary = primary,
+        secondary = secondary,
+        tertiary = tertiary,
+        muted = muted,
+        onPrimary = onPrimary,
+        onSurface = onSurface,
+        candidates = pool,
+    )
+}
+
+/** Garantit un rôle accent lisible : contraste WCAG + poussée vers clair/sombre selon le thème. */
+private fun ensureReadableRole(
+    color: Color,
+    surfaceBackground: Color,
+    minRatio: Float,
+    isLightTheme: Boolean,
+): Color {
+    val contrasted = ensureContrast(color, surfaceBackground, minRatio)
+    if (contrastRatio(contrasted, surfaceBackground) >= minRatio) {
+        // Sur fond sombre, éviter un secondary encore trop « boueux » (luminance basse).
+        if (!isLightTheme && relativeLuminance(contrasted) < 0.35f) {
+            return ensureContrast(lerp(contrasted, Color.White, 0.35f), surfaceBackground, minRatio)
+        }
+        if (isLightTheme && relativeLuminance(contrasted) > 0.65f) {
+            return ensureContrast(lerp(contrasted, Color.Black, 0.28f), surfaceBackground, minRatio)
+        }
+        return contrasted
+    }
+    return contrasted
 }
 
 /** Mélange la couleur de thème utilisateur avec l'accent extrait de la pochette. */
@@ -87,7 +214,7 @@ fun blendWithAlbumArt(themeAccent: Color, albumAccent: Color, weight: Float = 0.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Luminance relative WCAG (sRGB → linéaire), utilisée pour le calcul de contraste. */
-private fun relativeLuminance(color: Color): Float {
+fun relativeLuminance(color: Color): Float {
     fun toLinear(c: Float): Float = if (c <= 0.03928f) c / 12.92f else ((c + 0.055f) / 1.055f).pow(2.4f)
     return 0.2126f * toLinear(color.red) + 0.7152f * toLinear(color.green) + 0.0722f * toLinear(color.blue)
 }
@@ -202,8 +329,8 @@ data class LyricsPalette(
 
 /** Tokens de chrome fixes de l'écran Paroles (cf. KDoc [LyricsPalette]). */
 val LyricsChromePrimaryText = Color(0xFFF5F5F7)
-val LyricsChromeSecondaryText = Color(0xFFC7C9CE)
-val LyricsChromeTertiaryText = Color(0xFF9A9CA3)
+val LyricsChromeSecondaryText = Color(0xFFD4D6DB)
+val LyricsChromeTertiaryText = Color(0xFFB0B2B8)
 val LyricsChromeGlassSurface = Color(0x14FFFFFF)
 val LyricsChromeGlassBorder = Color(0x28FFFFFF)
 val LyricsChromeSurfaceElevated = Color(0x1FFFFFFF)
@@ -249,38 +376,46 @@ fun rememberLyricsPalette(albumArtUri: Uri?, fallbackAccent: Color): LyricsPalet
 private fun fallbackLyricsPalette(accent: Color): LyricsPalette {
     val bgBase = clampSaturation(accent, LyricsBackgroundMaxSaturation)
     val backgroundCenter = darken(bgBase, 0.7f)
-    val activeText = ensureContrast(accent, backgroundCenter, LyricsMinTextContrast)
+    val roles = buildRolePaletteFromCandidates(
+        candidates = listOf(accent),
+        surfaceBackground = backgroundCenter,
+        fallback = accent,
+        isLightTheme = false,
+        minContrast = LyricsMinTextContrast,
+    )
     return LyricsPalette(
         backgroundTop = darken(bgBase, 0.5f),
         backgroundCenter = backgroundCenter,
         backgroundBottom = darken(bgBase, 0.86f),
-        activeText = activeText,
-        inactiveText = Color.White.copy(alpha = 0.55f)
+        activeText = roles.primary,
+        inactiveText = ensureContrast(Color.White.copy(alpha = 0.72f), backgroundCenter, 3.5f)
     )
 }
 
 private fun buildLyricsPalette(palette: Palette, fallbackAccent: Color): LyricsPalette {
     val bgSwatch = palette.darkMutedSwatch ?: palette.dominantSwatch ?: palette.mutedSwatch
-    val accentSwatch = palette.vibrantSwatch ?: palette.lightVibrantSwatch ?: palette.dominantSwatch
-
     val bgRaw = bgSwatch?.rgb?.let { Color(it) } ?: fallbackAccent
-    val accentBase = accentSwatch?.rgb?.let { Color(it) } ?: fallbackAccent
 
     // Fond désaturé (plafond ~0.35) AVANT assombrissement : une pochette très
     // vive ne doit jamais produire un fond "premium" criard (règle 1).
     val bgBase = clampSaturation(bgRaw, LyricsBackgroundMaxSaturation)
     val backgroundCenter = darken(bgBase, 0.62f)
 
-    // Le texte actif cède du terrain (ensureContrast) tant qu'il n'atteint pas
-    // ~4.5:1 face au centre du fond — jamais l'inverse (règle 3).
-    val activeText = ensureContrast(accentBase, backgroundCenter, LyricsMinTextContrast)
+    val candidates = collectPaletteCandidates(palette)
+    val roles = buildRolePaletteFromCandidates(
+        candidates = candidates.ifEmpty { listOf(fallbackAccent) },
+        surfaceBackground = backgroundCenter,
+        fallback = fallbackAccent,
+        isLightTheme = false,
+        minContrast = LyricsMinTextContrast,
+    )
 
     return LyricsPalette(
         backgroundTop = darken(bgBase, 0.35f),
         backgroundCenter = backgroundCenter,
         backgroundBottom = darken(bgBase, 0.85f),
-        activeText = activeText,
-        inactiveText = Color.White.copy(alpha = 0.5f)
+        activeText = roles.primary,
+        inactiveText = ensureContrast(Color.White.copy(alpha = 0.68f), backgroundCenter, 3.5f)
     )
 }
 

@@ -95,6 +95,24 @@ expérimental dans une signature publique** (donc sans forcer `PlayerScreen` ou
   précédente, swipe vertical = fermer/ouvrir la file) sont inchangés : le
   shared element est appliqué en plus du `pointerInput` existant, pas à sa place.
 
+## Clés shared (contrat)
+
+| Transition | API | Clé |
+|---|---|---|
+| Mini ↔ Player (pochette) | `sharedElement` via `sgSharedAlbumArt` | `album_art_<songId>` |
+| Mini ↔ Player (titre/artiste) | `sharedBounds` via `sgSharedBounds` | `track_meta_<songId>` |
+| Mini ↔ Player (play) | `sharedBounds` via `sgSharedBounds` | `play_control_<songId>` (`sgPlayControlSharedKey`) |
+| Grille album → détail hero | `sharedBounds` | `album_cover_<Uri.encode(name)>` (`sgAlbumCoverSharedKey`) |
+| Liste artiste → avatar hero | `sharedBounds` | `artist_avatar_<Uri.encode(name)>` (`sgArtistAvatarSharedKey`) |
+
+Helpers dans `Motion.kt`. Radius : albums `SgRadius.xl` (~24dp) des deux côtés ; artistes `CircleShape`.
+
+**Nav** : destinations `album/{…}` et `artist/{…}` en **fade only** (comme le Player) pour éviter double-morph avec le slide H `navForward`. `HOME`/`SEARCH` sortent en fade vers ces routes. Scopes `LocalSgAnimatedVisibilityScope` fournis sur `HOME`, `SEARCH`, `ALBUM_DETAIL`, `ARTIST_DETAIL`, `PLAYER` et les `AnimatedVisibility` mini-player.
+
+**Sources shared album/artiste** : Bibliothèque (`LibraryTab`) **et** Recherche (`SearchScreen` — rows résultats Albums / Artistes, mêmes clés `sgAlbumCoverSharedKey` / `sgArtistAvatarSharedKey`). Les chansons Recherche lancent la lecture sans ouvrir `Player` → pas de câblage `album_art_` / `play_control_` sur ces rows.
+
+**Reduced motion / Mode performance** : `sgShared*` et `rememberSgSharedElementActive()` no-op / snap (inchangé).
+
 ## Référence
 
 [Navigation with shared elements — Android Developers](https://developer.android.com/develop/ui/compose/animation/shared-elements/navigation)

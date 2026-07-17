@@ -49,7 +49,6 @@ fun LegacyMainHost(
     val currentSong by viewModel.currentSong.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
     val playbackPosition by viewModel.playbackPosition.collectAsState()
-    val totalListeningSeconds by viewModel.totalListeningSeconds.collectAsState()
     val listeningStats by viewModel.listeningStats.collectAsState()
     val mainSelectedTab by viewModel.mainSelectedTab.collectAsState()
     val librarySelectedTab by viewModel.librarySelectedTab.collectAsState()
@@ -151,7 +150,7 @@ fun LegacyMainHost(
             librarySelectedTab = librarySelectedTab,
             onLibrarySelectedTabChange = { viewModel.updateLibrarySelectedTab(it) },
             onReloadMusic = { viewModel.reloadMusic() },
-            listeningTimeLabel = viewModel.formatListeningTime(totalListeningSeconds),
+            listeningTimeLabel = viewModel.formatListeningTime(listeningStats.totalSeconds),
             listeningStats = listeningStats,
             formatListeningTime = { viewModel.formatListeningTime(it) },
             smartNotificationsEnabled = smartNotificationsEnabled,

@@ -265,7 +265,12 @@ fun AddToPlaylistSheet(
                 color = TextPrimary
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Text(song.title, fontSize = 13.sp, color = TextSecondary, maxLines = 1)
+            Text(
+                com.credo.soundgroove.util.SongDisplay.title(song.title, song.folderPath),
+                fontSize = 13.sp,
+                color = TextSecondary,
+                maxLines = 1
+            )
             Spacer(modifier = Modifier.height(20.dp))
 
             // Create new button
@@ -341,7 +346,7 @@ fun AddToPlaylistSheet(
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(playlist.name, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                            Text("${playlist.songs.size} chanson(s)", color = TextSecondary, fontSize = 12.sp)
+                            Text(com.credo.soundgroove.ui.util.songsCountLabel(playlist.songs.size), color = TextSecondary, fontSize = 12.sp)
                         }
                         Icon(
                             painter = painterResource(R.drawable.ic_add),
@@ -423,8 +428,19 @@ fun SongContextMenuSheet(
                     }
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(song.title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Text(song.artist, color = TextSecondary, fontSize = 13.sp, maxLines = 1)
+                    Text(
+                        com.credo.soundgroove.util.SongDisplay.title(song.title, song.folderPath),
+                        color = TextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
+                    Text(
+                        com.credo.soundgroove.util.SongDisplay.artist(song.artist),
+                        color = TextSecondary,
+                        fontSize = 13.sp,
+                        maxLines = 1
+                    )
                 }
             }
 
@@ -645,18 +661,34 @@ fun SongInfoBottomSheet(
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(song.title, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                    Text(
+                        com.credo.soundgroove.util.SongDisplay.title(song.title, song.folderPath),
+                        color = TextPrimary,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2
+                    )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(song.artist, color = accentColor, fontSize = 14.sp, maxLines = 1)
+                    Text(
+                        com.credo.soundgroove.util.SongDisplay.artist(song.artist),
+                        color = accentColor,
+                        fontSize = 14.sp,
+                        maxLines = 1
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
             HorizontalDivider(color = GlassBorder.copy(alpha = 0.5f))
             Spacer(modifier = Modifier.height(8.dp))
-            SongInfoRow(Icons.Filled.Person, "Artiste", song.artist, accentColor)
-            SongInfoRow(Icons.Filled.MusicNote, "Titre", song.title, accentColor)
-            SongInfoRow(Icons.Filled.Album, "Album", song.albumName, accentColor)
-            SongInfoRow(Icons.Filled.Timer, "Durée", formatDuration(song.duration), accentColor)
+            SongInfoRow(Icons.Filled.Person, "Artiste", com.credo.soundgroove.util.SongDisplay.artist(song.artist), accentColor)
+            SongInfoRow(Icons.Filled.MusicNote, "Titre", com.credo.soundgroove.util.SongDisplay.title(song.title, song.folderPath), accentColor)
+            SongInfoRow(Icons.Filled.Album, "Album", com.credo.soundgroove.util.SongDisplay.album(song.albumName), accentColor)
+            SongInfoRow(
+                Icons.Filled.Timer,
+                "Durée",
+                com.credo.soundgroove.util.SongDisplay.formatDurationOrNull(song.duration) ?: "—",
+                accentColor
+            )
             if (song.folderPath.isNotBlank()) {
                 SongInfoRow(Icons.Filled.Folder, "Dossier", song.folderPath, accentColor)
             }
@@ -828,7 +860,7 @@ fun PlaybackSpeedBottomSheet(
             Text("Tonalité (pitch)", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                "Indépendante de la vitesse (Media3 setPitch)",
+                "Indépendante de la vitesse de lecture",
                 color = TextTertiary,
                 fontSize = 11.sp
             )
