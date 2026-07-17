@@ -45,8 +45,11 @@ object SgMotion {
     /** M3 "Medium3" (350ms) — transitions "emphasized" : écrans pleine page. */
     const val SlowMs = 350
 
+    /** Morph mini-player ↔ Player : plus court que SlowMs pour limiter la latence perçue. */
+    const val PlayerMorphMs = 220
+
     /** Révélation circulaire lors d'un changement de thème. */
-    const val ThemeRevealMs = 420
+    const val ThemeRevealMs = 280
 
     /**
      * Durée de lissage de la barre de progression, calée sur l'intervalle de
@@ -77,8 +80,8 @@ object SgMotion {
     val EaseOut = EmphasizedDecelerate
     val EaseIn = StandardAccelerate
 
-    val SpringSnappy = spring<Float>(dampingRatio = 0.86f, stiffness = 420f)
-    val SpringSoft = spring<Float>(dampingRatio = 0.88f, stiffness = 300f)
+    val SpringSnappy = spring<Float>(dampingRatio = 0.78f, stiffness = 650f)
+    val SpringSoft = spring<Float>(dampingRatio = 0.82f, stiffness = 480f)
 
     fun tweenFast() = tween<Float>(FastMs, easing = EmphasizedDecelerate)
     fun tweenMedium() = tween<Float>(MediumMs, easing = EmphasizedDecelerate)
@@ -119,9 +122,9 @@ object SgMotion {
     // (voir PlayerScreen : artEnterSpec/chromeEnterSpec) pour éviter l'effet
     // "feuille qui glisse" et donner une sensation de pochette qui "grandit".
 
-    fun playerEnter(): EnterTransition =
-        slideInVertically(initialOffsetY = { it / 6 }, animationSpec = tweenSlowOf()) +
-            fadeIn(tweenMediumOf())
+    // Pas de slide vertical : le morph shared element (pochette) porte le mouvement ;
+    // un slide NavHost en parallèle créait double motion + latence perçue.
+    fun playerEnter(): EnterTransition = fadeIn(tweenFastOf())
 
     fun playerExit(): ExitTransition = fadeOut(tweenFastAccelOf())
 
@@ -165,24 +168,24 @@ object SgMotion {
     val MiniArtCenterFromBottomDp = 41.dp
 
     /** Anim du morph de la pochette à l'ouverture du Player (mini → plein). */
-    fun playerArtEnterSpec(): AnimationSpec<Float> = tween(SlowMs, easing = EmphasizedDecelerate)
+    fun playerArtEnterSpec(): AnimationSpec<Float> = tween(PlayerMorphMs, easing = EmphasizedDecelerate)
 
     /** Morph symétrique à la fermeture (plein → mini). */
-    fun playerArtExitSpec(): AnimationSpec<Float> = tween(MediumMs, easing = EmphasizedAccelerate)
+    fun playerArtExitSpec(): AnimationSpec<Float> = tween(FastMs, easing = EmphasizedAccelerate)
 
-    fun playerArtOffsetEnterSpec(): AnimationSpec<Float> = tween(SlowMs, easing = EmphasizedDecelerate)
+    fun playerArtOffsetEnterSpec(): AnimationSpec<Float> = tween(PlayerMorphMs, easing = EmphasizedDecelerate)
 
-    fun playerArtOffsetExitSpec(): AnimationSpec<Float> = tween(MediumMs, easing = EmphasizedAccelerate)
+    fun playerArtOffsetExitSpec(): AnimationSpec<Float> = tween(FastMs, easing = EmphasizedAccelerate)
 
-    /** Délai avant le fade-in du "chrome" (titre, slider, contrôles) après la pochette. */
-    const val PlayerChromeDelayMs = 60
+    /** Chrome (titre, slider, contrôles) : en parallèle du morph, sans délai artificiel. */
+    const val PlayerChromeDelayMs = 0
 
-    /** Anim de fade du "chrome" une fois la pochette lancée. */
-    fun playerChromeEnterSpec(): AnimationSpec<Float> = tween(MediumMs, easing = EmphasizedDecelerate)
+    /** Anim de fade du "chrome" en parallèle du morph pochette. */
+    fun playerChromeEnterSpec(): AnimationSpec<Float> = tween(FastMs, easing = EmphasizedDecelerate)
 
     fun playerChromeExitSpec(): AnimationSpec<Float> = tween(FastMs, easing = EmphasizedAccelerate)
 
-    fun themeRevealSpec(): AnimationSpec<Float> = tween(ThemeRevealMs, easing = EmphasizedDecelerate)
+    fun themeRevealSpec(): AnimationSpec<Float> = tween(ThemeRevealMs, easing = Standard)
 
     // ── Contenu interactif de bottom sheet (Sheet Infos...) ─────────────────
     // Le `ModalBottomSheet` M3 gère déjà nativement le drag/cancel/spring-back

@@ -81,6 +81,7 @@ fun AppNavigation(
     val crossfadeDurationMs by viewModel.crossfadeDurationMs.collectAsState()
     val sleepTimerRemainingSeconds by viewModel.sleepTimerRemainingSeconds.collectAsState()
     val vinylModeEnabled by viewModel.vinylModeEnabled.collectAsState()
+    val albumCoverAccentEnabled by viewModel.albumCoverAccentEnabled.collectAsState()
     val equalizerEnabled by viewModel.equalizerEnabled.collectAsState()
     val equalizerPreset by viewModel.equalizerPreset.collectAsState()
     val equalizerBands by viewModel.equalizerBands.collectAsState()
@@ -152,7 +153,7 @@ fun AppNavigation(
         lyricsMounted = true
         scope.launch {
             if (reducedMotion) lyricsPeekProgress.snapTo(1f)
-            else lyricsPeekProgress.animateTo(1f, animationSpec = tween(SgMotion.SlowMs, easing = SgMotion.EmphasizedDecelerate))
+            else lyricsPeekProgress.animateTo(1f, animationSpec = tween(SgMotion.MediumMs, easing = SgMotion.EmphasizedDecelerate))
         }
     }
 
@@ -191,7 +192,7 @@ fun AppNavigation(
             } else {
                 lyricsPeekProgress.animateTo(
                     if (shouldOpen) 1f else 0f,
-                    animationSpec = SgMotion.SpringSoft
+                    animationSpec = SgMotion.SpringSnappy
                 )
             }
             if (lyricsPeekProgress.value <= 0.001f) lyricsMounted = false
@@ -347,7 +348,8 @@ fun AppNavigation(
                             playbackSpeed = playbackSpeed,
                             playbackPitch = playbackPitch,
                             sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
-                            vinylModeEnabled = vinylModeEnabled
+                            vinylModeEnabled = vinylModeEnabled,
+                            albumCoverAccentEnabled = albumCoverAccentEnabled,
                         )
                     }
                     }
@@ -522,7 +524,8 @@ fun AppNavigation(
                         onSkipNext = { viewModel.skipNext() },
                         onOpen = { navController.navigate(Routes.PLAYER) },
                         gaplessEnabled = gaplessEnabled,
-                        crossfadeDurationMs = crossfadeDurationMs
+                        crossfadeDurationMs = crossfadeDurationMs,
+                        albumCoverAccentEnabled = albumCoverAccentEnabled,
                     )
                 }
             }

@@ -58,10 +58,15 @@ fun MiniPlayer(
     // Feedback UI req. 4 : un badge discret sur la pochette signale un mode de
     // lecture non "silencieux par défaut" (crossfade actif ou gapless désactivé).
     gaplessEnabled: Boolean = true,
-    crossfadeDurationMs: Int = 0
+    crossfadeDurationMs: Int = 0,
+    albumCoverAccentEnabled: Boolean = false,
 ) {
     val albumAccent = rememberAlbumArtAccentColor(song.albumArtUri, accentColor)
-    val displayAccent = blendWithAlbumArt(accentColor, albumAccent, weight = 0.3f)
+    val displayAccent = if (albumCoverAccentEnabled) {
+        accentColor
+    } else {
+        blendWithAlbumArt(accentColor, albumAccent, weight = 0.3f)
+    }
     val animatedProgress by animateFloatAsState(
         targetValue = progress,
         animationSpec = SgMotion.tweenProgress(),

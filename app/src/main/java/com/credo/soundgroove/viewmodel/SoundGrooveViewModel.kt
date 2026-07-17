@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import com.credo.soundgroove.MetadataOverrideEntity
 import com.credo.soundgroove.notifications.SmartNotificationManager
+import com.credo.soundgroove.ui.theme.AppAccent
 import com.credo.soundgroove.ui.theme.AppTheme
 import com.credo.soundgroove.util.CoverArtStorage
 import com.credo.soundgroove.util.EqualizerBandInfo
@@ -61,12 +62,22 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     )
     val currentTheme: StateFlow<AppTheme> = _currentTheme.asStateFlow()
 
+    private val _currentAccent = MutableStateFlow(
+        AppAccent.fromId(prefs.getString("selected_accent", AppAccent.VIOLET.id))
+    )
+    val currentAccent: StateFlow<AppAccent> = _currentAccent.asStateFlow()
+
     private val _showThemeSelection = MutableStateFlow(!prefs.contains("selected_theme"))
     val showThemeSelection: StateFlow<Boolean> = _showThemeSelection.asStateFlow()
 
     fun setTheme(theme: AppTheme) {
         _currentTheme.value = theme
         prefs.edit().putString("selected_theme", theme.name).apply()
+    }
+
+    fun setAccent(accent: AppAccent) {
+        _currentAccent.value = accent
+        prefs.edit().putString("selected_accent", accent.id).apply()
     }
 
     fun completeThemeSelection(theme: AppTheme) {
@@ -181,6 +192,9 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _performanceModeEnabled = MutableStateFlow(prefs.getBoolean("performance_mode_enabled", false))
     val performanceModeEnabled: StateFlow<Boolean> = _performanceModeEnabled.asStateFlow()
+
+    private val _albumCoverAccentEnabled = MutableStateFlow(prefs.getBoolean("album_cover_accent_enabled", false))
+    val albumCoverAccentEnabled: StateFlow<Boolean> = _albumCoverAccentEnabled.asStateFlow()
     
     private val _sortMode = MutableStateFlow(0)
     val sortMode: StateFlow<Int> = _sortMode.asStateFlow()
@@ -369,6 +383,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
             runCatching {
                 val snapshot = BackupSnapshot(
                     theme = _currentTheme.value,
+                    accent = _currentAccent.value,
                     favorites = dbRepository.getFavoritesSnapshot(),
                     playlists = dbRepository.getPlaylistsSnapshot()
                 )
@@ -392,6 +407,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                     dbRepository.replaceLibraryData(snapshot.favorites, snapshot.playlists)
                 }
                 snapshot.theme?.let { setTheme(it) }
+                snapshot.accent?.let { setAccent(it) }
                 "Restauration terminée : ${snapshot.favorites.size} favori(s), ${snapshot.playlists.size} playlist(s)."
             }.onSuccess { message ->
                 _backupMessage.value = message
@@ -794,6 +810,11 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     fun setPerformanceModeEnabled(enabled: Boolean) {
         _performanceModeEnabled.value = enabled
         prefs.edit().putBoolean("performance_mode_enabled", enabled).apply()
+    }
+
+    fun setAlbumCoverAccentEnabled(enabled: Boolean) {
+        _albumCoverAccentEnabled.value = enabled
+        prefs.edit().putBoolean("album_cover_accent_enabled", enabled).apply()
     }
 
     fun playNext(song: Song) {

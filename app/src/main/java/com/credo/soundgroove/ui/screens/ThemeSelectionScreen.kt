@@ -40,13 +40,13 @@ fun ThemeSelectionScreen(
     var step by remember { mutableStateOf(OnboardingStep.Welcome) }
     val revealState = rememberSgThemeRevealState()
     val scope = rememberCoroutineScope()
-    val activeColor = accentColorForTheme(selectedTheme)
+    val activeColor = resolveAccentColor(selectedTheme, AppAccent.VIOLET)
 
     SgThemeRevealHost(
         baseTheme = selectedTheme,
         revealState = revealState
     ) { theme ->
-        val previewAccent = accentColorForTheme(theme)
+        val previewAccent = resolveAccentColor(theme, AppAccent.VIOLET)
         SgScreenBackground(appTheme = theme) {
             Column(
                 modifier = Modifier
@@ -244,8 +244,8 @@ private fun OnboardingThemeStep(
         ) {
             ThemeCard(
                 title = "Noir Absolu",
-                description = "Noir profond, accent violet signature.",
-                accentColor = BrandPurple,
+                description = "Noir profond, contraste maximal.",
+                accentColor = resolveAccentColor(AppTheme.NOIR_ABSOLU, AppAccent.VIOLET),
                 bgColor = AbsoluteBlackSurface,
                 isSelected = selectedTheme == AppTheme.NOIR_ABSOLU,
                 onClick = { origin ->
@@ -256,8 +256,8 @@ private fun OnboardingThemeStep(
             )
             ThemeCard(
                 title = "Clair Argent",
-                description = "Fond clair, violet profond WCAG + touches signature.",
-                accentColor = BrandPurpleDeep,
+                description = "Fond clair, lisibilité WCAG.",
+                accentColor = resolveAccentColor(AppTheme.ARGENT_CLAIR, AppAccent.VIOLET),
                 bgColor = ArgentClairSurface,
                 isSelected = selectedTheme == AppTheme.ARGENT_CLAIR,
                 onClick = { origin ->
@@ -268,8 +268,8 @@ private fun OnboardingThemeStep(
             )
             ThemeCard(
                 title = "Graphite",
-                description = "Graphite mat, violet atténué et argent.",
-                accentColor = BrandPurpleMuted,
+                description = "Graphite mat et touches argent.",
+                accentColor = resolveAccentColor(AppTheme.GRAPHITE, AppAccent.VIOLET),
                 bgColor = GraphiteCard,
                 isSelected = selectedTheme == AppTheme.GRAPHITE,
                 onClick = { origin ->

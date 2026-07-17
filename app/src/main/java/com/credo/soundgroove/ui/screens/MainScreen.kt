@@ -80,7 +80,11 @@ fun MainScreen(
     player: MediaController,
     accentColor: Color,
     currentTheme: AppTheme = AppTheme.NOIR_ABSOLU,
+    currentAccent: AppAccent = AppAccent.VIOLET,
     onThemeSelected: (AppTheme) -> Unit = {},
+    onAccentSelected: (AppAccent) -> Unit = {},
+    albumCoverAccentEnabled: Boolean = false,
+    onAlbumCoverAccentChange: (Boolean) -> Unit = {},
     sleepTimerRemainingSeconds: Int? = null,
     onSetSleepTimer: (Int) -> Unit = {},
     onSetSleepTimerEndOfTrack: () -> Unit = {},
@@ -518,7 +522,8 @@ fun MainScreen(
                             onSkipNext = { PlayerGuards.safeSeekToNext(player) },
                             onOpen = onNavigateToPlayer,
                             gaplessEnabled = gaplessEnabled,
-                            crossfadeDurationMs = crossfadeDurationMs
+                            crossfadeDurationMs = crossfadeDurationMs,
+                            albumCoverAccentEnabled = albumCoverAccentEnabled,
                         )
                     }
                 }
@@ -564,6 +569,7 @@ fun MainScreen(
     ) {
         com.credo.soundgroove.ui.screens.SettingsScreen(
             currentTheme = currentTheme,
+            currentAccent = currentAccent,
             accentColor = accentColor,
             appVersion = appVersion,
             songCount = songs.size,
@@ -573,6 +579,9 @@ fun MainScreen(
             sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
             onBack = { showSettings = false },
             onThemeSelected = onThemeSelected,
+            onAccentSelected = onAccentSelected,
+            albumCoverAccentEnabled = albumCoverAccentEnabled,
+            onAlbumCoverAccentChange = onAlbumCoverAccentChange,
             onOpenSleepTimer = { showSleepTimerSheet = true },
             onCancelSleepTimer = onCancelSleepTimer,
             playbackSpeed = playbackSpeed,

@@ -61,10 +61,11 @@ object SgRadius {
 @Composable
 fun SgScreenBackground(
     appTheme: AppTheme,
+    accent: AppAccent = AppAccent.VIOLET,
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val accent = accentColorForTheme(appTheme)
+    val accentColor = resolveAccentColor(appTheme, accent)
     val haloAlpha by animateFloatAsState(
         targetValue = 1f,
         animationSpec = tween(SgMotion.SlowMs, easing = SgMotion.EaseOut),
@@ -81,7 +82,7 @@ fun SgScreenBackground(
                 .offset(x = (-60).dp, y = 80.dp)
                 .background(
                     Brush.radialGradient(
-                        listOf(accent.copy(alpha = 0.18f * haloAlpha), Color.Transparent)
+                        listOf(accentColor.copy(alpha = 0.18f * haloAlpha), Color.Transparent)
                     ),
                     CircleShape
                 )
@@ -93,7 +94,7 @@ fun SgScreenBackground(
                 .offset(x = 40.dp, y = 200.dp)
                 .background(
                     Brush.radialGradient(
-                        listOf(accent.copy(alpha = 0.10f * haloAlpha), Color.Transparent)
+                        listOf(accentColor.copy(alpha = 0.10f * haloAlpha), Color.Transparent)
                     ),
                     CircleShape
                 )

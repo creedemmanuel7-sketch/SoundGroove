@@ -10,9 +10,11 @@ import androidx.compose.ui.graphics.Color
 
 /**
  * Trois identités visuelles distinctes :
- * - [NOIR_ABSOLU] : noir profond, accent violet signature
- * - [GRAPHITE] : graphite mat, accent violet atténué + argent
- * - [ARGENT_CLAIR] : thème clair (fond blanc, violet profond WCAG)
+ * - [NOIR_ABSOLU] : noir profond
+ * - [GRAPHITE] : graphite mat + argent
+ * - [ARGENT_CLAIR] : thème clair (fond blanc, accents WCAG)
+ *
+ * La couleur d'accent ([AppAccent]) est indépendante du thème clair/sombre.
  */
 enum class AppTheme {
     NOIR_ABSOLU,
@@ -77,61 +79,126 @@ private val ArgentClairSemantic = SgSemanticColors(
     isLight = true,
 )
 
-private val NoirAbsoluColors = darkColorScheme(
-    primary = BrandPurple,
-    onPrimary = Color.White,
-    primaryContainer = BrandPurpleContainer,
-    onPrimaryContainer = BrandPurpleSoft,
-    secondary = BrandPurpleMuted,
-    onSecondary = Color.White,
-    background = AbsoluteBlackBg,
-    onBackground = NoirAbsoluSemantic.textPrimary,
-    surface = NoirAbsoluSemantic.cardSurface,
-    onSurface = NoirAbsoluSemantic.textPrimary,
-    surfaceVariant = NoirAbsoluSemantic.surfaceElevated,
-    onSurfaceVariant = NoirAbsoluSemantic.textSecondary,
-    outline = NoirAbsoluSemantic.borderSubtle,
-    error = ErrorRed,
-    onError = Color.White,
-)
+private fun colorSchemeFor(appTheme: AppTheme, accent: AppAccent) = when (appTheme) {
+    AppTheme.NOIR_ABSOLU -> darkColorScheme(
+        primary = accent.primary,
+        onPrimary = Color.White,
+        primaryContainer = accent.container,
+        onPrimaryContainer = accent.soft,
+        secondary = accent.muted,
+        onSecondary = Color.White,
+        background = AbsoluteBlackBg,
+        onBackground = NoirAbsoluSemantic.textPrimary,
+        surface = NoirAbsoluSemantic.cardSurface,
+        onSurface = NoirAbsoluSemantic.textPrimary,
+        surfaceVariant = NoirAbsoluSemantic.surfaceElevated,
+        onSurfaceVariant = NoirAbsoluSemantic.textSecondary,
+        outline = NoirAbsoluSemantic.borderSubtle,
+        error = ErrorRed,
+        onError = Color.White,
+    )
+    AppTheme.GRAPHITE -> darkColorScheme(
+        primary = accent.muted,
+        onPrimary = Color.White,
+        primaryContainer = accent.container,
+        onPrimaryContainer = accent.soft,
+        secondary = SilverAccent,
+        onSecondary = Color(0xFF15161A),
+        background = GraphiteAbyss,
+        onBackground = GraphiteSemantic.textPrimary,
+        surface = GraphiteSemantic.cardSurface,
+        onSurface = GraphiteSemantic.textPrimary,
+        surfaceVariant = GraphiteSemantic.surfaceElevated,
+        onSurfaceVariant = GraphiteSemantic.textSecondary,
+        outline = GraphiteSemantic.borderSubtle,
+        error = ErrorRed,
+        onError = Color.White,
+    )
+    AppTheme.ARGENT_CLAIR -> lightColorScheme(
+        primary = accent.deep,
+        onPrimary = Color.White,
+        primaryContainer = accent.soft.copy(alpha = 0.35f),
+        onPrimaryContainer = accent.container,
+        secondary = SteelBlue,
+        onSecondary = Color.White,
+        tertiary = accent.primary,
+        onTertiary = Color.White,
+        background = ArgentClairBg,
+        onBackground = ArgentClairSemantic.textPrimary,
+        surface = ArgentClairSemantic.cardSurface,
+        onSurface = ArgentClairSemantic.textPrimary,
+        surfaceVariant = ArgentClairSemantic.surfaceElevated,
+        onSurfaceVariant = ArgentClairSemantic.textSecondary,
+        outline = ArgentClairSemantic.borderSubtle,
+        error = ErrorRed,
+        onError = Color.White,
+    )
+}
 
-private val GraphiteColors = darkColorScheme(
-    primary = BrandPurpleMuted,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFF3B0764),
-    onPrimaryContainer = BrandPurpleSoft,
-    secondary = SilverAccent,
-    onSecondary = Color(0xFF15161A),
-    background = GraphiteAbyss,
-    onBackground = GraphiteSemantic.textPrimary,
-    surface = GraphiteSemantic.cardSurface,
-    onSurface = GraphiteSemantic.textPrimary,
-    surfaceVariant = GraphiteSemantic.surfaceElevated,
-    onSurfaceVariant = GraphiteSemantic.textSecondary,
-    outline = GraphiteSemantic.borderSubtle,
-    error = ErrorRed,
-    onError = Color.White,
-)
-
-private val ArgentClairColors = lightColorScheme(
-    primary = BrandPurpleDeep,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFEDE9FE),
-    onPrimaryContainer = Color(0xFF4C1D95),
-    secondary = SteelBlue,
-    onSecondary = Color.White,
-    tertiary = BrandPurple,
-    onTertiary = Color.White,
-    background = ArgentClairBg,
-    onBackground = ArgentClairSemantic.textPrimary,
-    surface = ArgentClairSemantic.cardSurface,
-    onSurface = ArgentClairSemantic.textPrimary,
-    surfaceVariant = ArgentClairSemantic.surfaceElevated,
-    onSurfaceVariant = ArgentClairSemantic.textSecondary,
-    outline = ArgentClairSemantic.borderSubtle,
-    error = ErrorRed,
-    onError = Color.White,
-)
+private fun colorSchemeForDynamic(appTheme: AppTheme, baseColor: Color) = when (appTheme) {
+    AppTheme.NOIR_ABSOLU -> {
+        val v = deriveAccentVariants(baseColor)
+        darkColorScheme(
+            primary = v.primary,
+            onPrimary = Color.White,
+            primaryContainer = v.container,
+            onPrimaryContainer = v.soft,
+            secondary = v.muted,
+            onSecondary = Color.White,
+            background = AbsoluteBlackBg,
+            onBackground = NoirAbsoluSemantic.textPrimary,
+            surface = NoirAbsoluSemantic.cardSurface,
+            onSurface = NoirAbsoluSemantic.textPrimary,
+            surfaceVariant = NoirAbsoluSemantic.surfaceElevated,
+            onSurfaceVariant = NoirAbsoluSemantic.textSecondary,
+            outline = NoirAbsoluSemantic.borderSubtle,
+            error = ErrorRed,
+            onError = Color.White,
+        )
+    }
+    AppTheme.GRAPHITE -> {
+        val v = deriveAccentVariants(baseColor)
+        darkColorScheme(
+            primary = v.muted,
+            onPrimary = Color.White,
+            primaryContainer = v.container,
+            onPrimaryContainer = v.soft,
+            secondary = SilverAccent,
+            onSecondary = Color(0xFF15161A),
+            background = GraphiteAbyss,
+            onBackground = GraphiteSemantic.textPrimary,
+            surface = GraphiteSemantic.cardSurface,
+            onSurface = GraphiteSemantic.textPrimary,
+            surfaceVariant = GraphiteSemantic.surfaceElevated,
+            onSurfaceVariant = GraphiteSemantic.textSecondary,
+            outline = GraphiteSemantic.borderSubtle,
+            error = ErrorRed,
+            onError = Color.White,
+        )
+    }
+    AppTheme.ARGENT_CLAIR -> {
+        val v = deriveAccentVariants(baseColor)
+        lightColorScheme(
+            primary = v.deep,
+            onPrimary = Color.White,
+            primaryContainer = v.soft.copy(alpha = 0.35f),
+            onPrimaryContainer = v.container,
+            secondary = SteelBlue,
+            onSecondary = Color.White,
+            tertiary = v.primary,
+            onTertiary = Color.White,
+            background = ArgentClairBg,
+            onBackground = ArgentClairSemantic.textPrimary,
+            surface = ArgentClairSemantic.cardSurface,
+            onSurface = ArgentClairSemantic.textPrimary,
+            surfaceVariant = ArgentClairSemantic.surfaceElevated,
+            onSurfaceVariant = ArgentClairSemantic.textSecondary,
+            outline = ArgentClairSemantic.borderSubtle,
+            error = ErrorRed,
+            onError = Color.White,
+        )
+    }
+}
 
 fun semanticColorsForTheme(appTheme: AppTheme): SgSemanticColors = when (appTheme) {
     AppTheme.NOIR_ABSOLU -> NoirAbsoluSemantic
@@ -139,11 +206,9 @@ fun semanticColorsForTheme(appTheme: AppTheme): SgSemanticColors = when (appThem
     AppTheme.GRAPHITE -> GraphiteSemantic
 }
 
-fun accentColorForTheme(appTheme: AppTheme): Color = when (appTheme) {
-    AppTheme.NOIR_ABSOLU -> BrandPurple
-    AppTheme.ARGENT_CLAIR -> BrandPurpleDeep
-    AppTheme.GRAPHITE -> BrandPurpleMuted
-}
+/** @deprecated Préférer [resolveAccentColor] avec [AppAccent]. */
+fun accentColorForTheme(appTheme: AppTheme): Color =
+    resolveAccentColor(appTheme, AppAccent.VIOLET)
 
 fun themeBackgroundBrush(appTheme: AppTheme): Brush = when (appTheme) {
     AppTheme.NOIR_ABSOLU -> Brush.verticalGradient(
@@ -214,12 +279,14 @@ fun themeSecondaryAccent(accentColor: Color): Color =
 @Composable
 fun SoundGrooveTheme(
     appTheme: AppTheme = AppTheme.NOIR_ABSOLU,
+    accent: AppAccent = AppAccent.VIOLET,
+    dynamicAccentBase: Color? = null,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when (appTheme) {
-        AppTheme.NOIR_ABSOLU -> NoirAbsoluColors
-        AppTheme.ARGENT_CLAIR -> ArgentClairColors
-        AppTheme.GRAPHITE -> GraphiteColors
+    val colorScheme = if (dynamicAccentBase != null) {
+        colorSchemeForDynamic(appTheme, dynamicAccentBase)
+    } else {
+        colorSchemeFor(appTheme, accent)
     }
     val semanticColors = semanticColorsForTheme(appTheme)
 

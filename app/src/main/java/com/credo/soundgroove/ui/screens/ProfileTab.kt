@@ -658,8 +658,9 @@ private fun ProfileQuickPreferences(
                 AppTheme.entries.forEach { theme ->
                     ProfileThemeChip(
                         label = themeShortName(theme),
-                        accent = accentColorForTheme(theme),
+                        accent = themePreviewColor(theme),
                         selected = currentTheme == theme,
+                        selectedRing = accentColor,
                         modifier = Modifier.weight(1f),
                         onClick = { onThemeSelected(theme) }
                     )
@@ -692,11 +693,12 @@ private fun ProfileThemeChip(
     label: String,
     accent: Color,
     selected: Boolean,
+    selectedRing: Color = accent,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val bg = if (selected) accent.copy(alpha = 0.22f) else GlassSurface.copy(alpha = 0.32f)
-    val borderColor = if (selected) accent else GlassBorder.copy(alpha = 0.3f)
+    val bg = if (selected) selectedRing.copy(alpha = 0.14f) else GlassSurface.copy(alpha = 0.32f)
+    val borderColor = if (selected) selectedRing.copy(alpha = 0.5f) else GlassBorder.copy(alpha = 0.3f)
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))

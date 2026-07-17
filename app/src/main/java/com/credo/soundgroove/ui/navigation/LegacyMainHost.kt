@@ -29,6 +29,8 @@ fun LegacyMainHost(
 ) {
     val controller by viewModel.mediaController.collectAsState()
     val currentTheme by viewModel.currentTheme.collectAsState()
+    val currentAccent by viewModel.currentAccent.collectAsState()
+    val albumCoverAccentEnabled by viewModel.albumCoverAccentEnabled.collectAsState()
     val sleepTimerRemainingSeconds by viewModel.sleepTimerRemainingSeconds.collectAsState()
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
     val playbackPitch by viewModel.playbackPitch.collectAsState()
@@ -94,7 +96,11 @@ fun LegacyMainHost(
             player = activeController,
             accentColor = accentColor,
             currentTheme = currentTheme,
+            currentAccent = currentAccent,
             onThemeSelected = { viewModel.setTheme(it) },
+            onAccentSelected = { viewModel.setAccent(it) },
+            albumCoverAccentEnabled = albumCoverAccentEnabled,
+            onAlbumCoverAccentChange = { viewModel.setAlbumCoverAccentEnabled(it) },
             sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
             onSetSleepTimer = { viewModel.setSleepTimer(it) },
             onSetSleepTimerEndOfTrack = { viewModel.setSleepTimerEndOfTrack() },

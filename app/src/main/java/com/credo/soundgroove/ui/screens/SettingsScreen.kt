@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -44,6 +45,7 @@ fun formatSleepTimerDisplay(seconds: Int?): String? {
 @Composable
 fun SettingsScreen(
     currentTheme: AppTheme,
+    currentAccent: AppAccent,
     accentColor: Color,
     appVersion: String,
     songCount: Int,
@@ -62,6 +64,9 @@ fun SettingsScreen(
     onOpenEqualizer: () -> Unit = {},
     onBack: () -> Unit,
     onThemeSelected: (AppTheme) -> Unit,
+    onAccentSelected: (AppAccent) -> Unit,
+    albumCoverAccentEnabled: Boolean = false,
+    onAlbumCoverAccentChange: (Boolean) -> Unit = {},
     onOpenSleepTimer: () -> Unit,
     onCancelSleepTimer: () -> Unit,
     onOpenPlaybackSpeed: () -> Unit,
@@ -155,9 +160,10 @@ fun SettingsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     ThemeOptionRow(
                         title = "Noir Absolu",
-                        description = "Noir profond, accent violet signature",
-                        accentColor = BrandPurple,
+                        description = "Noir profond, contraste maximal",
+                        previewColor = themePreviewColor(AppTheme.NOIR_ABSOLU),
                         isSelected = currentTheme == AppTheme.NOIR_ABSOLU,
+                        selectedAccent = accentColor,
                         onClick = { origin ->
                             launchThemeReveal(
                                 revealState, scope, AppTheme.NOIR_ABSOLU, currentTheme, origin, onThemeSelected
@@ -166,9 +172,10 @@ fun SettingsScreen(
                     )
                     ThemeOptionRow(
                         title = "Clair Argent",
-                        description = "Fond clair, violet profond WCAG",
-                        accentColor = BrandPurpleDeep,
+                        description = "Fond clair, lisibilité WCAG",
+                        previewColor = themePreviewColor(AppTheme.ARGENT_CLAIR),
                         isSelected = currentTheme == AppTheme.ARGENT_CLAIR,
+                        selectedAccent = accentColor,
                         onClick = { origin ->
                             launchThemeReveal(
                                 revealState, scope, AppTheme.ARGENT_CLAIR, currentTheme, origin, onThemeSelected
@@ -177,14 +184,55 @@ fun SettingsScreen(
                     )
                     ThemeOptionRow(
                         title = "Graphite",
-                        description = "Graphite mat, violet atténué + argent",
-                        accentColor = BrandPurpleMuted,
+                        description = "Graphite mat, touches argent",
+                        previewColor = themePreviewColor(AppTheme.GRAPHITE),
                         isSelected = currentTheme == AppTheme.GRAPHITE,
+                        selectedAccent = accentColor,
                         onClick = { origin ->
                             launchThemeReveal(
                                 revealState, scope, AppTheme.GRAPHITE, currentTheme, origin, onThemeSelected
                             )
                         }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Couleur d'accent",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                AccentSwatchRow(
+                    currentAccent = currentAccent,
+                    selectedRingColor = accentColor,
+                    manualSelectionEnabled = !albumCoverAccentEnabled,
+                    onAccentSelected = onAccentSelected
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                SettingsToggleRow(
+                    icon = Icons.Filled.Album,
+                    title = "Accent de la pochette",
+                    description = if (albumCoverAccentEnabled) {
+                        "Couleur extraite du morceau en cours"
+                    } else {
+                        "Utiliser l'accent choisi ci-dessus"
+                    },
+                    checked = albumCoverAccentEnabled,
+                    accentColor = accentColor,
+                    onCheckedChange = onAlbumCoverAccentChange
+                )
+
+                if (albumCoverAccentEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Les pastilles restent votre choix de repli lorsque cette option est désactivée.",
+                        color = TextTertiary,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
                     )
                 }
             }
@@ -455,7 +503,7 @@ fun SettingsScreen(
                 SettingsActionRow(
                     iconRes = R.drawable.ic_songs,
                     title = "Exporter les données",
-                    description = "Favoris, playlists et thème au format JSON",
+                    description = "Favoris, playlists, thème et accent au format JSON",
                     accentColor = accentColor,
                     onClick = onExportBackup
                 )
@@ -719,10 +767,56 @@ private fun SettingsSection(
 }
 
 @Composable
+private fun AccentSwatchRow(
+    currentAccent: AppAccent,
+    selectedRingColor: Color,
+    manualSelectionEnabled: Boolean = true,
+    onAccentSelected: (AppAccent) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (!manualSelectionEnabled) Modifier.graphicsLayer { alpha = 0.45f } else Modifier),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        AppAccent.entries.forEach { accent ->
+            val isSelected = accent == currentAccent
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(accent.primary)
+                    .border(
+                        width = if (isSelected) 2.dp else 1.dp,
+                        color = if (isSelected) selectedRingColor else GlassBorder.copy(alpha = 0.35f),
+                        shape = CircleShape
+                    )
+                    .clickable { onAccentSelected(accent) },
+                contentAlignment = Alignment.Center
+            ) {
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = accent.label,
+                        tint = if (accent == AppAccent.FROST || accent == AppAccent.AMBER) {
+                            Color(0xFF1A1D23)
+                        } else {
+                            Color.White
+                        },
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ThemeOptionRow(
     title: String,
     description: String,
-    accentColor: Color,
+    previewColor: Color,
+    selectedAccent: Color,
     isSelected: Boolean,
     onClick: (Offset) -> Unit
 ) {
@@ -732,10 +826,10 @@ private fun ThemeOptionRow(
             .fillMaxWidth()
             .sgThemeRevealOrigin { revealOrigin = it }
             .clip(RoundedCornerShape(14.dp))
-            .background(if (isSelected) accentColor.copy(alpha = 0.11f) else GlassSurface.copy(alpha = 0.28f))
+            .background(if (isSelected) selectedAccent.copy(alpha = 0.11f) else GlassSurface.copy(alpha = 0.28f))
             .border(
                 width = 1.dp,
-                color = if (isSelected) accentColor.copy(alpha = 0.45f) else GlassBorder.copy(alpha = 0.26f),
+                color = if (isSelected) selectedAccent.copy(alpha = 0.45f) else GlassBorder.copy(alpha = 0.26f),
                 shape = RoundedCornerShape(14.dp)
             )
             .clickable { onClick(revealOrigin) }
@@ -745,13 +839,14 @@ private fun ThemeOptionRow(
         Box(
             modifier = Modifier
                 .size(32.dp)
-                .background(accentColor.copy(alpha = 0.25f), CircleShape),
+                .background(previewColor.copy(alpha = 0.85f), CircleShape)
+                .border(1.dp, GlassBorder.copy(alpha = 0.4f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
                     .size(14.dp)
-                    .background(accentColor, CircleShape)
+                    .background(previewColor, CircleShape)
             )
         }
         Spacer(modifier = Modifier.width(12.dp))
@@ -763,7 +858,7 @@ private fun ThemeOptionRow(
             Icon(
                 imageVector = Icons.Filled.CheckCircle,
                 contentDescription = "Sélectionné",
-                tint = accentColor,
+                tint = selectedAccent,
                 modifier = Modifier.size(22.dp)
             )
         }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.theme.AppAccent
 import com.credo.soundgroove.ui.theme.AppTheme
 import org.json.JSONArray
 import org.json.JSONObject
@@ -12,6 +13,7 @@ import java.io.InputStreamReader
 
 data class BackupSnapshot(
     val theme: AppTheme?,
+    val accent: AppAccent? = null,
     val favorites: List<Song>,
     val playlists: List<Playlist>
 )
@@ -25,6 +27,7 @@ class BackupManager(private val context: Context) {
         root.put("app", "SoundGroove")
 
         snapshot.theme?.let { root.put("theme", it.name) }
+        snapshot.accent?.let { root.put("accent", it.id) }
 
         val favoritesArray = JSONArray()
         snapshot.favorites.forEach { song ->
@@ -66,6 +69,10 @@ class BackupManager(private val context: Context) {
                 runCatching { AppTheme.valueOf(name) }.getOrNull()
             }
 
+        val accent = root.optString("accent", "")
+            .takeIf { it.isNotBlank() }
+            ?.let { id -> AppAccent.fromId(id) }
+
         val favoritesArray = root.optJSONArray("favorites")
         if (favoritesArray != null && favoritesArray.length() > MAX_FAVORITES) {
             throw IllegalArgumentException("Trop de favoris dans la sauvegarde.")
@@ -98,7 +105,7 @@ class BackupManager(private val context: Context) {
             }
         } ?: emptyList()
 
-        return BackupSnapshot(theme = theme, favorites = favorites, playlists = playlists)
+        return BackupSnapshot(theme = theme, accent = accent, favorites = favorites, playlists = playlists)
     }
 
     fun writeToUri(uri: Uri, content: String) {

@@ -11,6 +11,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -113,10 +114,15 @@ fun PlayerScreen(
     playbackSpeed: Float = 1f,
     playbackPitch: Float = 1f,
     sleepTimerRemainingSeconds: Int? = null,
-    vinylModeEnabled: Boolean = false
+    vinylModeEnabled: Boolean = false,
+    albumCoverAccentEnabled: Boolean = false,
 ) {
     val albumAccent = rememberAlbumArtAccentColor(song.albumArtUri, accentColor)
-    val displayAccent = blendWithAlbumArt(accentColor, albumAccent)
+    val displayAccent = if (albumCoverAccentEnabled) {
+        accentColor
+    } else {
+        blendWithAlbumArt(accentColor, albumAccent)
+    }
     val displaySecondaryAccent = themeSecondaryAccent(displayAccent)
     val secondaryAccent = themeSecondaryAccent(accentColor)
     // Ambiance dérivée de la pochette pour la couche d'assombrissement du fond :
@@ -138,6 +144,10 @@ fun PlayerScreen(
     var dragOffsetX by remember { mutableStateOf(0f) }
     var verticalDragOffset by remember { mutableStateOf(0f) }
     var isDismissDragging by remember { mutableStateOf(false) }
+    // Progrès 0→1 du morph interactif Player → mini (suivi doigt). Quand > 0, le
+    // shared element est temporairement désactivé sur la pochette/métas pour laisser
+    // le morph manuel piloter taille+position sans conflit de bounds au pop.
+    var dismissMorphProgress by remember { mutableFloatStateOf(0f) }
     var screenWidthPx by remember { mutableStateOf(1f) }
     val swipeThreshold = 100.dp
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -163,12 +173,28 @@ fun PlayerScreen(
     val artOffsetX = remember { Animatable(0f) }
     val artOffsetY = remember { Animatable(SgMotion.PlayerArtEnterOffsetY) }
     val chromeAlpha = remember { Animatable(0f) }
-    // Décalage vertical du Player entier pendant le dismiss interactif quand le shared
-    // element réel pilote la pochette : on ne touche JAMAIS artScale/artOffsetY sur le
-    // nœud `sgSharedAlbumArt` (sinon bounds layout ≠ rendu graphicsLayer → snap au pop).
     val dismissRootOffsetY = remember { Animatable(0f) }
     var isExiting by remember { mutableStateOf(false) }
     val reducedMotion = rememberSgReducedMotion()
+
+    // Fondu des "lampes" (scrim ambiance) : évite le snap brutal quand Palette
+    // Coil renvoie les couleurs extraites de la pochette.
+    val scrimColorSpec = if (reducedMotion) snap() else SgMotion.tweenFastOf<Color>()
+    val scrimTop by animateColorAsState(
+        targetValue = ambiencePalette.scrimTop,
+        animationSpec = scrimColorSpec,
+        label = "playerScrimTop"
+    )
+    val scrimMid by animateColorAsState(
+        targetValue = ambiencePalette.scrimMid,
+        animationSpec = scrimColorSpec,
+        label = "playerScrimMid"
+    )
+    val scrimBottom by animateColorAsState(
+        targetValue = ambiencePalette.scrimBottom,
+        animationSpec = scrimColorSpec,
+        label = "playerScrimBottom"
+    )
 
     // Position "au repos" de la pochette (centre, coordonnées racine), mesurée en
     // continu via onGloballyPositioned — voir le Box de la pochette plus bas, où
@@ -199,17 +225,13 @@ fun PlayerScreen(
             artScale.snapTo(1f)
             artOffsetY.snapTo(0f)
             dismissRootOffsetY.snapTo(0f)
-            kotlinx.coroutines.delay(SgMotion.PlayerChromeDelayMs.toLong())
             chromeAlpha.animateTo(1f, animationSpec = SgMotion.playerChromeEnterSpec())
             return
         }
         kotlinx.coroutines.coroutineScope {
             launch { artScale.animateTo(1f, animationSpec = SgMotion.playerArtEnterSpec()) }
             launch { artOffsetY.animateTo(0f, animationSpec = SgMotion.playerArtOffsetEnterSpec()) }
-            launch {
-                kotlinx.coroutines.delay(SgMotion.PlayerChromeDelayMs.toLong())
-                chromeAlpha.animateTo(1f, animationSpec = SgMotion.playerChromeEnterSpec())
-            }
+            launch { chromeAlpha.animateTo(1f, animationSpec = SgMotion.playerChromeEnterSpec()) }
         }
     }
 
@@ -277,35 +299,26 @@ fun PlayerScreen(
     // simple que d'introduire un second système de drag en parallèle).
     suspend fun applyDismissDrag(rawProgress: Float) {
         val p = rawProgress.coerceIn(0f, 1f)
+        dismissMorphProgress = p
+        dismissRootOffsetY.snapTo(0f)
         chromeAlpha.snapTo(lerpFloat(1f, 0f, p))
-        if (hasRealSharedTransition) {
-            // Feedback au doigt sans altérer les bornes du shared element : le morph
-            // pochette ↔ mini-player est délégué au pop NavHost (source de vérité unique).
-            dismissRootOffsetY.snapTo(p * dismissDragDistancePx * 0.55f)
-        } else {
-            val target = miniArtDismissTarget()
-            artScale.snapTo(lerpFloat(1f, SgMotion.PlayerArtMiniScale, p))
-            artOffsetX.snapTo(lerpFloat(0f, target.x, p))
-            artOffsetY.snapTo(lerpFloat(0f, target.y, p))
-        }
+        val target = miniArtDismissTarget()
+        artScale.snapTo(lerpFloat(1f, SgMotion.PlayerArtMiniScale, p))
+        artOffsetX.snapTo(lerpFloat(0f, target.x, p))
+        artOffsetY.snapTo(lerpFloat(0f, target.y, p))
     }
 
     // Relâché avant le seuil → annulation : spring back vers l'état plein écran
     // (pas un simple snap, pour un feedback "élastique" cohérent avec le reste
     // de la motion de l'app, cf. SgMotion.SpringSnappy déjà utilisé sur les press).
     suspend fun cancelDismissDrag() {
-        if (hasRealSharedTransition) {
-            kotlinx.coroutines.coroutineScope {
-                launch { dismissRootOffsetY.animateTo(0f, animationSpec = SgMotion.SpringSnappy) }
-                launch { chromeAlpha.animateTo(1f, animationSpec = SgMotion.tweenFastOf()) }
-            }
-        } else {
-            kotlinx.coroutines.coroutineScope {
-                launch { artScale.animateTo(1f, animationSpec = SgMotion.SpringSnappy) }
-                launch { artOffsetX.animateTo(0f, animationSpec = SgMotion.SpringSnappy) }
-                launch { artOffsetY.animateTo(0f, animationSpec = SgMotion.SpringSnappy) }
-                launch { chromeAlpha.animateTo(1f, animationSpec = SgMotion.tweenFastOf()) }
-            }
+        dismissMorphProgress = 0f
+        kotlinx.coroutines.coroutineScope {
+            launch { dismissRootOffsetY.animateTo(0f, animationSpec = SgMotion.SpringSnappy) }
+            launch { artScale.animateTo(1f, animationSpec = SgMotion.SpringSnappy) }
+            launch { artOffsetX.animateTo(0f, animationSpec = SgMotion.SpringSnappy) }
+            launch { artOffsetY.animateTo(0f, animationSpec = SgMotion.SpringSnappy) }
+            launch { chromeAlpha.animateTo(1f, animationSpec = SgMotion.tweenFastOf()) }
         }
     }
 
@@ -324,12 +337,33 @@ fun PlayerScreen(
         }
     }
 
-    fun dismissPlayer() {
+    fun dismissPlayer(fromInteractiveDrag: Boolean = false) {
         if (isExiting) return
         scope.launch {
             isExiting = true
-            runExitAnimation()
-            onClose()
+            if (fromInteractiveDrag && dismissMorphProgress > 0f) {
+                // Relâchement après un drag : la pochette est déjà à la cible mini —
+                // pop direct sans reset (évite le jump vers plein écran puis morph).
+                applyDismissDrag(1f)
+                dismissRootOffsetY.snapTo(0f)
+                chromeAlpha.snapTo(0f)
+                onClose()
+            } else if (hasRealSharedTransition) {
+                dismissMorphProgress = 0f
+                dismissRootOffsetY.snapTo(0f)
+                artScale.snapTo(1f)
+                artOffsetX.snapTo(0f)
+                artOffsetY.snapTo(0f)
+                if (reducedMotion) {
+                    chromeAlpha.snapTo(0f)
+                } else {
+                    launch { chromeAlpha.animateTo(0f, animationSpec = SgMotion.playerChromeExitSpec()) }
+                }
+                onClose()
+            } else {
+                runExitAnimation()
+                onClose()
+            }
         }
     }
 
@@ -385,7 +419,7 @@ fun PlayerScreen(
                             scope.launch {
                                 when {
                                     wasDismissDragging && offset / dismissDragDistancePx >= dismissCommitFraction ->
-                                        dismissPlayer()
+                                        dismissPlayer(fromInteractiveDrag = true)
                                     wasDismissDragging -> cancelDismissDrag()
                                     offset < -120f -> onSwipeUp()
                                 }
@@ -400,6 +434,7 @@ fun PlayerScreen(
                         }
                         verticalDragOffset = 0f
                         isDismissDragging = false
+                        dismissMorphProgress = 0f
                     },
                     onVerticalDrag = { change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Float ->
                         change.consume()
@@ -452,7 +487,7 @@ fun PlayerScreen(
                     // Durée calée sur le token M3 "Medium" (SgMotion) : le fond change au
                     // même rythme que la pochette pour rester perçu comme un seul morph,
                     // pas deux animations désynchronisées (cf. UX_MOTION_GUIDELINES.md).
-                    .crossfade(SgMotion.MediumMs)
+                    .crossfade(SgMotion.FastMs)
                     .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
@@ -471,9 +506,9 @@ fun PlayerScreen(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            ambiencePalette.scrimTop,
-                            ambiencePalette.scrimMid,
-                            ambiencePalette.scrimBottom
+                            scrimTop,
+                            scrimMid,
+                            scrimBottom
                         )
                     )
                 )
@@ -544,7 +579,9 @@ fun PlayerScreen(
 
             // Pochette — bornes de taille/position partagées avec le mini-player
             // (sgSharedAlbumArt) quand un vrai SharedTransitionLayout est disponible ;
-            // sinon repli sur le morph manuel artScale/artOffsetY (cf. plus haut).
+            // pendant le dismiss interactif (dismissMorphProgress > 0), le morph manuel
+            // prend le relais pour suivre le doigt sans conflit de bounds au pop.
+            val interactiveDismissActive = dismissMorphProgress > 0f
             Box(
                 modifier = Modifier
                     // Doit rester AVANT `.offset{}` : voir le commentaire sur
@@ -557,31 +594,31 @@ fun PlayerScreen(
                             posInRoot.y + coordinates.size.height / 2f
                         )
                     }
-                    // Y n'ajoute plus `verticalDragOffset` brut : le dismiss interactif
-                    // (`applyDismissDrag`) pilote déjà `artOffsetY` en continu pendant le
-                    // drag, en visant la vraie position du mini-player (pas juste "suivre
-                    // le doigt sans direction") — cf. plus haut.
+                    .offset {
+                        IntOffset(
+                            (dragOffsetX + if (!hasRealSharedTransition || interactiveDismissActive) artOffsetX.value else 0f).toInt(),
+                            if (!hasRealSharedTransition || interactiveDismissActive) artOffsetY.value.toInt() else 0
+                        )
+                    }
                     .then(
-                        if (hasRealSharedTransition) {
-                            // Swipe horizontal piste suivante/précédente uniquement — pas de morph manuel.
-                            Modifier.offset { IntOffset(dragOffsetX.toInt(), 0) }
+                        if (!hasRealSharedTransition || interactiveDismissActive) {
+                            Modifier.graphicsLayer {
+                                scaleX = artScale.value
+                                scaleY = artScale.value
+                            }
                         } else {
                             Modifier
-                                .offset {
-                                    IntOffset(
-                                        (dragOffsetX + artOffsetX.value).toInt(),
-                                        artOffsetY.value.toInt()
-                                    )
-                                }
-                                .graphicsLayer {
-                                    scaleX = artScale.value
-                                    scaleY = artScale.value
-                                }
                         }
                     )
                     .fillMaxWidth(0.82f)
                     .aspectRatio(1f)
-                    .sgSharedAlbumArt(key = "album_art_${song.id}")
+                    .then(
+                        if (hasRealSharedTransition && !interactiveDismissActive) {
+                            Modifier.sgSharedAlbumArt(key = "album_art_${song.id}")
+                        } else {
+                            Modifier
+                        }
+                    )
                     .pointerInput(player.mediaItemCount) {
                         detectHorizontalDragGestures(
                             onDragEnd = {
@@ -633,7 +670,7 @@ fun PlayerScreen(
                                 AsyncImage(
                                     model = ImageRequest.Builder(LocalContext.current)
                                         .data(song.albumArtUri)
-                                        .crossfade(SgMotion.MediumMs)
+                                        .crossfade(SgMotion.FastMs)
                                         .build(),
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
@@ -679,7 +716,13 @@ fun PlayerScreen(
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .sgSharedBounds(key = "track_meta_${song.id}")
+                            .then(
+                                if (hasRealSharedTransition && !interactiveDismissActive) {
+                                    Modifier.sgSharedBounds(key = "track_meta_${song.id}")
+                                } else {
+                                    Modifier
+                                }
+                            )
                     ) {
                         Text(
                             text = song.title,
@@ -1042,7 +1085,7 @@ private fun VinylDisc(
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(song.albumArtUri)
-                        .crossfade(SgMotion.MediumMs)
+                        .crossfade(SgMotion.FastMs)
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
