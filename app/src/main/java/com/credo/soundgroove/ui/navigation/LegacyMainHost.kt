@@ -34,6 +34,9 @@ fun LegacyMainHost(
     val playbackPitch by viewModel.playbackPitch.collectAsState()
     val gaplessEnabled by viewModel.gaplessEnabled.collectAsState()
     val crossfadeDurationMs by viewModel.crossfadeDurationMs.collectAsState()
+    val equalizerEnabled by viewModel.equalizerEnabled.collectAsState()
+    val equalizerPreset by viewModel.equalizerPreset.collectAsState()
+    val equalizerBands by viewModel.equalizerBands.collectAsState()
     val metadataEditMessage by viewModel.metadataEditMessage.collectAsState()
     val songs by viewModel.songs.collectAsState()
     val sortedSongs by viewModel.sortedSongs.collectAsState()
@@ -104,6 +107,14 @@ fun LegacyMainHost(
             onGaplessChange = { viewModel.setGaplessEnabled(it) },
             crossfadeDurationMs = crossfadeDurationMs,
             onCrossfadeDurationChange = { viewModel.setCrossfadeDurationMs(it) },
+            equalizerEnabled = equalizerEnabled,
+            equalizerPresetLabel = equalizerPreset.label,
+            equalizerPreset = equalizerPreset,
+            equalizerBands = equalizerBands,
+            onEqualizerEnabledChange = { viewModel.setEqualizerEnabled(it) },
+            onEqualizerPresetChange = { viewModel.setEqualizerPreset(it) },
+            onEqualizerBandLevelChange = { band, level -> viewModel.setEqualizerBandLevel(band, level) },
+            onRefreshEqualizerBands = { viewModel.refreshEqualizerBands() },
             onSaveSongMetadata = { song, title, artist, album ->
                 viewModel.saveSongMetadata(song, title, artist, album)
             },

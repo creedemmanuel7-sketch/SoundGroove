@@ -2,6 +2,7 @@ package com.credo.soundgroove
 
 import android.app.PendingIntent
 import android.content.Intent
+import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -12,11 +13,15 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionResult
 import com.credo.soundgroove.notifications.NotificationChannels
+import com.credo.soundgroove.ui.theme.AppTheme
 import com.credo.soundgroove.util.CrossfadeController
+import com.credo.soundgroove.util.EqualizerManager
 import com.credo.soundgroove.util.PlaybackPreferences
 import com.credo.soundgroove.widget.MusicAppWidgetProvider
 import com.credo.soundgroove.widget.WidgetPlaybackState
+import com.credo.soundgroove.widget.WidgetSkin
 import com.credo.soundgroove.widget.WidgetState
 
 class PlaybackService : MediaSessionService() {
@@ -26,6 +31,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         NotificationChannels.ensureAll(this)
 
         val extractorsFactory = DefaultExtractorsFactory()
@@ -46,6 +52,7 @@ class PlaybackService : MediaSessionService() {
             .build()
 
         applyPlaybackPreferences(player)
+        attachAudioEffects(player)
 
         val sessionActivity = PendingIntent.getActivity(
             this,
@@ -58,6 +65,7 @@ class PlaybackService : MediaSessionService() {
 
         mediaSession = MediaSession.Builder(this, player)
             .setSessionActivity(sessionActivity)
+            .setCallback(PlaybackSessionCallback(player))
             .build()
 
         setMediaNotificationProvider(
@@ -83,10 +91,36 @@ class PlaybackService : MediaSessionService() {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 updateWidgetFromPlayer(player)
             }
+
+            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                updateWidgetFromPlayer(player)
+            }
+
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                updateWidgetFromPlayer(player)
+            }
+
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                if (audioSessionId != C.AUDIO_SESSION_ID_UNSET) {
+                    EqualizerManager.attach(this@PlaybackService, audioSessionId)
+                }
+            }
         }
         playerListener = listener
         player.addListener(listener)
         updateWidgetFromPlayer(player)
+    }
+
+    private fun attachAudioEffects(player: ExoPlayer) {
+        val sessionId = player.audioSessionId
+        if (sessionId != C.AUDIO_SESSION_ID_UNSET) {
+            EqualizerManager.attach(this, sessionId)
+        }
+    }
+
+    fun refreshPlaybackSettings() {
+        crossfadeController?.refreshSettings()
+        EqualizerManager.applyFromPreferences(this)
     }
 
     private fun applyPlaybackPreferences(player: ExoPlayer) {
@@ -94,7 +128,6 @@ class PlaybackService : MediaSessionService() {
         val speed = prefs.getFloat(PlaybackPreferences.KEY_PLAYBACK_SPEED, 1.0f)
         val pitch = prefs.getFloat(PlaybackPreferences.KEY_PLAYBACK_PITCH, 1.0f)
         player.playbackParameters = PlaybackParameters(speed, pitch)
-        // Gapless : ExoPlayer gère la lecture enchaînée ; le toggle désactive la micro-pause via CrossfadeController
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
@@ -109,8 +142,10 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        instance = null
         crossfadeController?.detach()
         crossfadeController = null
+        EqualizerManager.release()
         playerListener?.let { mediaSession?.player?.removeListener(it) }
         playerListener = null
         mediaSession?.run {
@@ -119,6 +154,17 @@ class PlaybackService : MediaSessionService() {
             mediaSession = null
         }
         super.onDestroy()
+    }
+
+    private fun resolveWidgetSkin(): WidgetSkin {
+        val themeName = getSharedPreferences("soundgroove_prefs", MODE_PRIVATE)
+            .getString("selected_theme", AppTheme.NOIR_ABSOLU.name)
+        val theme = runCatching { AppTheme.valueOf(themeName ?: AppTheme.NOIR_ABSOLU.name) }
+            .getOrDefault(AppTheme.NOIR_ABSOLU)
+        return when (theme) {
+            AppTheme.NOIR_ABSOLU -> WidgetSkin.CYAN
+            AppTheme.GRAPHITE, AppTheme.ARGENT_CLAIR -> WidgetSkin.DARK
+        }
     }
 
     private fun updateWidgetFromPlayer(player: Player) {
@@ -131,13 +177,48 @@ class PlaybackService : MediaSessionService() {
                 title = title,
                 artist = artist,
                 albumArtUri = metadata.artworkUri,
-                isPlaying = player.isPlaying
+                isPlaying = player.isPlaying,
+                skin = resolveWidgetSkin()
             )
         )
         MusicAppWidgetProvider.updateAllWidgets(this)
     }
 
+    private class PlaybackSessionCallback(
+        private val player: Player
+    ) : MediaSession.Callback {
+
+        override fun onPlayerCommandRequest(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            playerCommand: Int
+        ): Int {
+            when (playerCommand) {
+                Player.COMMAND_SEEK_TO_PREVIOUS,
+                Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
+                    seekPreviousTrack()
+                    return SessionResult.RESULT_SUCCESS
+                }
+            }
+            return super.onPlayerCommandRequest(session, controller, playerCommand)
+        }
+
+        private fun seekPreviousTrack() {
+            if (player.currentPosition > PREVIOUS_RESTART_THRESHOLD_MS) {
+                player.seekTo(0)
+            } else if (player.hasPreviousMediaItem()) {
+                player.seekToPreviousMediaItem()
+            } else {
+                player.seekTo(0)
+            }
+        }
+    }
+
     companion object {
         const val MEDIA_NOTIFICATION_ID = 1001
+        private const val PREVIOUS_RESTART_THRESHOLD_MS = 3_000L
+
+        @Volatile
+        var instance: PlaybackService? = null
     }
 }

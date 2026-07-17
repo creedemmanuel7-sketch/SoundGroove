@@ -26,6 +26,7 @@ import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.AlbumArtThumb
+import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.components.EditMetadataBottomSheet
 import com.credo.soundgroove.ui.components.SongContextMenuSheet
 import com.credo.soundgroove.ui.components.SongInfoBottomSheet
@@ -210,34 +211,15 @@ fun AlbumDetailScreen(
             // ── Song List ────────────────────────────────────────────────────
             if (songs.isEmpty()) {
                 item {
-                    Box(
+                    SgEmptyState(
+                        iconPainter = painterResource(R.drawable.ic_songs),
+                        title = "Aucun titre dans cet album",
+                        subtitle = "Les fichiers audio de cet album n'ont pas été trouvés.",
+                        compact = true,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_songs),
-                                contentDescription = null,
-                                tint = TextSecondary,
-                                modifier = Modifier.size(52.dp)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                "Aucun titre dans cet album",
-                                color = TextPrimary,
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "Les fichiers audio de cet album n'ont pas été trouvés.",
-                                color = TextSecondary.copy(0.85f),
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
+                            .padding(vertical = SgSpacing.xxl)
+                    )
                 }
             } else {
             itemsIndexed(songs) { index, song ->
@@ -341,6 +323,7 @@ fun AlbumDetailScreen(
                 song = song,
                 accentColor = accentColor,
                 onSave = { title, artist, album -> onSaveMetadata(song, title, artist, album) },
+                onSetCoverArt = { launchCoverPicker(song) },
                 onDismiss = { editSong = null }
             )
         }

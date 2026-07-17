@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -23,6 +24,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.material.icons.Icons
@@ -30,6 +32,12 @@ import androidx.compose.material.icons.filled.*
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.graphics.graphicsLayer
+import com.credo.soundgroove.util.EqualizerBandInfo
+import com.credo.soundgroove.util.EqualizerPreset
+import com.credo.soundgroove.util.PlaybackPreferences
 import com.credo.soundgroove.ui.theme.*
 
 // ─── Create Playlist Sheet ──────────────────────────────────────────────────
@@ -578,6 +586,20 @@ fun SongInfoBottomSheet(
     onSetCoverArt: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
+    // Le `ModalBottomSheet` M3 gère déjà nativement tenir/glisser/annuler (son
+    // `SheetState` interne règle seul le spring-back si le drag est insuffisant,
+    // cf. SgMotion.sheetContentEnterSpec) : on ne touche pas à cette mécanique.
+    // Ce qu'on ajoute ici, c'est une apparition plus douce du CONTENU (scale+fade
+    // court) pour éviter l'effet "pop" instantané dès que la sheet devient visible.
+    val reducedMotion = rememberSgReducedMotion()
+    val contentScale = remember { Animatable(if (reducedMotion) 1f else SgMotion.SheetContentInitialScale) }
+    val contentAlpha = remember { Animatable(if (reducedMotion) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (!reducedMotion) {
+            launch { contentScale.animateTo(1f, animationSpec = SgMotion.sheetContentEnterSpec()) }
+            launch { contentAlpha.animateTo(1f, animationSpec = SgMotion.sheetContentEnterSpec()) }
+        }
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = SurfaceOverlay.copy(alpha = 0.96f),
@@ -586,6 +608,11 @@ fun SongInfoBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = contentScale.value
+                    scaleY = contentScale.value
+                    alpha = contentAlpha.value
+                }
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 26.dp)
         ) {
@@ -837,11 +864,12 @@ fun PlaybackSpeedBottomSheet(
 @Composable
 fun CrossfadeBottomSheet(
     currentMs: Int,
+    gaplessEnabled: Boolean,
     accentColor: Color,
     onDurationSelected: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val options = com.credo.soundgroove.util.PlaybackPreferences.CROSSFADE_OPTIONS_MS
+    val options = PlaybackPreferences.CROSSFADE_OPTIONS_MS
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = SurfaceOverlay.copy(alpha = 0.96f),
@@ -861,14 +889,20 @@ fun CrossfadeBottomSheet(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "Fondu entre les pistes via le volume du lecteur",
+                "Fondu enchaîné via le volume — courbe ease-in-out",
                 color = TextSecondary,
                 fontSize = 13.sp
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            PlaybackModeIndicator(
+                gaplessEnabled = gaplessEnabled,
+                crossfadeMs = currentMs,
+                accentColor = accentColor
             )
             Spacer(modifier = Modifier.height(16.dp))
             options.forEach { ms ->
                 val isSelected = ms == currentMs
-                val label = com.credo.soundgroove.util.PlaybackPreferences.crossfadeLabel(ms)
+                val label = PlaybackPreferences.crossfadeLabel(ms)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -894,12 +928,227 @@ fun CrossfadeBottomSheet(
     }
 }
 
+@Composable
+fun PlaybackModeIndicator(
+    gaplessEnabled: Boolean,
+    crossfadeMs: Int,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+    // Badge cliquable depuis PlayerScreen (ouvre CrossfadeBottomSheet) ; laissé à
+    // `null` là où l'indicateur reste purement informatif (ex. dans CrossfadeBottomSheet
+    // lui-même, pas de sens à se ré-ouvrir soi-même).
+    onClick: (() -> Unit)? = null
+) {
+    val label = PlaybackPreferences.playbackModeLabel(gaplessEnabled, crossfadeMs)
+    val icon = when {
+        crossfadeMs > 0 -> Icons.Filled.BlurLinear
+        gaplessEnabled -> Icons.Filled.SkipNext
+        else -> Icons.Filled.Pause
+    }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .background(accentColor.copy(alpha = 0.1f))
+            .border(1.dp, accentColor.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(label, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun EqualizerBottomSheet(
+    enabled: Boolean,
+    preset: EqualizerPreset,
+    bands: List<EqualizerBandInfo>,
+    accentColor: Color,
+    onEnabledChange: (Boolean) -> Unit,
+    onPresetSelected: (EqualizerPreset) -> Unit,
+    onBandLevelChange: (Int, Short) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val presetOptions = EqualizerPreset.entries.filter { it != EqualizerPreset.CUSTOM }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceOverlay.copy(alpha = 0.96f),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Égaliseur",
+                        color = TextPrimary,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (bands.isEmpty()) {
+                            "En attente de lecture audio…"
+                        } else {
+                            "${bands.size} bandes · ${preset.label}"
+                        },
+                        color = TextSecondary,
+                        fontSize = 12.sp
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = onEnabledChange,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = accentColor,
+                        uncheckedThumbColor = TextSecondary,
+                        uncheckedTrackColor = GlassSurface
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+            Text("Presets", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(8.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                presetOptions.forEach { option ->
+                    val selected = preset == option
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(
+                                if (selected) accentColor.copy(alpha = 0.18f)
+                                else GlassSurface.copy(alpha = 0.35f)
+                            )
+                            .border(
+                                1.dp,
+                                if (selected) accentColor.copy(alpha = 0.5f) else GlassBorder.copy(alpha = 0.3f),
+                                RoundedCornerShape(20.dp)
+                            )
+                            .clickable { onPresetSelected(option) }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            option.label,
+                            color = if (selected) accentColor else TextPrimary,
+                            fontSize = 13.sp,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+
+            if (bands.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(20.dp))
+                Text("Bandes", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    bands.forEach { band ->
+                        EqualizerBandSlider(
+                            band = band,
+                            accentColor = accentColor,
+                            enabled = enabled,
+                            onLevelChange = { onBandLevelChange(band.index.toInt(), it) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EqualizerBandSlider(
+    band: EqualizerBandInfo,
+    accentColor: Color,
+    enabled: Boolean,
+    onLevelChange: (Short) -> Unit
+) {
+    val range = band.maxLevelMillibels - band.minLevelMillibels
+    val normalized = if (range == 0) {
+        0.5f
+    } else {
+        (band.levelMillibels - band.minLevelMillibels).toFloat() / range.toFloat()
+    }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.width(44.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .height(150.dp)
+                .width(36.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Slider(
+                value = normalized.coerceIn(0f, 1f),
+                onValueChange = { value ->
+                    val level = (band.minLevelMillibels + value * range).toInt()
+                        .coerceIn(band.minLevelMillibels.toInt(), band.maxLevelMillibels.toInt())
+                        .toShort()
+                    onLevelChange(level)
+                },
+                enabled = enabled,
+                modifier = Modifier
+                    .graphicsLayer {
+                        rotationZ = -90f
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+                    }
+                    .height(36.dp)
+                    .width(150.dp)
+                    .offset(x = 57.dp),
+                colors = SliderDefaults.colors(
+                    thumbColor = accentColor,
+                    activeTrackColor = accentColor,
+                    inactiveTrackColor = GlassBorder.copy(alpha = 0.4f)
+                )
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            formatFrequencyLabel(band.centerFrequencyHz),
+            color = TextTertiary,
+            fontSize = 10.sp,
+            maxLines = 1
+        )
+    }
+}
+
+private fun formatFrequencyLabel(hz: Int): String = when {
+    hz >= 1000 -> "${hz / 1000}k"
+    else -> "$hz"
+}
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditMetadataBottomSheet(
     song: Song,
     accentColor: Color,
     onSave: (title: String, artist: String, album: String) -> Unit,
+    onSetCoverArt: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     var title by remember(song.id) { mutableStateOf(song.title) }
@@ -914,22 +1163,59 @@ fun EditMetadataBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 28.dp)
+                .padding(horizontal = SgSpacing.lg)
+                .padding(bottom = SgSpacing.xxl)
         ) {
             Text(
-                "Modifier les métadonnées",
+                "Tags & pochette",
                 color = TextPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(SgSpacing.xs))
             Text(
-                "Enregistrement local + tentative d'écriture MediaStore",
+                "Modifie les métadonnées et la pochette en un seul endroit",
                 color = TextSecondary,
                 fontSize = 12.sp
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(SgSpacing.md))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(SgRadius.md))
+                    .background(GlassSurface.copy(alpha = 0.4f))
+                    .border(1.dp, GlassBorder.copy(alpha = 0.35f), RoundedCornerShape(SgRadius.md))
+                    .clickable(onClick = onSetCoverArt)
+                    .padding(SgSpacing.md),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(SgRadius.sm))
+                        .background(GraphiteCard),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (song.albumArtUri != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(song.albumArtUri).crossfade(true).build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Icon(Icons.Filled.MusicNote, null, tint = accentColor, modifier = Modifier.size(28.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.width(SgSpacing.md))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Pochette", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Appuyer pour choisir une image", color = TextSecondary, fontSize = 12.sp)
+                }
+                Icon(Icons.Filled.Image, null, tint = accentColor, modifier = Modifier.size(22.dp))
+            }
+            Spacer(modifier = Modifier.height(SgSpacing.md))
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
@@ -996,4 +1282,258 @@ private fun formatSpeedLabel(speed: Float): String {
 
 private fun formatPitchLabel(pitch: Float): String {
     return if (pitch == pitch.toLong().toFloat()) "${pitch.toLong()}x" else "${pitch}x"
+}
+
+// ─── Player Options Sheet (declutter Player plein écran) ────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun PlayerOptionsBottomSheet(
+    accentColor: Color,
+    gaplessEnabled: Boolean,
+    crossfadeDurationMs: Int,
+    sleepTimerRemainingSeconds: Int?,
+    playbackSpeed: Float,
+    playbackPitch: Float,
+    equalizerEnabled: Boolean,
+    equalizerPresetLabel: String,
+    vinylModeEnabled: Boolean,
+    onOpenCrossfade: () -> Unit,
+    onOpenSleepTimer: () -> Unit,
+    onOpenPlaybackSpeed: () -> Unit,
+    onOpenEqualizer: () -> Unit,
+    onToggleVinylMode: () -> Unit,
+    onShowInfo: () -> Unit,
+    onShare: () -> Unit,
+    onShareCard: () -> Unit,
+    onEditMetadata: () -> Unit,
+    onSetRingtone: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val reducedMotion = rememberSgReducedMotion()
+    val contentScale = remember { Animatable(if (reducedMotion) 1f else SgMotion.SheetContentInitialScale) }
+    val contentAlpha = remember { Animatable(if (reducedMotion) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (!reducedMotion) {
+            launch { contentScale.animateTo(1f, animationSpec = SgMotion.sheetContentEnterSpec()) }
+            launch { contentAlpha.animateTo(1f, animationSpec = SgMotion.sheetContentEnterSpec()) }
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceOverlay.copy(alpha = 0.96f),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = contentScale.value
+                    scaleY = contentScale.value
+                    alpha = contentAlpha.value
+                }
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp)
+        ) {
+            Text(
+                "Options de lecture",
+                color = TextPrimary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Transition, audio, affichage et actions",
+                color = TextSecondary,
+                fontSize = 12.sp
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Transition", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val crossfadeActive = crossfadeDurationMs > 0
+                val playbackModeActive = crossfadeActive || !gaplessEnabled
+                PlayerOptionCompactChip(
+                    icon = if (crossfadeActive) Icons.Filled.BlurLinear else Icons.Filled.SkipNext,
+                    label = PlaybackPreferences.playbackModeLabel(gaplessEnabled, crossfadeDurationMs),
+                    active = playbackModeActive,
+                    accentColor = accentColor,
+                    onClick = { onDismiss(); onOpenCrossfade() },
+                    modifier = Modifier.weight(1f)
+                )
+                val sleepActive = sleepTimerRemainingSeconds != null
+                PlayerOptionCompactChip(
+                    icon = Icons.Filled.Bedtime,
+                    label = com.credo.soundgroove.ui.screens.formatSleepTimerDisplay(sleepTimerRemainingSeconds)
+                        ?: "Minuterie",
+                    active = sleepActive,
+                    accentColor = accentColor,
+                    onClick = { onDismiss(); onOpenSleepTimer() },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Audio", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(8.dp))
+            val speedPitchActive = playbackSpeed != 1f || playbackPitch != 1f
+            PlayerOptionsListRow(
+                icon = Icons.Filled.Speed,
+                label = "Vitesse et tonalité",
+                detail = "${formatSpeedLabel(playbackSpeed)} · ${formatPitchLabel(playbackPitch)}",
+                active = speedPitchActive,
+                accentColor = accentColor,
+                onClick = { onDismiss(); onOpenPlaybackSpeed() }
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            PlayerOptionsListRow(
+                icon = Icons.Filled.GraphicEq,
+                label = "Égaliseur",
+                detail = if (equalizerEnabled) equalizerPresetLabel else "Désactivé",
+                active = equalizerEnabled,
+                accentColor = accentColor,
+                onClick = { onDismiss(); onOpenEqualizer() }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Affichage", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (vinylModeEnabled) accentColor.copy(alpha = 0.1f) else GlassSurface.copy(alpha = 0.45f))
+                    .border(
+                        1.dp,
+                        if (vinylModeEnabled) accentColor.copy(alpha = 0.35f) else GlassBorder.copy(alpha = 0.35f),
+                        RoundedCornerShape(12.dp)
+                    )
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Album, null, tint = if (vinylModeEnabled) accentColor else TextSecondary, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text("Mode vinyle", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text("Pochette en disque tournant", color = TextSecondary, fontSize = 11.sp)
+                    }
+                }
+                Switch(
+                    checked = vinylModeEnabled,
+                    onCheckedChange = { onToggleVinylMode() },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = accentColor,
+                        uncheckedThumbColor = TextSecondary,
+                        uncheckedTrackColor = GlassSurface
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Actions", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(8.dp))
+            val actionRows = listOf(
+                Triple(Icons.Filled.Share, "Partager", onShare),
+                Triple(Icons.Filled.Image, "Partager la carte", onShareCard),
+                Triple(Icons.Filled.Info, "Informations", onShowInfo),
+                Triple(Icons.Filled.Edit, "Modifier métadonnées", onEditMetadata),
+                Triple(Icons.Filled.Notifications, "Définir comme sonnerie", onSetRingtone)
+            )
+            actionRows.forEach { (icon, label, action) ->
+                PlayerOptionsListRow(
+                    icon = icon,
+                    label = label,
+                    detail = null,
+                    active = false,
+                    accentColor = accentColor,
+                    onClick = { onDismiss(); action() }
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlayerOptionCompactChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    active: Boolean,
+    accentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (active) accentColor.copy(alpha = 0.14f) else GlassSurface.copy(alpha = 0.45f))
+            .border(
+                1.dp,
+                if (active) accentColor.copy(alpha = 0.4f) else GlassBorder.copy(alpha = 0.35f),
+                RoundedCornerShape(10.dp)
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (active) accentColor else TextSecondary,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = label,
+            color = if (active) accentColor else TextPrimary,
+            fontSize = 11.sp,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun PlayerOptionsListRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    detail: String?,
+    active: Boolean,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (active) accentColor.copy(alpha = 0.08f) else Color.Transparent)
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, null, tint = if (active) accentColor else TextSecondary, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(label, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                if (detail != null) {
+                    Text(detail, color = if (active) accentColor else TextSecondary, fontSize = 11.sp, maxLines = 1)
+                }
+            }
+        }
+        Icon(Icons.Filled.ChevronRight, null, tint = TextTertiary, modifier = Modifier.size(18.dp))
+    }
 }

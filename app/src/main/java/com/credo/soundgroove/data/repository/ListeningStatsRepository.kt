@@ -9,7 +9,11 @@ data class ListeningStats(
     val weekSeconds: Long,
     val monthSeconds: Long,
     val streakDays: Int,
-    val totalSeconds: Long
+    val totalSeconds: Long,
+    // Ajouté pour les jalons discrets du Profil (cf. gamification légère) : temps
+    // d'écoute du jour, sans nouvelle structure de données — juste exposer une
+    // valeur déjà calculée en interne (`daily[todayKey]`).
+    val todaySeconds: Long = 0L
 )
 
 class ListeningStatsRepository(context: Context) {
@@ -60,7 +64,8 @@ class ListeningStatsRepository(context: Context) {
             weekSeconds = weekSeconds,
             monthSeconds = monthSeconds,
             streakDays = calculateStreak(daily, today),
-            totalSeconds = totalSeconds
+            totalSeconds = totalSeconds,
+            todaySeconds = daily[dateKey(today)] ?: 0L
         )
     }
 

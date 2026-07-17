@@ -49,6 +49,7 @@ import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.SongItem
+import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.theme.CardSurface
 import com.credo.soundgroove.ui.theme.GlassBorder
 import com.credo.soundgroove.ui.theme.GlassCard
@@ -140,11 +141,11 @@ fun HomeTab(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = SgSpacing.lg),
-        verticalArrangement = Arrangement.spacedBy(SgSpacing.md + 2.dp)
+            .padding(horizontal = SgSpacing.screenHorizontal),
+        verticalArrangement = Arrangement.spacedBy(SgSpacing.sectionGap)
     ) {
         item {
-            Spacer(modifier = Modifier.height(SgSpacing.xxxl + SgSpacing.sm))
+            Spacer(modifier = Modifier.height(SgSpacing.screenTop))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -170,6 +171,20 @@ fun HomeTab(
                     modifier = Modifier
                         .size(22.dp)
                         .clickable { onOpenSettings() }
+                )
+            }
+        }
+
+        if (songs.isEmpty()) {
+            item {
+                SgEmptyState(
+                    iconPainter = painterResource(R.drawable.ic_songs),
+                    title = "Bibliothèque vide",
+                    subtitle = "Importez de la musique sur votre appareil ou vérifiez l'accès aux fichiers audio.",
+                    compact = true,
+                    accentColor = accentColor,
+                    actionLabel = "Ouvrir la bibliothèque",
+                    onAction = { onNavigateToLibrarySection(0) }
                 )
             }
         }
@@ -246,33 +261,64 @@ fun HomeTab(
 
             if (homeState.mixSuggestions.isNotEmpty()) {
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            SectionHeader(title = "MIX POUR TOI")
-                            Text(
-                                text = "${homeState.mixSuggestions.size} titres · basé sur vos écoutes",
-                                color = TextTertiary,
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(top = 2.dp)
-                            )
+                    DailyMixHero(
+                        songs = homeState.mixSuggestions,
+                        accentColor = accentColor,
+                        secondaryAccent = secondaryAccent,
+                        onPlayAll = {
+                            onPlaySong(homeState.mixSuggestions.first(), homeState.mixSuggestions)
                         }
-                        Text(
-                            text = "Tout lire",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = accentColor,
-                            modifier = Modifier.clickable {
-                                onPlaySong(homeState.mixSuggestions.first(), homeState.mixSuggestions)
-                            }
-                        )
-                    }
+                    )
                 }
                 item {
                     MixSuggestionsRow(
                         songs = homeState.mixSuggestions,
+                        currentSong = currentSong,
+                        isPlaying = isPlaying,
+                        accentColor = accentColor,
+                        onPlaySong = onPlaySong
+                    )
+                }
+            }
+
+            if (homeState.similarSongs.isNotEmpty()) {
+                item {
+                    DiscoverySectionHeader(
+                        title = "SIMILAIRES",
+                        subtitle = "Même artiste ou album",
+                        actionLabel = "Tout lire",
+                        accentColor = accentColor,
+                        onAction = {
+                            onPlaySong(homeState.similarSongs.first(), homeState.similarSongs)
+                        }
+                    )
+                }
+                item {
+                    MixSuggestionsRow(
+                        songs = homeState.similarSongs,
+                        currentSong = currentSong,
+                        isPlaying = isPlaying,
+                        accentColor = accentColor,
+                        onPlaySong = onPlaySong
+                    )
+                }
+            }
+
+            if (homeState.localRadio.isNotEmpty()) {
+                item {
+                    DiscoverySectionHeader(
+                        title = "RADIO LOCALE",
+                        subtitle = "File aléatoire · ${homeState.localRadio.size} titres",
+                        actionLabel = "Lancer",
+                        accentColor = accentColor,
+                        onAction = {
+                            onPlaySong(homeState.localRadio.first(), homeState.localRadio)
+                        }
+                    )
+                }
+                item {
+                    LocalRadioRow(
+                        songs = homeState.localRadio,
                         currentSong = currentSong,
                         isPlaying = isPlaying,
                         accentColor = accentColor,
@@ -611,6 +657,228 @@ private fun QuickAccessChip(
                     color = TextTertiary,
                     fontSize = 10.sp
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiscoverySectionHeader(
+    title: String,
+    subtitle: String,
+    actionLabel: String,
+    accentColor: Color,
+    onAction: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            SectionHeader(title = title)
+            Text(
+                text = subtitle,
+                color = TextTertiary,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        Text(
+            text = actionLabel,
+            style = MaterialTheme.typography.labelLarge,
+            color = accentColor,
+            modifier = Modifier.clickable(onClick = onAction)
+        )
+    }
+}
+
+@Composable
+private fun DailyMixHero(
+    songs: List<Song>,
+    accentColor: Color,
+    secondaryAccent: Color,
+    onPlayAll: () -> Unit
+) {
+    val featured = songs.first()
+    val preview = songs.take(3)
+    Column {
+        SectionHeader(title = "MIX DU JOUR")
+        Spacer(modifier = Modifier.height(SgSpacing.sm))
+        GlassCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onPlayAll),
+            cornerRadius = SgRadius.lg,
+            accentColor = accentColor
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                accentColor.copy(alpha = 0.34f),
+                                secondaryAccent.copy(alpha = 0.14f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+                    .padding(SgSpacing.md + 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy((-18).dp),
+                        modifier = Modifier.padding(end = SgSpacing.md)
+                    ) {
+                        preview.forEachIndexed { index, song ->
+                            AlbumArtThumb(
+                                song = song,
+                                size = if (index == 0) 72.dp else 56.dp,
+                                cornerRadius = SgRadius.sm,
+                                modifier = Modifier
+                            )
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = featured.title,
+                            color = TextPrimary,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(SgSpacing.xs))
+                        Text(
+                            text = featured.artist,
+                            color = accentColor,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(SgSpacing.sm))
+                        Text(
+                            text = "${songs.size} titres · votre sélection du jour",
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(SgSpacing.md))
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(SgRadius.pill))
+                        .background(accentColor.copy(alpha = 0.24f))
+                        .clickable(onClick = onPlayAll)
+                        .padding(horizontal = SgSpacing.md + 4.dp, vertical = SgSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(SgSpacing.xs)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_play),
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Lancer le mix",
+                        color = accentColor,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocalRadioRow(
+    songs: List<Song>,
+    currentSong: Song?,
+    isPlaying: Boolean,
+    accentColor: Color,
+    onPlaySong: (Song, List<Song>) -> Unit
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(SgSpacing.sm + 2.dp),
+        contentPadding = PaddingValues(end = SgSpacing.xs)
+    ) {
+        items(songs, key = { "radio-${it.id}" }) { song ->
+            val isCurrent = currentSong?.id == song.id && isPlaying
+            GlassCard(
+                modifier = Modifier
+                    .width(120.dp)
+                    .clickable { onPlaySong(song, songs) },
+                cornerRadius = SgRadius.md,
+                accentColor = accentColor
+            ) {
+                Column {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                    ) {
+                        AlbumArtThumb(
+                            song = song,
+                            size = null,
+                            cornerRadius = 0.dp,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(SgSpacing.xs)
+                                .clip(RoundedCornerShape(SgRadius.pill))
+                                .background(accentColor.copy(alpha = 0.85f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "RADIO",
+                                color = Color.Black,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                        if (isCurrent) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(accentColor.copy(alpha = 0.22f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_play),
+                                    contentDescription = null,
+                                    tint = accentColor,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
+                    }
+                    Column(modifier = Modifier.padding(SgSpacing.sm)) {
+                        Text(
+                            text = song.title,
+                            color = TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = song.artist,
+                            color = TextSecondary,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
     }

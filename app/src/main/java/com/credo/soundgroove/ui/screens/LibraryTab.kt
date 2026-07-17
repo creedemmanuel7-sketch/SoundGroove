@@ -64,6 +64,7 @@ import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.SongItem
+import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.components.formatDuration
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.util.PlayerGuards
@@ -142,9 +143,9 @@ fun LibraryTab(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                    .padding(horizontal = 8.dp)
+                .padding(horizontal = SgSpacing.screenHorizontal)
         ) {
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(SgSpacing.screenTop))
 
             Text(
                 text = "Ma Musique",
@@ -153,7 +154,7 @@ fun LibraryTab(
                 fontWeight = FontWeight.Bold
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(SgSpacing.sectionGap))
 
             val tabIcons = listOf(
                 R.drawable.ic_songs,
@@ -295,22 +296,62 @@ fun LibraryTab(
                                 }
                             }
 
-                            LazyColumn(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                                contentPadding = PaddingValues(vertical = 4.dp)
-                            ) {
-                                items(displaySongs, key = { it.id }) { song ->
-                                    com.credo.soundgroove.ui.components.SongListItem(
-                                        song = song,
-                                        isFavorite = favoriteSongs.any { it.id == song.id },
-                                        isCurrentSong = currentSong?.id == song.id,
-                                        accentColor = accentColor,
-                                        onClick = { onPlayPlaylist(song, displaySongs) },
-                                        onMenuClick = { menuSong = song }
-                                    )
+                            if (displaySongs.isEmpty()) {
+                                SgEmptyState(
+                                    iconPainter = painterResource(R.drawable.ic_songs),
+                                    title = "Bibliothèque vide",
+                                    subtitle = "Aucun morceau détecté. Vérifiez les permissions ou ajoutez des fichiers audio sur l'appareil.",
+                                    modifier = Modifier.weight(1f)
+                                )
+                            } else {
+                            val songsListState = androidx.compose.foundation.lazy.rememberLazyListState()
+                            // Index dans `displaySongs`, pas dans la liste brute `songs` (l'ordre de
+                            // tri peut différer) — c'est la cible réelle de `animateScrollToItem`.
+                            val currentSongIndex = remember(displaySongs, currentSong) {
+                                displaySongs.indexOfFirst { it.id == currentSong?.id }
+                            }
+                            // `derivedStateOf` : ne recalcule que quand la liste visible change
+                            // réellement, pas à chaque frame de scroll — évite les recompositions
+                            // inutiles du FAB pendant un fling.
+                            val showScrollToCurrent by remember(songsListState) {
+                                derivedStateOf {
+                                    currentSongIndex >= 0 &&
+                                        songsListState.layoutInfo.visibleItemsInfo.none { it.index == currentSongIndex }
                                 }
-                                item { Spacer(modifier = Modifier.height(16.dp)) }
+                            }
+                            Box(modifier = Modifier.weight(1f)) {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    state = songsListState,
+                                    verticalArrangement = Arrangement.spacedBy(SgSpacing.listItemGap),
+                                    contentPadding = PaddingValues(vertical = SgSpacing.xs)
+                                ) {
+                                    items(displaySongs, key = { it.id }) { song ->
+                                        com.credo.soundgroove.ui.components.SongListItem(
+                                            song = song,
+                                            isFavorite = favoriteSongs.any { it.id == song.id },
+                                            isCurrentSong = currentSong?.id == song.id,
+                                            isPlaying = isPlaying,
+                                            accentColor = accentColor,
+                                            onClick = { onPlayPlaylist(song, displaySongs) },
+                                            onMenuClick = { menuSong = song }
+                                        )
+                                    }
+                                    item { Spacer(modifier = Modifier.height(SgSpacing.lg)) }
+                                }
+                                com.credo.soundgroove.ui.components.ScrollToCurrentFab(
+                                    visible = showScrollToCurrent,
+                                    accentColor = accentColor,
+                                    onClick = {
+                                        if (currentSongIndex >= 0) {
+                                            scope.launch { songsListState.animateScrollToItem(currentSongIndex) }
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(end = SgSpacing.sm, bottom = SgSpacing.lg)
+                                )
+                            }
                             }
                         }
 
@@ -517,25 +558,15 @@ fun LibraryTab(
                             }
 
                             if (playlists.isEmpty()) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Icon(painter = painterResource(R.drawable.ic_queue), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(48.dp))
-                                        Spacer(modifier = Modifier.height(12.dp))
-                                        Text(
-                                            text = "Aucune playlist",
-                                            color = TextSecondary,
-                                            fontSize = 16.sp
-                                        )
-                                        Text(
-                                            text = "Appuie sur Créer pour commencer",
-                                            color = TextSecondary,
-                                            fontSize = 13.sp
-                                        )
-                                    }
-                                }
+                                SgEmptyState(
+                                    iconPainter = painterResource(R.drawable.ic_queue),
+                                    title = "Aucune playlist",
+                                    subtitle = "Crée ta première playlist pour organiser tes morceaux préférés.",
+                                    actionLabel = "Créer une playlist",
+                                    accentColor = accentColor,
+                                    onAction = { showCreateSheet = true },
+                                    modifier = Modifier.fillMaxSize()
+                                )
                             } else {
                                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     items(playlists, key = { it.id }) { playlist ->
@@ -807,18 +838,14 @@ fun LibraryTab(
                             onShowPlaylistPicker = onShowPlaylistPicker
                         )
                     } else if (folders.isEmpty()) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(painter = painterResource(R.drawable.ic_songs), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(48.dp))
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text("Aucun dossier trouvé", color = TextSecondary, fontSize = 16.sp)
-                            }
-                        }
+                        SgEmptyState(
+                            iconPainter = painterResource(R.drawable.ic_songs),
+                            title = "Aucun dossier trouvé",
+                            subtitle = "Scannez votre bibliothèque ou vérifiez les permissions d'accès aux fichiers audio.",
+                            modifier = Modifier.fillMaxSize()
+                        )
                     } else {
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(SgSpacing.listItemGap)) {
                             if (hiddenFolders.isNotEmpty()) {
                                 item {
                                     Text(
@@ -914,18 +941,14 @@ fun LibraryTab(
 
                 5 -> {
                     if (favoriteSongs.isEmpty()) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(painter = painterResource(R.drawable.ic_favorite_outline), contentDescription = null, tint = TextSecondary, modifier = Modifier.size(48.dp))
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text("Aucun favori", color = TextSecondary, fontSize = 16.sp)
-                            }
-                        }
+                        SgEmptyState(
+                            iconPainter = painterResource(R.drawable.ic_favorite_outline),
+                            title = "Aucun favori pour l'instant",
+                            subtitle = "Appuie sur le cœur d'un morceau pour le retrouver ici rapidement.",
+                            modifier = Modifier.fillMaxSize()
+                        )
                     } else {
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(SgSpacing.listItemGap)) {
                             items(favoriteSongs, key = { it.id }) { song ->
                                 GlassCard(
                                     modifier = Modifier

@@ -296,6 +296,7 @@ fun ArtistDetailScreen(
                 song = song,
                 accentColor = accentColor,
                 onSave = { title, artist, album -> onSaveMetadata(song, title, artist, album) },
+                onSetCoverArt = { launchCoverPicker(song) },
                 onDismiss = { editSong = null }
             )
         }

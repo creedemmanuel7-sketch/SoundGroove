@@ -9,6 +9,9 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BlurLinear
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,7 +48,17 @@ fun MiniPlayer(
     onSkipNext: () -> Unit,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
-    albumArtModifier: Modifier = Modifier
+    // Shared element réel (SharedTransitionLayout) par défaut : la pochette morphe
+    // vers celle du Player plein écran si le contexte est disponible (fourni par
+    // AppNavigation/MainScreen via CompositionLocal), sinon ce modifier est un
+    // no-op — cf. docs/FEATURES_C_SHARED_ELEMENT.md et ui/theme/Motion.kt.
+    albumArtModifier: Modifier = Modifier.sgSharedAlbumArt(key = "album_art_${song.id}"),
+    // Bornes partagées titre+artiste (sharedBounds, pas sharedElement — contenu différent).
+    trackMetaModifier: Modifier = Modifier.sgSharedBounds(key = "track_meta_${song.id}"),
+    // Feedback UI req. 4 : un badge discret sur la pochette signale un mode de
+    // lecture non "silencieux par défaut" (crossfade actif ou gapless désactivé).
+    gaplessEnabled: Boolean = true,
+    crossfadeDurationMs: Int = 0
 ) {
     val albumAccent = rememberAlbumArtAccentColor(song.albumArtUri, accentColor)
     val displayAccent = blendWithAlbumArt(accentColor, albumAccent, weight = 0.3f)
@@ -119,9 +132,32 @@ fun MiniPlayer(
                         modifier = Modifier.size(20.dp)
                     )
                 }
+                if (crossfadeDurationMs > 0 || !gaplessEnabled) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(2.dp)
+                            .size(14.dp)
+                            .clip(CircleShape)
+                            .background(GraphiteAbyss)
+                            .border(1.dp, displayAccent.copy(alpha = 0.7f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (crossfadeDurationMs > 0) Icons.Filled.BlurLinear else Icons.Filled.Pause,
+                            contentDescription = if (crossfadeDurationMs > 0) "Crossfade actif" else "Gapless désactivé",
+                            tint = displayAccent,
+                            modifier = Modifier.size(9.dp)
+                        )
+                    }
+                }
             }
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .then(trackMetaModifier)
+            ) {
                 Text(
                     text = song.title,
                     style = MaterialTheme.typography.titleSmall,

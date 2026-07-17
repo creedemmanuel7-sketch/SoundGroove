@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -27,7 +28,10 @@ import com.credo.soundgroove.R
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.util.AudioFormatInfo
 import com.credo.soundgroove.util.PlaybackPreferences
+import com.credo.soundgroove.util.StorageMaintenance
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 fun formatSleepTimerDisplay(seconds: Int?): String? {
     if (seconds == null) return null
@@ -53,6 +57,9 @@ fun SettingsScreen(
     onGaplessChange: (Boolean) -> Unit = {},
     crossfadeDurationMs: Int = 0,
     onOpenCrossfade: () -> Unit = {},
+    equalizerEnabled: Boolean = true,
+    equalizerPresetLabel: String = "Normal",
+    onOpenEqualizer: () -> Unit = {},
     onBack: () -> Unit,
     onThemeSelected: (AppTheme) -> Unit,
     onOpenSleepTimer: () -> Unit,
@@ -72,9 +79,20 @@ fun SettingsScreen(
 ) {
     val revealState = rememberSgThemeRevealState()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var showClearRecentConfirm by remember { mutableStateOf(false) }
     var showClearSearchConfirm by remember { mutableStateOf(false) }
     var showImportConfirm by remember { mutableStateOf(false) }
+    var showClearCacheConfirm by remember { mutableStateOf(false) }
+    var cacheSizeLabel by remember { mutableStateOf<String?>(null) }
+
+    suspend fun refreshCacheSize() {
+        cacheSizeLabel = withContext(Dispatchers.IO) {
+            StorageMaintenance.formatBytes(StorageMaintenance.computeBreakdown(context).clearableBytes)
+        }
+    }
+
+    LaunchedEffect(Unit) { refreshCacheSize() }
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -137,8 +155,8 @@ fun SettingsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     ThemeOptionRow(
                         title = "Noir Absolu",
-                        description = "Noir profond, accent cyan (icône)",
-                        accentColor = BrandCyan,
+                        description = "Noir profond, accent violet signature",
+                        accentColor = BrandPurple,
                         isSelected = currentTheme == AppTheme.NOIR_ABSOLU,
                         onClick = { origin ->
                             launchThemeReveal(
@@ -148,8 +166,8 @@ fun SettingsScreen(
                     )
                     ThemeOptionRow(
                         title = "Clair Argent",
-                        description = "Fond blanc, texte sombre, accent cyan",
-                        accentColor = ArgentClairAccent,
+                        description = "Fond clair, violet profond WCAG",
+                        accentColor = BrandPurpleDeep,
                         isSelected = currentTheme == AppTheme.ARGENT_CLAIR,
                         onClick = { origin ->
                             launchThemeReveal(
@@ -159,8 +177,8 @@ fun SettingsScreen(
                     )
                     ThemeOptionRow(
                         title = "Graphite",
-                        description = "Graphite mat, accent argent/platine",
-                        accentColor = SilverAccent,
+                        description = "Graphite mat, violet atténué + argent",
+                        accentColor = BrandPurpleMuted,
                         isSelected = currentTheme == AppTheme.GRAPHITE,
                         onClick = { origin ->
                             launchThemeReveal(
@@ -293,6 +311,58 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider(color = GlassBorder.copy(alpha = 0.4f))
                 Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenEqualizer() }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(accentColor.copy(alpha = 0.2f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.GraphicEq,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Égaliseur",
+                            color = TextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = if (equalizerEnabled) equalizerPresetLabel else "Désactivé",
+                            color = accentColor,
+                            fontSize = 12.sp
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Filled.ChevronRight,
+                        contentDescription = null,
+                        tint = TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                com.credo.soundgroove.ui.components.PlaybackModeIndicator(
+                    gaplessEnabled = gaplessEnabled,
+                    crossfadeMs = crossfadeDurationMs,
+                    accentColor = accentColor
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 SettingsToggleRow(
                     icon = Icons.Filled.SkipNext,
@@ -429,6 +499,26 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
+            SettingsSection(title = "Stockage") {
+                SettingsActionRow(
+                    iconRes = R.drawable.ic_trash,
+                    title = "Vider le cache",
+                    description = "Paroles en cache, recherche web et cartes de partage · ${cacheSizeLabel ?: "Calcul…"}",
+                    accentColor = accentColor,
+                    onClick = { showClearCacheConfirm = true }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Les pochettes personnalisées et vos fichiers .lrc/.txt à côté des morceaux " +
+                        "ne sont jamais supprimés par cette action.",
+                    color = TextTertiary,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
             SettingsSection(title = "Statistiques") {
                 StatRowIcon(R.drawable.ic_songs, "Morceaux", "$songCount")
                 Spacer(modifier = Modifier.height(10.dp))
@@ -525,6 +615,45 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearSearchConfirm = false }) {
+                    Text("Annuler", color = TextSecondary)
+                }
+            },
+            containerColor = CardSurface,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary
+        )
+    }
+
+    if (showClearCacheConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearCacheConfirm = false },
+            title = { Text("Vider le cache ?", color = TextPrimary) },
+            text = {
+                Text(
+                    "Supprime le cache local des paroles (re-téléchargeables via LRCLIB ou " +
+                        "relisibles depuis le fichier voisin de l'audio), le cache de la recherche " +
+                        "web de paroles et les cartes de partage temporaires.\n\n" +
+                        "Vos pochettes personnalisées et vos fichiers .lrc/.txt ne sont pas touchés.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearCacheConfirm = false
+                        scope.launch {
+                            withContext(Dispatchers.IO) {
+                                StorageMaintenance.clearClearableCaches(context)
+                            }
+                            refreshCacheSize()
+                        }
+                    }
+                ) {
+                    Text("Vider", color = FavoritePink, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearCacheConfirm = false }) {
                     Text("Annuler", color = TextSecondary)
                 }
             },

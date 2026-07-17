@@ -7,11 +7,13 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 
 /**
  * Durées et courbes partagées pour une motion cohérente dans toute l'app,
@@ -132,8 +134,35 @@ object SgMotion {
     /** Scale initial pochette ≈ taille mini-player (44dp vs plein écran). */
     const val PlayerArtMiniScale = 0.14f
 
-    /** Offset Y (px) simulant la position du mini-player en bas. */
+    /**
+     * Offset Y (px) de repli pour l'entrée (Mini → Player, comportement inchangé,
+     * jugé correct) et pour la sortie si la vraie position de la pochette n'a pas
+     * encore été mesurée (cf. `artRestCenterPx` dans PlayerScreen — normalement
+     * jamais utilisé en pratique, juste un filet de sécurité).
+     */
     const val PlayerArtEnterOffsetY = 220f
+
+    // ── Cible réelle de sortie (Player → Mini) ──────────────────────────────
+    // La sortie doit amener la pochette à l'endroit exact qu'occupe la pochette
+    // du mini-player (cf. MiniPlayer.kt), pas juste la faire rétrécir sur place :
+    // sans ces valeurs, artScale/artOffsetY rétrécissaient la pochette autour de
+    // son propre centre avec un décalage Y minime (220px) — visuellement, elle
+    // "rétrécit au centre puis disparaît" au lieu de "descendre vers le bas".
+    // Ces dp reproduisent la géométrie de MiniPlayer.kt : conteneur
+    // `.padding(horizontal = SgSpacing.sm)` (8dp) + Row
+    // `.padding(horizontal = SgSpacing.md)` (12dp) + moitié de la pochette 44dp.
+
+    /** Distance du centre de la pochette mini-player par rapport au bord gauche. */
+    val MiniArtCenterXDp = 42.dp // 8 (padding conteneur) + 12 (padding Row) + 22 (moitié de 44dp)
+
+    /**
+     * Distance du centre de la pochette mini-player par rapport au bas de la zone
+     * de contenu (hors barre de navigation, ajoutée séparément via les vrais
+     * insets système — cf. PlayerScreen). 8dp = `padding(bottom = 8.dp)` posé par
+     * `AppNavigation` sur le mini-player ; 33dp ≈ moitié de sa hauteur totale
+     * (barre de progression 2dp + padding vertical Row 2×8dp + pochette 44dp).
+     */
+    val MiniArtCenterFromBottomDp = 41.dp
 
     /** Anim du morph de la pochette à l'ouverture du Player (mini → plein). */
     fun playerArtEnterSpec(): AnimationSpec<Float> = tween(SlowMs, easing = EmphasizedDecelerate)
@@ -154,6 +183,22 @@ object SgMotion {
     fun playerChromeExitSpec(): AnimationSpec<Float> = tween(FastMs, easing = EmphasizedAccelerate)
 
     fun themeRevealSpec(): AnimationSpec<Float> = tween(ThemeRevealMs, easing = EmphasizedDecelerate)
+
+    // ── Contenu interactif de bottom sheet (Sheet Infos...) ─────────────────
+    // Le `ModalBottomSheet` M3 gère déjà nativement le drag/cancel/spring-back
+    // (son `SheetState` interne, basé sur un `AnchoredDraggableState`, règle
+    // seul via `positionalThreshold`/`velocityThreshold` : relâcher avant le
+    // seuil = retour à l'état ouvert, au-delà = fermeture — comportement geré
+    // hors de notre contrôle, volontairement non ré-implémenté ici). Ce qui
+    // manquait : une apparition du CONTENU plus douce qu'un "pop" instantané
+    // dès que la sheet devient visible — cf. §1 "apparition micro-anim courte,
+    // pas un pop brutal".
+
+    /** Apparition contenu sheet : scale+fade court, découplé du slide natif. */
+    fun sheetContentEnterSpec(): AnimationSpec<Float> = tween(MediumMs, easing = EmphasizedDecelerate)
+
+    /** Échelle de départ du contenu (proche de 1 : effet subtil, pas un "zoom"). */
+    const val SheetContentInitialScale = 0.94f
 
     // ── Overlays (mini-player, queue, sheets) ───────────────────────────────
 
@@ -283,4 +328,90 @@ fun animateChipColors(
         label = "chipBorder"
     )
     return bg to border
+}
+
+// ── Shared element pochette (mini-player ↔ Player) ──────────────────────────
+// cf. docs/FEATURES_C_SHARED_ELEMENT.md — implémentation réelle via
+// SharedTransitionLayout (Compose Animation 1.7, disponible dans ce projet).
+//
+// Le mini-player existe à deux endroits (overlay AppNavigation + overlay interne
+// MainScreen/HomeTab) et la pochette plein écran vit dans une destination NavHost.
+// Plutôt que de faire remonter le SharedTransitionScope/AnimatedVisibilityScope par
+// paramètre à travers toute la hiérarchie d'appel (MainScreen, LegacyMainHost...),
+// on les expose via CompositionLocal — approche explicitement recommandée par la
+// doc officielle quand plusieurs call sites doivent partager le même scope :
+// https://developer.android.com/develop/ui/compose/animation/shared-elements
+
+/**
+ * Le [SharedTransitionScope] actif, fourni par `AppNavigation` qui enveloppe tout
+ * son contenu (NavHost + overlays) dans un `SharedTransitionLayout`. `null` si
+ * l'appelant est rendu hors de ce contexte (previews, tests...).
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+val LocalSharedTransitionScope = staticCompositionLocalOf<SharedTransitionScope?> { null }
+
+/**
+ * L'[AnimatedVisibilityScope] du point d'entrée courant : soit l'`AnimatedContentScope`
+ * de la destination "player" du NavHost, soit l'`AnimatedVisibility` qui héberge le
+ * mini-player (overlay ou intégré à MainScreen). Requis par `Modifier.sharedElement`
+ * pour savoir si l'élément entre ou sort de la composition.
+ */
+val LocalSgAnimatedVisibilityScope = staticCompositionLocalOf<AnimatedVisibilityScope?> { null }
+
+/**
+ * `true` si un vrai shared element Compose est utilisable dans le contexte courant.
+ * Permet à `PlayerScreen` de désactiver son morph manuel (scale + offset, cf.
+ * `artScale`/`artOffsetY`) et de laisser `Modifier.sharedElement` piloter la
+ * transition — sans exposer de type expérimental dans une signature publique.
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+fun rememberSgSharedElementActive(): Boolean =
+    LocalSharedTransitionScope.current != null && LocalSgAnimatedVisibilityScope.current != null
+
+/**
+ * Applique un vrai `Modifier.sharedElement` (pochette mini-player ↔ Player plein
+ * écran, morph de position + taille géré nativement par Compose) si le contexte
+ * [LocalSharedTransitionScope]/[LocalSgAnimatedVisibilityScope] est disponible.
+ *
+ * Sinon ne fait rien : c'est le filet de sécurité qui permet à `MiniPlayer` et
+ * `PlayerScreen` de rester utilisables hors SharedTransitionLayout (previews,
+ * futurs call sites non encore raccordés) — dans ce cas, `PlayerScreen` retombe
+ * sur son morph manuel scale+position existant (cf. `runEnterAnimation`).
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+fun Modifier.sgSharedAlbumArt(key: String): Modifier {
+    val sharedTransitionScope = LocalSharedTransitionScope.current ?: return this
+    val animatedVisibilityScope = LocalSgAnimatedVisibilityScope.current ?: return this
+    return with(sharedTransitionScope) {
+        this@sgSharedAlbumArt.sharedElement(
+            rememberSharedContentState(key = key),
+            animatedVisibilityScope = animatedVisibilityScope
+        )
+    }
+}
+
+/**
+ * Variante `sharedBounds` (pas `sharedElement`) pour les éléments texte partagés
+ * entre le mini-player et le Player plein écran (titre, artiste) : le CONTENU
+ * diffère (taille de police, mise en page) entre les deux, seules les BORNES
+ * (position + taille du conteneur) doivent être interpolées nativement — c'est
+ * exactement la distinction que fait la doc officielle entre les deux API :
+ * https://developer.android.com/develop/ui/compose/animation/shared-elements
+ *
+ * Même filet de sécurité que [sgSharedAlbumArt] : no-op hors contexte
+ * `SharedTransitionLayout`/`AnimatedVisibilityScope`.
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+fun Modifier.sgSharedBounds(key: String): Modifier {
+    val sharedTransitionScope = LocalSharedTransitionScope.current ?: return this
+    val animatedVisibilityScope = LocalSgAnimatedVisibilityScope.current ?: return this
+    return with(sharedTransitionScope) {
+        this@sgSharedBounds.sharedBounds(
+            rememberSharedContentState(key = key),
+            animatedVisibilityScope = animatedVisibilityScope
+        )
+    }
 }

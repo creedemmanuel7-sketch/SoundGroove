@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -53,11 +54,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -74,15 +77,9 @@ import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.lyrics.LyricLine
 import com.credo.soundgroove.lyrics.LyricsContent
 import com.credo.soundgroove.lyrics.LyricsViewModel
-import com.credo.soundgroove.ui.theme.BorderSubtle
-import com.credo.soundgroove.ui.theme.GlassBorder
-import com.credo.soundgroove.ui.theme.GlassSurface
 import com.credo.soundgroove.ui.theme.SgMotion
 import com.credo.soundgroove.ui.theme.SgRadius
-import com.credo.soundgroove.ui.theme.SurfaceElevated
-import com.credo.soundgroove.ui.theme.TextPrimary
-import com.credo.soundgroove.ui.theme.TextSecondary
-import com.credo.soundgroove.ui.theme.TextTertiary
+import com.credo.soundgroove.util.LyricsPalette
 import com.credo.soundgroove.util.PlayerGuards
 import com.credo.soundgroove.util.rememberLyricsPalette
 import kotlinx.coroutines.launch
@@ -105,16 +102,29 @@ fun LyricsScreen(
     onOpenWebSearch: () -> Unit,
     pendingPasteText: String? = null,
     onPendingPasteConsumed: () -> Unit = {},
+    isPlaying: Boolean = false,
+    onPlayPause: () -> Unit = {},
+    // Transition "peek" annulable, symétrique de celle pilotée depuis PlayerScreen :
+    // 0 = Player plein, 1 = Paroles plein (valeur partagée, propriété d'AppNavigation).
+    // Par défaut 1 (plein écran immédiat) pour les appelants qui ne branchent pas
+    // encore le peek (previews, tests) — cf. Motion.kt pour la même logique côté Player.
+    peekProgress: Float = 1f,
+    onPeekDragStart: () -> Unit = {},
+    onPeekDrag: (Float) -> Unit = {},
+    onPeekDragEnd: () -> Unit = {},
     viewModel: LyricsViewModel = viewModel()
 ) {
     val context = LocalContext.current
     var verticalDragOffset by remember { mutableStateOf(0f) }
-    var horizontalDragOffset by remember { mutableStateOf(0f) }
     var autoScrollEnabled by remember { mutableStateOf(true) }
+    var screenWidthPx by remember { mutableStateOf(1f) }
 
     // Bouton "toggle" clair vers le Player (icône) + geste natif : back système
-    // et swipe (bas ou droite) doivent produire exactement le même résultat.
-    BackHandler(onBack = onClose)
+    // et swipe (bas) doivent produire exactement le même résultat. `enabled` sur le
+    // progrès de peek : désactivé quand l'écran n'est pas au premier plan (progrès à
+    // 0, potentiellement encore monté juste après un dismiss) pour ne pas voler le
+    // back destiné au Player en dessous.
+    BackHandler(enabled = peekProgress > 0.001f, onBack = onClose)
 
     LaunchedEffect(pendingPasteText) {
         pendingPasteText?.let { text ->
@@ -147,6 +157,11 @@ fun LyricsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .onSizeChanged { screenWidthPx = it.width.toFloat().coerceAtLeast(1f) }
+            // Peek symétrique de celui du Player (cf. PlayerScreen.graphicsLayer) :
+            // Paroles entre/sort par la droite, translationX dérivé du même progrès
+            // partagé — swipe gauche→droite ici décroît le progrès (retour au Player).
+            .graphicsLayer { translationX = (1f - peekProgress) * size.width }
             .pointerInput(Unit) { detectTapGestures { } }
             .pointerInput(Unit) {
                 detectVerticalDragGestures(
@@ -162,17 +177,16 @@ fun LyricsScreen(
                 )
             }
             .pointerInput(Unit) {
-                // Swipe droite = retour au Player, symétrique du swipe gauche qui
-                // ouvre les Paroles depuis PlayerScreen (cf. PlayerScreen.kt).
+                // Swipe droite = retour au Player (peek annulable, cf. PlayerScreen pour
+                // le sens symétrique) : ne rapporte que le geste brut, AppNavigation
+                // décide seuil/cancel/spring puisqu'il possède le progrès partagé.
                 detectHorizontalDragGestures(
-                    onDragEnd = {
-                        if (horizontalDragOffset > 120f) onClose()
-                        horizontalDragOffset = 0f
-                    },
-                    onDragCancel = { horizontalDragOffset = 0f },
+                    onDragStart = { onPeekDragStart() },
+                    onDragEnd = { onPeekDragEnd() },
+                    onDragCancel = { onPeekDragEnd() },
                     onHorizontalDrag = { change, dragAmount ->
                         change.consume()
-                        horizontalDragOffset += dragAmount
+                        onPeekDrag(-dragAmount / screenWidthPx)
                     }
                 )
             }
@@ -226,15 +240,15 @@ fun LyricsScreen(
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(GlassSurface, CircleShape)
-                        .border(1.dp, GlassBorder, CircleShape)
+                        .background(palette.glassSurface, CircleShape)
+                        .border(1.dp, palette.glassBorder, CircleShape)
                         .clickable { onClose() },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_close_down),
                         contentDescription = "Revenir au lecteur",
-                        tint = TextPrimary,
+                        tint = palette.primaryText,
                         modifier = Modifier.size(28.dp)
                     )
                 }
@@ -244,7 +258,7 @@ fun LyricsScreen(
                 ) {
                     Text(
                         text = "PAROLES",
-                        color = TextSecondary,
+                        color = palette.secondaryText,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 2.sp
@@ -260,8 +274,8 @@ fun LyricsScreen(
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(GlassSurface, CircleShape)
-                        .border(1.dp, GlassBorder, CircleShape)
+                        .background(palette.glassSurface, CircleShape)
+                        .border(1.dp, palette.glassBorder, CircleShape)
                         .clickable { autoScrollEnabled = !autoScrollEnabled },
                     contentAlignment = Alignment.Center
                 ) {
@@ -272,7 +286,7 @@ fun LyricsScreen(
                         } else {
                             "Activer le défilement automatique"
                         },
-                        tint = if (autoScrollEnabled) effectiveAccent else TextSecondary,
+                        tint = if (autoScrollEnabled) effectiveAccent else palette.secondaryText,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -289,6 +303,7 @@ fun LyricsScreen(
                     isEditing -> PasteLyricsEditor(
                         song = song,
                         accentColor = effectiveAccent,
+                        palette = palette,
                         initialDraft = editingDraft,
                         isSaving = isSaving,
                         saveError = saveError,
@@ -296,7 +311,7 @@ fun LyricsScreen(
                         onSave = { raw -> viewModel.saveLyrics(song, raw) }
                     )
                     content is LyricsContent.Loading -> LoadingLyricsState(effectiveAccent)
-                    content is LyricsContent.SearchingOnline -> SearchingOnlineLyricsState(effectiveAccent)
+                    content is LyricsContent.SearchingOnline -> SearchingOnlineLyricsState(effectiveAccent, palette)
                     content is LyricsContent.Synced -> SyncedLyricsList(
                         lines = (content as LyricsContent.Synced).lines,
                         currentLineIndex = currentLineIndex,
@@ -306,15 +321,40 @@ fun LyricsScreen(
                         onLineClick = { timeMs -> PlayerGuards.safeSeekToPosition(player, timeMs) }
                     )
                     content is LyricsContent.PlainText -> PlainTextLyrics(
-                        text = (content as LyricsContent.PlainText).text
+                        text = (content as LyricsContent.PlainText).text,
+                        palette = palette
                     )
                     else -> EmptyLyricsState(
                         accentColor = effectiveAccent,
+                        palette = palette,
                         onSearchOnline = onOpenWebSearch,
                         onPasteLyrics = { viewModel.startEditing() }
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Mini contrôles de lecture — permet de piloter précédent/pause/suivant
+            // sans quitter les Paroles (cf. demande §2). Branché directement sur le
+            // `player`/`isPlaying`/`onPlayPause` reçus en paramètres, comme le Player
+            // plein écran (PlayerGuards pour prev/next, callback dédié pour play/pause
+            // car géré côté ViewModel — crossfade, minuterie de sommeil...).
+            LyricsPlaybackBar(
+                song = song,
+                isPlaying = isPlaying,
+                progress = (playbackPosition.toFloat() / (song.duration.takeIf { it > 0L } ?: 1L).toFloat())
+                    .coerceIn(0f, 1f),
+                palette = palette,
+                accentColor = effectiveAccent,
+                onPlayPause = onPlayPause,
+                onSkipPrevious = { PlayerGuards.safeSeekToPrevious(player) },
+                onSkipNext = { PlayerGuards.safeSeekToNext(player) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(bottom = 8.dp)
+            )
         }
     }
 
@@ -327,10 +367,151 @@ fun LyricsScreen(
     }
 }
 
+/**
+ * Barre compacte de mini contrôles de lecture, ancrée en bas de l'écran Paroles —
+ * pochette miniature + titre/artiste, précédent/play-pause/suivant, fine barre de
+ * progression sur le bord supérieur (même langage visuel que [MiniPlayer], teinté
+ * avec la palette Paroles plutôt que l'accent brut du thème).
+ */
+@Composable
+private fun LyricsPlaybackBar(
+    song: Song,
+    isPlaying: Boolean,
+    progress: Float,
+    palette: LyricsPalette,
+    accentColor: Color,
+    onPlayPause: () -> Unit,
+    onSkipPrevious: () -> Unit,
+    onSkipNext: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = SgMotion.tweenProgress(),
+        label = "lyricsBarProgress"
+    )
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(SgRadius.xl))
+            .background(palette.glassSurface)
+            .border(1.dp, palette.glassBorder, RoundedCornerShape(SgRadius.xl))
+    ) {
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(animatedProgress.coerceIn(0.02f, 1f))
+                    .height(2.dp)
+                    .background(
+                        Brush.horizontalGradient(listOf(accentColor, accentColor.copy(alpha = 0.4f))),
+                        RoundedCornerShape(topStart = SgRadius.xl, topEnd = SgRadius.xl)
+                    )
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(SgRadius.sm))
+                        .background(palette.surfaceElevated),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (song.albumArtUri != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(song.albumArtUri)
+                                .crossfade(SgMotion.FastMs)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_songs),
+                            contentDescription = null,
+                            tint = palette.secondaryText,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = song.title,
+                        color = palette.primaryText,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = song.artist,
+                        color = palette.secondaryText,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clickable { onSkipPrevious() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_previous),
+                            contentDescription = "Précédent",
+                            tint = palette.primaryText,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(accentColor)
+                            .clickable { onPlayPause() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
+                            contentDescription = if (isPlaying) "Pause" else "Lecture",
+                            tint = Color.Black,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clickable { onSkipNext() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_next),
+                            contentDescription = "Suivant",
+                            tint = palette.primaryText,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun PasteLyricsEditor(
     song: Song,
     accentColor: Color,
+    palette: LyricsPalette,
     initialDraft: String,
     isSaving: Boolean,
     saveError: String?,
@@ -346,7 +527,7 @@ private fun PasteLyricsEditor(
     ) {
         Text(
             text = "Coller ou saisir les paroles",
-            color = TextPrimary,
+            color = palette.primaryText,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.fillMaxWidth(),
@@ -355,7 +536,7 @@ private fun PasteLyricsEditor(
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = "Copiez depuis Genius, AZLyrics ou un autre site, puis collez ici. Format LRC avec horodatages accepté.",
-            color = TextSecondary,
+            color = palette.secondaryText,
             fontSize = 12.sp,
             lineHeight = 17.sp,
             textAlign = TextAlign.Center,
@@ -372,7 +553,7 @@ private fun PasteLyricsEditor(
             placeholder = {
                 Text(
                     "Collez les paroles ici…",
-                    color = TextTertiary,
+                    color = palette.tertiaryText,
                     fontSize = 14.sp
                 )
             },
@@ -380,11 +561,11 @@ private fun PasteLyricsEditor(
             shape = RoundedCornerShape(SgRadius.md),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = accentColor.copy(alpha = 0.5f),
-                unfocusedBorderColor = BorderSubtle.copy(alpha = 0.45f),
-                focusedContainerColor = SurfaceElevated.copy(alpha = 0.45f),
-                unfocusedContainerColor = SurfaceElevated.copy(alpha = 0.28f),
-                focusedTextColor = TextPrimary,
-                unfocusedTextColor = TextPrimary,
+                unfocusedBorderColor = palette.borderSubtle.copy(alpha = 0.45f),
+                focusedContainerColor = palette.surfaceElevated.copy(alpha = 0.45f),
+                unfocusedContainerColor = palette.surfaceElevated.copy(alpha = 0.28f),
+                focusedTextColor = palette.primaryText,
+                unfocusedTextColor = palette.primaryText,
                 cursorColor = accentColor
             )
         )
@@ -411,7 +592,7 @@ private fun PasteLyricsEditor(
                 enabled = !isSaving,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(SgRadius.pill),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary)
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.secondaryText)
             ) {
                 Text("Annuler")
             }
@@ -488,31 +669,48 @@ private fun SyncedLyricsList(
                 animationSpec = SgMotion.SpringSoft,
                 label = "lyricLineScale"
             )
+            // Halo doux derrière la ligne "en cours" — visible pour guider l'œil
+            // pendant le défilement automatique, mais assez discret (alpha ~0.14)
+            // pour ne jamais rivaliser avec le texte lui-même.
+            val highlightAlpha by animateFloatAsState(
+                targetValue = if (isActive) 1f else 0f,
+                animationSpec = SgMotion.tweenMediumOf(),
+                label = "lyricLineHighlight"
+            )
 
-            Text(
-                text = line.text.ifBlank { "···" },
-                color = color,
-                fontSize = if (isActive) 19.sp else 16.sp,
-                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                lineHeight = 24.sp,
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .graphicsLayer {
                         scaleX = scale
                         scaleY = scale
                     }
+                    .background(
+                        accentColor.copy(alpha = 0.14f * highlightAlpha),
+                        RoundedCornerShape(SgRadius.md)
+                    )
                     .clickable {
                         runCatching { onLineClick(line.timeMs) }
                     }
-                    .padding(horizontal = 24.dp, vertical = 4.dp)
-            )
+                    .padding(horizontal = 24.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = line.text.ifBlank { "···" },
+                    color = color,
+                    fontSize = if (isActive) 19.sp else 16.sp,
+                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 24.sp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun PlainTextLyrics(text: String) {
+private fun PlainTextLyrics(text: String, palette: LyricsPalette) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -521,7 +719,7 @@ private fun PlainTextLyrics(text: String) {
     ) {
         Text(
             text = text.ifBlank { "Aucune parole trouvée." },
-            color = TextPrimary,
+            color = palette.primaryText,
             fontSize = 16.sp,
             lineHeight = 26.sp,
             textAlign = TextAlign.Center,
@@ -539,7 +737,7 @@ private fun LoadingLyricsState(accentColor: Color) {
 }
 
 @Composable
-private fun SearchingOnlineLyricsState(accentColor: Color) {
+private fun SearchingOnlineLyricsState(accentColor: Color, palette: LyricsPalette) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -551,14 +749,14 @@ private fun SearchingOnlineLyricsState(accentColor: Color) {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "Recherche en ligne…",
-            color = TextPrimary,
+            color = palette.primaryText,
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = "Interrogation de LRCLIB pour ce morceau",
-            color = TextSecondary,
+            color = palette.secondaryText,
             fontSize = 12.sp,
             textAlign = TextAlign.Center
         )
@@ -568,6 +766,7 @@ private fun SearchingOnlineLyricsState(accentColor: Color) {
 @Composable
 private fun EmptyLyricsState(
     accentColor: Color,
+    palette: LyricsPalette,
     onSearchOnline: () -> Unit,
     onPasteLyrics: () -> Unit
 ) {
@@ -581,28 +780,28 @@ private fun EmptyLyricsState(
         Box(
             modifier = Modifier
                 .size(72.dp)
-                .background(GlassSurface, CircleShape)
-                .border(1.dp, GlassBorder, CircleShape),
+                .background(palette.glassSurface, CircleShape)
+                .border(1.dp, palette.glassBorder, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Filled.Lyrics,
                 contentDescription = null,
-                tint = TextSecondary,
+                tint = palette.secondaryText,
                 modifier = Modifier.size(30.dp)
             )
         }
         Spacer(modifier = Modifier.height(20.dp))
         Text(
             text = "Aucune parole disponible",
-            color = TextPrimary,
+            color = palette.primaryText,
             fontSize = 17.sp,
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = "Recherchez les paroles en ligne, copiez-les, puis enregistrez-les pour ce morceau. Les paroles trouvées automatiquement ou saisies manuellement seront mémorisées pour les prochaines écoutes.",
-            color = TextSecondary,
+            color = palette.secondaryText,
             fontSize = 13.sp,
             lineHeight = 18.sp,
             textAlign = TextAlign.Center
@@ -633,7 +832,7 @@ private fun EmptyLyricsState(
             onClick = onPasteLyrics,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(SgRadius.pill),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary)
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.primaryText)
         ) {
             Text("Coller les paroles")
         }

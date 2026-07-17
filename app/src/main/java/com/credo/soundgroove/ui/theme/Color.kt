@@ -5,9 +5,27 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-// ── Palette de marque (icône : note cyan #00D6F9 sur noir) ─────────────────
+// ── Palette de marque (signature violet premium #A855F7 sur noir) ───────────
 
-val BrandCyan = Color(0xFF00D6F9)
+/** Violet signature — fort sur fond sombre. */
+val BrandPurple = Color(0xFFA855F7)
+
+/** Violet profond — boutons / accents sur thème clair (WCAG AA). */
+val BrandPurpleDeep = Color(0xFF7C3AED)
+
+/** Violet atténué — thème Graphite et secondaires. */
+val BrandPurpleMuted = Color(0xFF9333EA)
+
+/** Violet doux — containers clairs et touches subtiles. */
+val BrandPurpleSoft = Color(0xFFC084FC)
+
+/** Container violet sur fond noir. */
+val BrandPurpleContainer = Color(0xFF2E1065)
+
+/** @deprecated Remplacé par [BrandPurple]. */
+@Deprecated("Use BrandPurple", ReplaceWith("BrandPurple"))
+val BrandCyan = BrandPurple
+
 val BrandBlack = Color(0xFF000000)
 
 // ── Thème Noir Absolu ───────────────────────────────────────────────────────
@@ -30,7 +48,7 @@ val ArgentClairBg = Color(0xFFF7F8FA)
 val ArgentClairSurface = Color(0xFFFFFFFF)
 val ArgentClairCard = Color(0xFFF0F2F5)
 val SteelBlue = Color(0xFF2B6CB0)
-val ArgentClairAccent = Color(0xFF00B8D9)
+val ArgentClairAccent = BrandPurpleDeep
 
 // ── Sémantique transversale (constantes fixes) ──────────────────────────────
 
@@ -76,7 +94,7 @@ val LocalSgSemanticColors = staticCompositionLocalOf {
         glassHighlight = Color(0x1FFFFFFF),
         scrimOverlay = Color(0x99000000),
         sheetDeep = Color(0xFF000000),
-        heroGradientTop = Color(0xFF0A1520),
+        heroGradientTop = Color(0xFF12081A),
         heroGradientBottom = Color(0xFF000000),
         isLight = false,
     )
@@ -163,5 +181,5 @@ val HeroGradientBottom: Color
     get() = LocalSgSemanticColors.current.heroGradientBottom
 
 // Rétrocompatibilité — alias palette historique
-val ChampagneGold = BrandCyan
+val ChampagneGold = BrandPurple
 val DarkSurface = GraphiteAbyss

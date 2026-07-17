@@ -59,6 +59,7 @@ import androidx.media3.session.MediaController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.R
+import com.credo.soundgroove.ui.components.SgLoadingState
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.data.repository.ListeningStats
@@ -66,6 +67,7 @@ import com.credo.soundgroove.ui.components.BottomNavBar
 import com.credo.soundgroove.ui.components.InfoRow
 import com.credo.soundgroove.ui.components.MiniPlayer
 import com.credo.soundgroove.ui.components.formatDuration
+import com.credo.soundgroove.ui.theme.LocalSgAnimatedVisibilityScope
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.util.MediaPermissions
 import com.credo.soundgroove.util.PlayerGuards
@@ -96,6 +98,14 @@ fun MainScreen(
     onGaplessChange: (Boolean) -> Unit = {},
     crossfadeDurationMs: Int = 0,
     onCrossfadeDurationChange: (Int) -> Unit = {},
+    equalizerEnabled: Boolean = true,
+    equalizerPresetLabel: String = "Normal",
+    equalizerPreset: com.credo.soundgroove.util.EqualizerPreset = com.credo.soundgroove.util.EqualizerPreset.NORMAL,
+    equalizerBands: List<com.credo.soundgroove.util.EqualizerBandInfo> = emptyList(),
+    onEqualizerEnabledChange: (Boolean) -> Unit = {},
+    onEqualizerPresetChange: (com.credo.soundgroove.util.EqualizerPreset) -> Unit = {},
+    onEqualizerBandLevelChange: (Int, Short) -> Unit = { _, _ -> },
+    onRefreshEqualizerBands: () -> Unit = {},
     onSaveSongMetadata: (Song, String, String, String) -> Unit = { _, _, _, _ -> },
     onSetSongCoverArt: (Song, android.net.Uri) -> Unit = { _, _ -> },
     metadataEditMessage: String? = null,
@@ -152,9 +162,25 @@ fun MainScreen(
     var overlayedSong by remember { mutableStateOf<Song?>(null) }
     var showSongInfo by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
+    val launchCoverPicker = com.credo.soundgroove.ui.components.rememberSongCoverArtPicker(
+        onCoverSelected = onSetSongCoverArt
+    )
 
     var hasPermission by remember {
         mutableStateOf(MediaPermissions.hasAudioReadPermission(context))
+    }
+
+    var libraryScanPending by remember { mutableStateOf(true) }
+
+    LaunchedEffect(songs) {
+        if (songs.isNotEmpty()) libraryScanPending = false
+    }
+
+    LaunchedEffect(hasPermission, songs) {
+        if (hasPermission && songs.isEmpty()) {
+            kotlinx.coroutines.delay(4_000)
+            libraryScanPending = false
+        }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -248,6 +274,7 @@ fun MainScreen(
     var showSleepTimerSheet by remember { mutableStateOf(false) }
     var showPlaybackSpeedSheet by remember { mutableStateOf(false) }
     var showCrossfadeSheet by remember { mutableStateOf(false) }
+    var showEqualizerSheet by remember { mutableStateOf(false) }
     var showEditMetadata by remember { mutableStateOf(false) }
     val activeSong = localCurrentSong ?: currentSong
     val activeIsPlaying = localIsPlaying
@@ -300,6 +327,12 @@ fun MainScreen(
                     }
                 }
             }
+        } else if (libraryScanPending && songs.isEmpty()) {
+            SgLoadingState(
+                message = "Analyse de votre bibliothèque musicale…",
+                accentColor = accentColor,
+                modifier = Modifier.fillMaxSize()
+            )
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f)) {
@@ -466,21 +499,28 @@ fun MainScreen(
                 enter = SgMotion.slideUpEnter(),
                 exit = SgMotion.slideUpExit()
             ) {
-                activeSong?.let { song ->
-                    val duration = song.duration.takeIf { it > 0L } ?: 1L
-                    MiniPlayer(
-                        song = song,
-                        isPlaying = activeIsPlaying,
-                        progress = (playbackPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f),
-                        accentColor = accentColor,
-                        onPlayPause = {
-                            if (activeIsPlaying) player.pause() else player.play()
-                            localIsPlaying = !activeIsPlaying
-                        },
-                        onSkipPrevious = { PlayerGuards.safeSeekToPrevious(player) },
-                        onSkipNext = { PlayerGuards.safeSeekToNext(player) },
-                        onOpen = onNavigateToPlayer
-                    )
+                // Fournit l'AnimatedVisibilityScope de ce mini-player "intégré" (onglet
+                // Accueil) au shared element pochette, au même titre que l'overlay de
+                // AppNavigation — cf. ui/theme/Motion.kt et docs/FEATURES_C_SHARED_ELEMENT.md.
+                CompositionLocalProvider(LocalSgAnimatedVisibilityScope provides this@AnimatedVisibility) {
+                    activeSong?.let { song ->
+                        val duration = song.duration.takeIf { it > 0L } ?: 1L
+                        MiniPlayer(
+                            song = song,
+                            isPlaying = activeIsPlaying,
+                            progress = (playbackPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f),
+                            accentColor = accentColor,
+                            onPlayPause = {
+                                if (activeIsPlaying) player.pause() else player.play()
+                                localIsPlaying = !activeIsPlaying
+                            },
+                            onSkipPrevious = { PlayerGuards.safeSeekToPrevious(player) },
+                            onSkipNext = { PlayerGuards.safeSeekToNext(player) },
+                            onOpen = onNavigateToPlayer,
+                            gaplessEnabled = gaplessEnabled,
+                            crossfadeDurationMs = crossfadeDurationMs
+                        )
+                    }
                 }
             }
 
@@ -541,6 +581,12 @@ fun MainScreen(
             onGaplessChange = onGaplessChange,
             crossfadeDurationMs = crossfadeDurationMs,
             onOpenCrossfade = { showCrossfadeSheet = true },
+            equalizerEnabled = equalizerEnabled,
+            equalizerPresetLabel = equalizerPresetLabel,
+            onOpenEqualizer = {
+                onRefreshEqualizerBands()
+                showEqualizerSheet = true
+            },
             onOpenPlaybackSpeed = { showPlaybackSpeedSheet = true },
             smartNotificationsEnabled = smartNotificationsEnabled,
             onSmartNotificationsChange = onSmartNotificationsChange,
@@ -580,9 +626,23 @@ fun MainScreen(
     if (showCrossfadeSheet) {
         com.credo.soundgroove.ui.components.CrossfadeBottomSheet(
             currentMs = crossfadeDurationMs,
+            gaplessEnabled = gaplessEnabled,
             accentColor = accentColor,
             onDurationSelected = onCrossfadeDurationChange,
             onDismiss = { showCrossfadeSheet = false }
+        )
+    }
+
+    if (showEqualizerSheet) {
+        com.credo.soundgroove.ui.components.EqualizerBottomSheet(
+            enabled = equalizerEnabled,
+            preset = equalizerPreset,
+            bands = equalizerBands,
+            accentColor = accentColor,
+            onEnabledChange = onEqualizerEnabledChange,
+            onPresetSelected = onEqualizerPresetChange,
+            onBandLevelChange = onEqualizerBandLevelChange,
+            onDismiss = { showEqualizerSheet = false }
         )
     }
 
@@ -594,6 +654,7 @@ fun MainScreen(
                 onSave = { title, artist, album ->
                     onSaveSongMetadata(song, title, artist, album)
                 },
+                onSetCoverArt = { launchCoverPicker(song) },
                 onDismiss = { showEditMetadata = false }
             )
         }

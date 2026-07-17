@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -42,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,6 +69,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.theme.ErrorRed
 import com.credo.soundgroove.ui.theme.GlassBorder
 import com.credo.soundgroove.ui.theme.GlassCard
@@ -86,11 +89,13 @@ import kotlinx.coroutines.launch
 fun QueueScreen(
     playlist: List<Song>,
     currentIndex: Int,
+    isPlaying: Boolean = true,
     accentColor: Color = SilverAccent,
     onClose: () -> Unit,
     onPlaySong: (Int) -> Unit,
     onRemoveSong: (Int) -> Unit,
-    onMoveSong: (Int, Int) -> Unit
+    onMoveSong: (Int, Int) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var verticalDragOffset by remember { mutableStateOf(0f) }
     var draggingIndex by remember { mutableStateOf<Int?>(null) }
@@ -107,9 +112,10 @@ fun QueueScreen(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .fillMaxHeight(0.74f)
+            // ~3/4 d'écran (cf. correction utilisateur : bandeau Player 1/4, Queue 3/4).
+            .fillMaxHeight(0.75f)
             .clip(RoundedCornerShape(topStart = SgRadius.xl, topEnd = SgRadius.xl))
             .background(sgSheetGradientBrush())
             .pointerInput(Unit) { detectTapGestures { } }
@@ -167,6 +173,7 @@ fun QueueScreen(
                         song = song,
                         position = safeCurrentIndex + 1,
                         total = playlist.size,
+                        isPlaying = isPlaying,
                         accentColor = accentColor
                     )
                 }
@@ -198,7 +205,12 @@ fun QueueScreen(
                     ),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    QueueEmptyState(modifier = Modifier.fillMaxSize())
+                    SgEmptyState(
+                        iconPainter = painterResource(R.drawable.ic_queue),
+                        title = "File d'attente vide",
+                        subtitle = "Lance une lecture depuis la bibliothèque ou une playlist pour remplir la file.",
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
 
                 androidx.compose.animation.AnimatedVisibility(
@@ -219,6 +231,7 @@ fun QueueScreen(
                         ) { index, song ->
                             val isCurrent = index == safeCurrentIndex
                             val isDragging = draggingIndex == index
+                            val isCurrentPlaying = isCurrent && isPlaying
                             val dismissState = rememberSwipeToDismissBoxState(
                                 confirmValueChange = { value ->
                                     if (value != SwipeToDismissBoxValue.Settled && !isCurrent) {
@@ -244,6 +257,7 @@ fun QueueScreen(
                                     song = song,
                                     index = index,
                                     isCurrent = isCurrent,
+                                    isCurrentPlaying = isCurrentPlaying,
                                     isDragging = isDragging,
                                     itemDragOffset = if (isDragging) itemDragOffset else 0f,
                                     accentColor = accentColor,
@@ -273,6 +287,23 @@ fun QueueScreen(
                         }
                     }
                 }
+
+                // "Revenir à la piste en cours" : utile dès que la file est longue et que
+                // l'utilisateur a scrollé loin de l'item en lecture (cf. demande §A).
+                val showScrollToCurrent by remember(listState, safeCurrentIndex) {
+                    derivedStateOf {
+                        playlist.isNotEmpty() &&
+                            listState.layoutInfo.visibleItemsInfo.none { it.index == safeCurrentIndex }
+                    }
+                }
+                com.credo.soundgroove.ui.components.ScrollToCurrentFab(
+                    visible = showScrollToCurrent,
+                    accentColor = accentColor,
+                    onClick = { scope.launch { listState.animateScrollToItem(safeCurrentIndex) } },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = SgSpacing.sm, bottom = 96.dp)
+                )
             }
         }
     }
@@ -341,6 +372,7 @@ private fun QueueNowPlayingBanner(
     song: Song,
     position: Int,
     total: Int,
+    isPlaying: Boolean,
     accentColor: Color
 ) {
     GlassCard(
@@ -390,11 +422,10 @@ private fun QueueNowPlayingBanner(
                         .background(Color.Black.copy(alpha = 0.45f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_play),
-                        contentDescription = null,
-                        tint = accentColor,
-                        modifier = Modifier.size(16.dp)
+                    com.credo.soundgroove.ui.components.NowPlayingBars(
+                        isPlaying = isPlaying,
+                        accentColor = accentColor,
+                        barHeight = 14.dp
                     )
                 }
             }
@@ -476,45 +507,6 @@ private fun QueueHintRow() {
 }
 
 @Composable
-private fun QueueEmptyState(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.padding(horizontal = SgSpacing.xl),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .background(GlassSurface, CircleShape)
-                .border(1.dp, GlassBorder, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_queue),
-                contentDescription = null,
-                tint = TextSecondary,
-                modifier = Modifier.size(32.dp)
-            )
-        }
-        Spacer(modifier = Modifier.height(SgSpacing.lg))
-        Text(
-            text = "File d'attente vide",
-            color = TextPrimary,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(SgSpacing.xs))
-        Text(
-            text = "Lance une lecture depuis la bibliothèque ou une playlist pour remplir la file.",
-            color = TextSecondary,
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-@Composable
 private fun QueueSwipeBackground(
     dismissState: androidx.compose.material3.SwipeToDismissBoxState,
     isCurrent: Boolean
@@ -573,6 +565,7 @@ private fun QueueItemRow(
     song: Song,
     index: Int,
     isCurrent: Boolean,
+    isCurrentPlaying: Boolean,
     isDragging: Boolean,
     itemDragOffset: Float,
     accentColor: Color,
@@ -670,17 +663,19 @@ private fun QueueItemRow(
                     )
                 }
                 if (isCurrent) {
+                    // Barres d'égaliseur animées plutôt qu'une simple icône play statique —
+                    // beaucoup plus visible qu'un pictogramme figé (cf. demande "pas trop
+                    // discret"), et distingue en plus lecture/pause via leur mouvement.
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(Color.Black.copy(alpha = 0.5f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_play),
-                            contentDescription = null,
-                            tint = accentColor,
-                            modifier = Modifier.size(16.dp)
+                        com.credo.soundgroove.ui.components.NowPlayingBars(
+                            isPlaying = isCurrentPlaying,
+                            accentColor = accentColor,
+                            barHeight = 16.dp
                         )
                     }
                 }
@@ -758,4 +753,150 @@ private fun queueCountLabel(count: Int): String = when (count) {
     0 -> "Aucun titre"
     1 -> "1 titre"
     else -> "$count titres"
+}
+
+/**
+ * Bandeau compact du Player quand la File d'attente est ouverte (cf. demande §B) :
+ * le Player plein écran se réduit à ceci (~1/4 écran, cf. AppNavigation) — pochette,
+ * titre/artiste, précédent/play-pause/suivant. Un tap ailleurs que sur les contrôles
+ * referme la file et fait ré-expanser le Player (`onExpand`).
+ */
+@Composable
+fun PlayerQueueBanner(
+    song: Song,
+    isPlaying: Boolean,
+    accentColor: Color,
+    onPlayPause: () -> Unit,
+    onSkipPrevious: () -> Unit,
+    onSkipNext: () -> Unit,
+    onExpand: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(com.credo.soundgroove.ui.theme.sgFullScreenGradientBrush())
+            .statusBarsPadding()
+            .clickable { onExpand() }
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = SgSpacing.xl),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Poignée visuelle : rappelle qu'on peut taper pour ré-expanser, cohérent
+                // avec le "drag handle" utilisé sur les bottom sheets de l'app.
+                Box(
+                    modifier = Modifier
+                        .size(width = 4.dp, height = 36.dp)
+                        .background(GlassBorder, RoundedCornerShape(2.dp))
+                )
+                Spacer(modifier = Modifier.width(SgSpacing.md))
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(SgRadius.sm))
+                        .background(GraphiteCard),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (song.albumArtUri != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(song.albumArtUri)
+                                .crossfade(SgMotion.MediumMs)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_songs),
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(SgSpacing.md))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = song.title,
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = song.artist,
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(modifier = Modifier.width(SgSpacing.sm))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            // `combinedClickable`/`clickable` imbriqué : ces contrôles doivent
+                            // rester utilisables sans déclencher `onExpand` (cf. Modifier
+                            // parent du Box racine) — Compose route l'évènement au plus
+                            // profond, ce clic-ci gagne sur celui du parent.
+                            .clickable { onSkipPrevious() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_previous),
+                            contentDescription = "Précédent",
+                            tint = TextPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(accentColor)
+                            .clickable { onPlayPause() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
+                            contentDescription = if (isPlaying) "Pause" else "Lecture",
+                            tint = Color.Black,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clickable { onSkipNext() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_next),
+                            contentDescription = "Suivant",
+                            tint = TextPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(GlassBorder.copy(alpha = 0.4f))
+            )
+        }
+    }
 }

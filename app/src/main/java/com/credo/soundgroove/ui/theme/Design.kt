@@ -33,6 +33,21 @@ object SgSpacing {
     val xl = 20.dp
     val xxl = 24.dp
     val xxxl = 32.dp
+
+    /** Padding horizontal standard des écrans principaux. */
+    val screenHorizontal = lg
+
+    /** Marge haute sous la barre de statut (titres d'écran). */
+    val screenTop = xl + sm
+
+    /** Espacement vertical entre sections de liste. */
+    val sectionGap = md
+
+    /** Espacement entre items de liste. */
+    val listItemGap = sm
+
+    /** Padding interne des cartes / rows cliquables. */
+    val cardPadding = md
 }
 
 object SgRadius {

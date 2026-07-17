@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="brand_cyan">#FF00D6F9</color>
+    <color name="brand_purple">#FFA855F7</color>
+    <!-- Alias legacy — même valeur que brand_purple -->
+    <color name="brand_cyan">#FFA855F7</color>
     <color name="brand_black">#FF000000</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>

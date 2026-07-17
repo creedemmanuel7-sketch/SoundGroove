@@ -46,13 +46,13 @@ object ShareCardGenerator {
         SQUARE(1080, 1080),
     }
 
-    private const val BRAND_CYAN = 0xFF00D6F9.toInt()
+    private const val BRAND_PURPLE = 0xFFA855F7.toInt()
     private val DEFAULT_FORMAT = ShareCardFormat.STORY
 
     fun generateCardBitmap(
         context: Context,
         song: Song,
-        accentArgb: Int = BRAND_CYAN,
+        accentArgb: Int = BRAND_PURPLE,
         format: ShareCardFormat = DEFAULT_FORMAT,
     ): Bitmap {
         val cardWidth = format.width
@@ -119,14 +119,21 @@ object ShareCardGenerator {
         return bitmap
     }
 
+    private const val SHARE_CACHE_DIR = "share"
+
     fun shareCard(
         context: Context,
         song: Song,
-        accentArgb: Int = BRAND_CYAN,
+        accentArgb: Int = BRAND_PURPLE,
         format: ShareCardFormat = DEFAULT_FORMAT,
     ) {
         val bitmap = generateCardBitmap(context, song, accentArgb, format)
-        val cacheDir = File(context.cacheDir, "share").apply { mkdirs() }
+        val cacheDir = File(context.cacheDir, SHARE_CACHE_DIR).apply { mkdirs() }
+        // Chaque carte est un fichier temporaire (au format PNG plein cadre) uniquement
+        // nécessaire pour l'Intent.ACTION_SEND qui suit : on purge les cartes précédentes
+        // avant d'en écrire une nouvelle pour éviter une accumulation silencieuse dans le
+        // cache de partage à chaque utilisation de la fonctionnalité.
+        cacheDir.listFiles()?.forEach { it.delete() }
         val file = File(cacheDir, "soundgroove_share_${song.id}.png")
         FileOutputStream(file).use { out ->
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
@@ -148,6 +155,18 @@ object ShareCardGenerator {
         context.startActivity(Intent.createChooser(intent, "Partager la carte"))
     }
 
+    /** Taille totale actuelle du cache de cartes de partage temporaires, en octets. */
+    fun shareCacheSizeBytes(context: Context): Long =
+        runCatching {
+            File(context.cacheDir, SHARE_CACHE_DIR).listFiles()?.sumOf { it.length() } ?: 0L
+        }.getOrDefault(0L)
+
+    fun clearShareCache(context: Context): Int =
+        runCatching {
+            val files = File(context.cacheDir, SHARE_CACHE_DIR).listFiles() ?: return 0
+            files.count { it.delete() }
+        }.getOrDefault(0)
+
     private data class CardPalette(
         val dominant: Int,
         val accent: Int,
@@ -160,7 +179,7 @@ object ShareCardGenerator {
             return CardPalette(
                 dominant = 0xFF141418.toInt(),
                 accent = fallbackAccent,
-                secondary = BRAND_CYAN,
+                secondary = BRAND_PURPLE,
                 glow = fallbackAccent,
             )
         }
@@ -370,7 +389,7 @@ object ShareCardGenerator {
             ?.toBitmap(logoSize, logoSize)
 
         val brandTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = BRAND_CYAN
+            color = BRAND_PURPLE
             textSize = if (format == ShareCardFormat.SQUARE) 34f else 38f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             letterSpacing = 0.12f
@@ -390,7 +409,7 @@ object ShareCardGenerator {
         val startX = (width - totalWidth) / 2f
 
         val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = withAlpha(BRAND_CYAN, 0.22f)
+            color = withAlpha(BRAND_PURPLE, 0.22f)
             strokeWidth = 1.5f
         }
         val dividerY = baseY - 52f

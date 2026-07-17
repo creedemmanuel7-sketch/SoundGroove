@@ -100,11 +100,11 @@ fun ProfileTab(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(horizontal = SgSpacing.screenHorizontal),
+        verticalArrangement = Arrangement.spacedBy(SgSpacing.sectionGap)
     ) {
         item {
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(SgSpacing.screenTop))
             ProfileIdentityCard(
                 userName = userName,
                 avatarUri = avatarUri,
@@ -470,29 +470,124 @@ private fun ProfileStatsSection(
                     value = formatListeningTime(listeningStats.monthSeconds),
                     modifier = Modifier.weight(1f)
                 )
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                ProfileMetric(
-                    label = "Série",
-                    value = if (listeningStats.streakDays > 0) {
-                        "${listeningStats.streakDays} jour${if (listeningStats.streakDays > 1) "s" else ""}"
-                    } else {
-                        "Aucune"
-                    },
-                    modifier = Modifier.weight(1f)
-                )
                 ProfileMetric(
                     label = "Total",
                     value = formatListeningTime(listeningStats.totalSeconds),
                     modifier = Modifier.weight(1f)
                 )
             }
+            Spacer(modifier = Modifier.height(14.dp))
+            // Gamification légère (sobre, sans confettis) : la série mérite plus de
+            // présence qu'une simple case du grid ci-dessus — feu + microcopy qui
+            // change avec la longueur de la série, cf. demande explicite "pas trop
+            // discret" (mais reste dans les tokens thème, pas de couleur inventée).
+            StreakHighlightRow(streakDays = listeningStats.streakDays, accentColor = accentColor)
+            todayMilestoneLabel(listeningStats.todaySeconds)?.let { milestone ->
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                    MilestoneChip(label = milestone, accentColor = accentColor)
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun StreakHighlightRow(
+    streakDays: Int,
+    accentColor: Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(SgRadius.md))
+            .background(
+                Brush.horizontalGradient(listOf(accentColor.copy(alpha = 0.16f), Color.Transparent))
+            )
+            .border(1.dp, accentColor.copy(alpha = 0.28f), RoundedCornerShape(SgRadius.md))
+            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm + 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .background(
+                    Brush.radialGradient(listOf(accentColor, accentColor.copy(alpha = 0.55f))),
+                    CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.LocalFireDepartment,
+                contentDescription = "Série d'écoute",
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(SgSpacing.md))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (streakDays > 0) {
+                    "$streakDays jour${if (streakDays > 1) "s" else ""} de série"
+                } else {
+                    "Pas encore de série"
+                },
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = streakMicrocopy(streakDays),
+                color = TextSecondary,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun MilestoneChip(label: String, accentColor: Color) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(SgRadius.pill))
+            .background(accentColor.copy(alpha = 0.14f))
+            .border(1.dp, accentColor.copy(alpha = 0.3f), RoundedCornerShape(SgRadius.pill))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Bolt,
+            contentDescription = null,
+            tint = accentColor,
+            modifier = Modifier.size(13.dp)
+        )
+        Text(
+            text = label,
+            color = accentColor,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+/** Une seule micro-copie motivante par palier — pas de superposition de messages. */
+private fun streakMicrocopy(streakDays: Int): String = when {
+    streakDays <= 0 -> "Écoute aujourd'hui pour démarrer une série."
+    streakDays == 1 -> "Un jour d'écoute. Continue demain !"
+    streakDays < 7 -> "Belle régularité, jour après jour."
+    streakDays < 30 -> "Une semaine ou plus d'affilée, impressionnant."
+    else -> "Une régularité remarquable. Bravo."
+}
+
+/** Jalon discret du jour (1 seul affiché, le plus haut palier atteint) — ex. "1 h aujourd'hui". */
+private fun todayMilestoneLabel(todaySeconds: Long): String? = when {
+    todaySeconds >= 7200L -> "2 h d'écoute aujourd'hui"
+    todaySeconds >= 3600L -> "1 h d'écoute aujourd'hui"
+    todaySeconds >= 1800L -> "30 min d'écoute aujourd'hui"
+    else -> null
 }
 
 @Composable

@@ -9,7 +9,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,8 +35,6 @@ import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -43,12 +43,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,10 +71,15 @@ import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.formatDuration
 import com.credo.soundgroove.ui.theme.*
+import com.credo.soundgroove.util.PlaybackPreferences
 import com.credo.soundgroove.util.PlayerGuards
 import com.credo.soundgroove.util.blendWithAlbumArt
 import com.credo.soundgroove.util.rememberAlbumArtAccentColor
+import com.credo.soundgroove.util.rememberPlayerAmbiencePalette
 import kotlinx.coroutines.launch
+
+/** Interpolation linéaire simple — évite une dépendance à `androidx.compose.ui.util.lerp`. */
+private fun lerpFloat(start: Float, stop: Float, fraction: Float): Float = start + (stop - start) * fraction
 
 @Composable
 fun PlayerScreen(
@@ -84,19 +94,42 @@ fun PlayerScreen(
     onToggleFavorite: () -> Unit,
     onOpenQueue: () -> Unit,
     player: androidx.media3.common.Player,
-    onShowInfo: () -> Unit = {},
-    onShare: () -> Unit = {},
-    onShareCard: () -> Unit = {},
-    onEditMetadata: () -> Unit = {},
-    onSetRingtone: () -> Unit = {},
+    onOpenPlayerOptions: () -> Unit = {},
+    onOpenLyrics: () -> Unit = {},
+    // Transition "peek" annulable Player ↔ Paroles (cf. AppNavigation, propriétaire
+    // du progrès partagé) : 0 = Player plein, 1 = Paroles plein. PlayerScreen ne fait
+    // que rapporter le geste brut (delta de drag normalisé par la largeur d'écran) et
+    // afficher le résultat (translationX) — toute la logique de seuil/cancel/spring
+    // vit côté parent, pour rester la source de vérité unique du progrès partagé
+    // avec LyricsScreen.
+    lyricsPeekProgress: Float = 0f,
+    onLyricsPeekDragStart: () -> Unit = {},
+    onLyricsPeekDrag: (Float) -> Unit = {},
+    onLyricsPeekDragEnd: () -> Unit = {},
+    gaplessEnabled: Boolean = true,
+    crossfadeDurationMs: Int = 0,
+    equalizerEnabled: Boolean = true,
+    equalizerPresetLabel: String = "Normal",
     playbackSpeed: Float = 1f,
-    onOpenPlaybackSpeed: () -> Unit = {},
-    onOpenLyrics: () -> Unit = {}
+    playbackPitch: Float = 1f,
+    sleepTimerRemainingSeconds: Int? = null,
+    vinylModeEnabled: Boolean = false
 ) {
     val albumAccent = rememberAlbumArtAccentColor(song.albumArtUri, accentColor)
     val displayAccent = blendWithAlbumArt(accentColor, albumAccent)
     val displaySecondaryAccent = themeSecondaryAccent(displayAccent)
     val secondaryAccent = themeSecondaryAccent(accentColor)
+    // Ambiance dérivée de la pochette pour la couche d'assombrissement du fond :
+    // contrairement à Paroles (fond toujours sombre), le Player garde le fond du
+    // thème actif et adapte seulement la teinte du scrim — en thème clair, la
+    // pochette ne fonce jamais le fond (texte sombre = illisible sinon), elle
+    // l'éclaircit et le teinte légèrement (cf. AlbumArtPalette.rememberPlayerAmbiencePalette).
+    val ambiencePalette = rememberPlayerAmbiencePalette(
+        albumArtUri = song.albumArtUri,
+        fallbackAccent = accentColor,
+        isLightTheme = IsLightTheme,
+        themeBackground = MaterialTheme.colorScheme.background
+    )
     var progress by remember { mutableStateOf(0f) }
     var isShuffled by remember { mutableStateOf(false) }
     var repeatMode by remember { mutableStateOf(0) }
@@ -104,26 +137,70 @@ fun PlayerScreen(
     var currentPosition by remember { mutableStateOf(0L) }
     var dragOffsetX by remember { mutableStateOf(0f) }
     var verticalDragOffset by remember { mutableStateOf(0f) }
-    var lyricsSwipeOffsetX by remember { mutableStateOf(0f) }
-    var showOptionsMenu by remember { mutableStateOf(false) }
+    var isDismissDragging by remember { mutableStateOf(false) }
+    var screenWidthPx by remember { mutableStateOf(1f) }
     val swipeThreshold = 100.dp
     val density = androidx.compose.ui.platform.LocalDensity.current
+    // Distance de drag vertical correspondant à un dismiss "complet" (100%) vers le
+    // mini-player, et fraction de cette distance à partir de laquelle on considère
+    // le dismiss "engagé" (sinon → annulation/spring-back). Volontairement plus
+    // courte que la hauteur d'écran : comme iOS, on n'exige pas un drag pleine
+    // hauteur pour valider le geste.
+    val dismissDragDistancePx = with(density) { 260.dp.toPx() }
+    val dismissCommitFraction = 0.42f
     val scope = rememberCoroutineScope()
+    val view = LocalView.current
+    // Vrais insets système (pas une estimation) : la marge de navigation varie
+    // beaucoup selon le mode (gestes vs barre 3 boutons), donc indispensable pour
+    // viser la vraie position du mini-player en bas d'écran (cf. runExitAnimation).
+    val navBarBottomPx = androidx.compose.foundation.layout.WindowInsets.navigationBars
+        .getBottom(density)
 
     // Morph d'ouverture / fermeture inspiré de la transition "Now Playing" d'Apple Music :
     // la pochette part de la taille mini-player (scale ~0.14) et remonte vers le centre ;
     // le chrome apparaît / disparaît en fondu décalé. Symétrique à la fermeture.
     val artScale = remember { Animatable(SgMotion.PlayerArtMiniScale) }
+    val artOffsetX = remember { Animatable(0f) }
     val artOffsetY = remember { Animatable(SgMotion.PlayerArtEnterOffsetY) }
     val chromeAlpha = remember { Animatable(0f) }
+    // Décalage vertical du Player entier pendant le dismiss interactif quand le shared
+    // element réel pilote la pochette : on ne touche JAMAIS artScale/artOffsetY sur le
+    // nœud `sgSharedAlbumArt` (sinon bounds layout ≠ rendu graphicsLayer → snap au pop).
+    val dismissRootOffsetY = remember { Animatable(0f) }
     var isExiting by remember { mutableStateOf(false) }
     val reducedMotion = rememberSgReducedMotion()
+
+    // Position "au repos" de la pochette (centre, coordonnées racine), mesurée en
+    // continu via onGloballyPositioned — voir le Box de la pochette plus bas, où
+    // ce modifier est placé AVANT `.offset{}` dans la chaîne : Compose positionne
+    // ce nœud d'après le parent (Column) sans tenir compte du décalage que NOUS
+    // appliquons nous-mêmes plus loin dans la même chaîne, donc cette valeur reste
+    // stable pendant toute l'anim (contrairement à `positionInRoot()` lu après
+    // `.offset{}`, qui inclurait notre propre décalage en cours d'anim).
+    var artRestCenterPx by remember { mutableStateOf<Offset?>(null) }
+
+    // Un vrai SharedTransitionLayout (Modifier.sharedElement, cf. sgSharedAlbumArt)
+    // est branché par AppNavigation/MainScreen : dans ce cas c'est lui qui pilote la
+    // taille/position de la pochette pendant le morph, donc on n'anime plus
+    // artScale/artOffsetY nous-mêmes (double animation = à-coups). Seul le fondu du
+    // "chrome" reste géré ici. Sans ce contexte (ex. preview), on retombe sur
+    // l'ancien morph manuel scale+position.
+    val hasRealSharedTransition = rememberSgSharedElementActive()
 
     suspend fun runEnterAnimation() {
         if (reducedMotion) {
             artScale.snapTo(1f)
             artOffsetY.snapTo(0f)
+            dismissRootOffsetY.snapTo(0f)
             chromeAlpha.snapTo(1f)
+            return
+        }
+        if (hasRealSharedTransition) {
+            artScale.snapTo(1f)
+            artOffsetY.snapTo(0f)
+            dismissRootOffsetY.snapTo(0f)
+            kotlinx.coroutines.delay(SgMotion.PlayerChromeDelayMs.toLong())
+            chromeAlpha.animateTo(1f, animationSpec = SgMotion.playerChromeEnterSpec())
             return
         }
         kotlinx.coroutines.coroutineScope {
@@ -136,17 +213,114 @@ fun PlayerScreen(
         }
     }
 
+    // Cible réelle = centre de la pochette du mini-player (bas gauche), pas un simple
+    // rétrécissement sur place : on part de la position "au repos" mesurée
+    // (artRestCenterPx, indépendante de nos propres offsets) et on vise la géométrie
+    // connue du mini-player (SgMotion.MiniArtCenter*) + les vrais insets de barre de
+    // navigation. Décalage nul en repli si la mesure n'est pas encore dispo (ne
+    // devrait pas arriver en pratique). Extrait en fonction propre : utilisée à la
+    // fois par `runExitAnimation` (fermeture "discrète", tap/back) et par le dismiss
+    // vertical interactif (`applyDismissDrag`, suit le doigt en continu).
+    fun miniArtDismissTarget(): Offset {
+        val restCenter = artRestCenterPx
+        return if (restCenter != null && view.height > 0) {
+            val targetCenterX = with(density) { SgMotion.MiniArtCenterXDp.toPx() }
+            val distanceFromBottom = navBarBottomPx + with(density) { SgMotion.MiniArtCenterFromBottomDp.toPx() }
+            val targetCenterY = view.height.toFloat() - distanceFromBottom
+            Offset(targetCenterX - restCenter.x, targetCenterY - restCenter.y)
+        } else {
+            Offset(0f, SgMotion.PlayerArtEnterOffsetY)
+        }
+    }
+
     suspend fun runExitAnimation() {
         if (reducedMotion) {
-            artScale.snapTo(SgMotion.PlayerArtMiniScale)
-            artOffsetY.snapTo(SgMotion.PlayerArtEnterOffsetY)
+            dismissRootOffsetY.snapTo(0f)
+            if (hasRealSharedTransition) {
+                artScale.snapTo(1f)
+                artOffsetX.snapTo(0f)
+                artOffsetY.snapTo(0f)
+            } else {
+                artScale.snapTo(SgMotion.PlayerArtMiniScale)
+                artOffsetX.snapTo(0f)
+                artOffsetY.snapTo(SgMotion.PlayerArtEnterOffsetY)
+            }
             chromeAlpha.snapTo(0f)
             return
         }
+        if (hasRealSharedTransition) {
+            // Identité stricte sur le nœud partagé avant le pop : le morph est 100 % shared element.
+            dismissRootOffsetY.snapTo(0f)
+            artScale.snapTo(1f)
+            artOffsetX.snapTo(0f)
+            artOffsetY.snapTo(0f)
+            chromeAlpha.snapTo(0f)
+            return
+        }
+        val target = miniArtDismissTarget()
         kotlinx.coroutines.coroutineScope {
             launch { chromeAlpha.animateTo(0f, animationSpec = SgMotion.playerChromeExitSpec()) }
-            launch { artOffsetY.animateTo(SgMotion.PlayerArtEnterOffsetY, animationSpec = SgMotion.playerArtOffsetExitSpec()) }
+            launch { artOffsetX.animateTo(target.x, animationSpec = SgMotion.playerArtOffsetExitSpec()) }
+            launch { artOffsetY.animateTo(target.y, animationSpec = SgMotion.playerArtOffsetExitSpec()) }
             launch { artScale.animateTo(SgMotion.PlayerArtMiniScale, animationSpec = SgMotion.playerArtExitSpec()) }
+        }
+    }
+
+    // Dismiss vertical interactif ("peek annulable" Player → Mini) : pendant le
+    // swipe down, on interpole EN DIRECT (snapTo, pas d'anim) entre l'état ouvert
+    // et la cible mini-player (même géométrie que `runExitAnimation`) — la pochette
+    // et le chrome suivent le doigt au pixel près, sans attendre le relâchement.
+    // `snapTo` dans un coroutine lancé à chaque évènement de drag est le pattern
+    // standard Compose pour piloter un `Animatable` depuis un geste bas niveau
+    // (pas de `AnchoredDraggableState` ici : Player/Lyrics/dismiss cohabitent sur
+    // les 4 mêmes Animatable déjà utilisés par le morph ouverture/fermeture, plus
+    // simple que d'introduire un second système de drag en parallèle).
+    suspend fun applyDismissDrag(rawProgress: Float) {
+        val p = rawProgress.coerceIn(0f, 1f)
+        chromeAlpha.snapTo(lerpFloat(1f, 0f, p))
+        if (hasRealSharedTransition) {
+            // Feedback au doigt sans altérer les bornes du shared element : le morph
+            // pochette ↔ mini-player est délégué au pop NavHost (source de vérité unique).
+            dismissRootOffsetY.snapTo(p * dismissDragDistancePx * 0.55f)
+        } else {
+            val target = miniArtDismissTarget()
+            artScale.snapTo(lerpFloat(1f, SgMotion.PlayerArtMiniScale, p))
+            artOffsetX.snapTo(lerpFloat(0f, target.x, p))
+            artOffsetY.snapTo(lerpFloat(0f, target.y, p))
+        }
+    }
+
+    // Relâché avant le seuil → annulation : spring back vers l'état plein écran
+    // (pas un simple snap, pour un feedback "élastique" cohérent avec le reste
+    // de la motion de l'app, cf. SgMotion.SpringSnappy déjà utilisé sur les press).
+    suspend fun cancelDismissDrag() {
+        if (hasRealSharedTransition) {
+            kotlinx.coroutines.coroutineScope {
+                launch { dismissRootOffsetY.animateTo(0f, animationSpec = SgMotion.SpringSnappy) }
+                launch { chromeAlpha.animateTo(1f, animationSpec = SgMotion.tweenFastOf()) }
+            }
+        } else {
+            kotlinx.coroutines.coroutineScope {
+                launch { artScale.animateTo(1f, animationSpec = SgMotion.SpringSnappy) }
+                launch { artOffsetX.animateTo(0f, animationSpec = SgMotion.SpringSnappy) }
+                launch { artOffsetY.animateTo(0f, animationSpec = SgMotion.SpringSnappy) }
+                launch { chromeAlpha.animateTo(1f, animationSpec = SgMotion.tweenFastOf()) }
+            }
+        }
+    }
+
+    // Mode vinyle : rotation continue tant que isPlaying=true, gelée à l'angle
+    // courant sinon ("pause = stop", pas de reset à 0 — cf. Animatable qui
+    // conserve sa dernière valeur quand la coroutine qui l'anime est annulée).
+    val vinylRotation = remember { Animatable(0f) }
+    LaunchedEffect(vinylModeEnabled, isPlaying, reducedMotion) {
+        if (vinylModeEnabled && isPlaying && !reducedMotion) {
+            while (true) {
+                vinylRotation.animateTo(
+                    targetValue = vinylRotation.value + 360f,
+                    animationSpec = tween(durationMillis = 8000, easing = LinearEasing)
+                )
+            }
         }
     }
 
@@ -187,38 +361,80 @@ fun PlayerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .offset { IntOffset(0, dismissRootOffsetY.value.toInt()) }
+            .onSizeChanged { screenWidthPx = it.width.toFloat().coerceAtLeast(1f) }
+            // Peek horizontal Player → Paroles : le Player glisse vers la gauche au
+            // même rythme que Paroles entre par la droite (cf. LyricsScreen, même
+            // `lyricsPeekProgress` partagé côté AppNavigation). `size` est la taille
+            // réelle du layout au moment du dessin — pas besoin de re-mesurer.
+            .graphicsLayer { translationX = -lyricsPeekProgress * size.width }
             .pointerInput(Unit) { detectTapGestures { } }
             .pointerInput(Unit) {
                 detectVerticalDragGestures(
                     onDragEnd = {
-                        when {
-                            verticalDragOffset > 120f -> dismissPlayer()
-                            verticalDragOffset < -120f -> onSwipeUp()
+                        val offset = verticalDragOffset
+                        if (reducedMotion) {
+                            // "Skip peek, cut simple" : pas de suivi au doigt, juste le
+                            // seuil fixe d'origine, tranché net.
+                            when {
+                                offset > 120f -> dismissPlayer()
+                                offset < -120f -> onSwipeUp()
+                            }
+                        } else {
+                            val wasDismissDragging = isDismissDragging
+                            scope.launch {
+                                when {
+                                    wasDismissDragging && offset / dismissDragDistancePx >= dismissCommitFraction ->
+                                        dismissPlayer()
+                                    wasDismissDragging -> cancelDismissDrag()
+                                    offset < -120f -> onSwipeUp()
+                                }
+                            }
                         }
                         verticalDragOffset = 0f
+                        isDismissDragging = false
                     },
-                    onDragCancel = { verticalDragOffset = 0f },
+                    onDragCancel = {
+                        if (!reducedMotion && isDismissDragging) {
+                            scope.launch { cancelDismissDrag() }
+                        }
+                        verticalDragOffset = 0f
+                        isDismissDragging = false
+                    },
                     onVerticalDrag = { change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Float ->
                         change.consume()
                         verticalDragOffset += dragAmount
+                        // Seul le drag vers le BAS pilote le dismiss "peek" (le swipe vers
+                        // le haut ouvre la file d'attente, geste distinct — cf. onSwipeUp,
+                        // volontairement resté au seuil simple, hors périmètre de la demande).
+                        if (!reducedMotion && !isExiting) {
+                            if (verticalDragOffset > 0f) {
+                                isDismissDragging = true
+                                val p = verticalDragOffset / dismissDragDistancePx
+                                scope.launch { applyDismissDrag(p) }
+                            } else if (isDismissDragging) {
+                                isDismissDragging = false
+                                scope.launch { applyDismissDrag(0f) }
+                            }
+                        }
                     }
                 )
             }
-            // Swipe horizontal Player → Paroles, au même niveau que le drag sur la
+            // Peek horizontal Player → Paroles, au même niveau que le drag sur la
             // pochette (qui change de piste) : la pochette consomme déjà ses propres
             // deltas horizontaux (cf. plus bas), donc ce détecteur ne se déclenche
             // que pour un swipe démarré ailleurs sur l'écran (header, titre, slider,
             // contrôles) — pas de conflit avec le changement de piste au doigt.
+            // Rapporte un delta normalisé (signe : swipe gauche → +progrès) à
+            // AppNavigation, seul propriétaire du progrès partagé avec LyricsScreen.
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
-                    onDragEnd = {
-                        if (lyricsSwipeOffsetX < -100f) onOpenLyrics()
-                        lyricsSwipeOffsetX = 0f
-                    },
-                    onDragCancel = { lyricsSwipeOffsetX = 0f },
+                    onDragStart = { onLyricsPeekDragStart() },
+                    onDragEnd = { onLyricsPeekDragEnd() },
+                    onDragCancel = { onLyricsPeekDragEnd() },
                     onHorizontalDrag = { change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Float ->
                         change.consume()
-                        lyricsSwipeOffsetX += dragAmount
+                        onLyricsPeekDrag(-dragAmount / screenWidthPx)
                     }
                 )
             }
@@ -246,16 +462,18 @@ fun PlayerScreen(
             )
         }
         
-        // Couche d'assombrissement
+        // Couche de teinte ambiance — dérivée de la pochette (ambiencePalette), pas
+        // d'un simple accent brut : reste lisible et cohérente avec le thème actif
+        // (sombre OU clair), cf. problème "Clair Argent ne suit pas la pochette".
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            displayAccent.copy(alpha = 0.35f),
-                            MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
-                            MaterialTheme.colorScheme.background.copy(alpha = 0.95f)
+                            ambiencePalette.scrimTop,
+                            ambiencePalette.scrimMid,
+                            ambiencePalette.scrimBottom
                         )
                     )
                 )
@@ -304,7 +522,7 @@ fun PlayerScreen(
                     letterSpacing = 2.sp
                 )
 
-                SgTapTarget(onClick = { showOptionsMenu = true }) {
+                SgTapTarget(onClick = onOpenPlayerOptions) {
                     Box(
                         modifier = Modifier
                             .size(40.dp)
@@ -314,71 +532,9 @@ fun PlayerScreen(
                     ) {
                         Icon(
                             painter = androidx.compose.ui.res.painterResource(R.drawable.ic_options),
-                            contentDescription = "Options",
+                            contentDescription = "Options de lecture",
                             tint = TextPrimary,
                             modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    // Hick's Law (lawsofux.com/hicks-law) : le menu ne liste que les
-                    // actions absentes de la rangée de boutons du bas (Favori, File,
-                    // Vitesse, Infos, Paroles) pour ne pas dupliquer les choix et
-                    // garder une décision rapide.
-                    DropdownMenu(
-                        expanded = showOptionsMenu,
-                        onDismissRequest = { showOptionsMenu = false },
-                        modifier = Modifier.background(CardSurface)
-                    ) {
-                        DropdownMenuItem(
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(painter = painterResource(R.drawable.ic_options), contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Partager", color = TextPrimary)
-                                }
-                            },
-                            onClick = {
-                                showOptionsMenu = false
-                                onShare()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.Image, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Partager la carte", color = TextPrimary)
-                                }
-                            },
-                            onClick = {
-                                showOptionsMenu = false
-                                onShareCard()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.Edit, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Modifier métadonnées", color = TextPrimary)
-                                }
-                            },
-                            onClick = {
-                                showOptionsMenu = false
-                                onEditMetadata()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(painter = painterResource(R.drawable.ic_settings), contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Définir comme sonnerie", color = TextPrimary)
-                                }
-                            },
-                            onClick = {
-                                showOptionsMenu = false
-                                onSetRingtone()
-                            }
                         )
                     }
                 }
@@ -386,24 +542,46 @@ fun PlayerScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Pochette
+            // Pochette — bornes de taille/position partagées avec le mini-player
+            // (sgSharedAlbumArt) quand un vrai SharedTransitionLayout est disponible ;
+            // sinon repli sur le morph manuel artScale/artOffsetY (cf. plus haut).
             Box(
                 modifier = Modifier
-                    .offset {
-                        IntOffset(
-                            dragOffsetX.toInt(),
-                            (artOffsetY.value + verticalDragOffset.coerceAtLeast(0f)).toInt()
+                    // Doit rester AVANT `.offset{}` : voir le commentaire sur
+                    // `artRestCenterPx` plus haut (position stable, non affectée
+                    // par notre propre décalage appliqué juste après).
+                    .onGloballyPositioned { coordinates ->
+                        val posInRoot = coordinates.positionInRoot()
+                        artRestCenterPx = Offset(
+                            posInRoot.x + coordinates.size.width / 2f,
+                            posInRoot.y + coordinates.size.height / 2f
                         )
                     }
+                    // Y n'ajoute plus `verticalDragOffset` brut : le dismiss interactif
+                    // (`applyDismissDrag`) pilote déjà `artOffsetY` en continu pendant le
+                    // drag, en visant la vraie position du mini-player (pas juste "suivre
+                    // le doigt sans direction") — cf. plus haut.
+                    .then(
+                        if (hasRealSharedTransition) {
+                            // Swipe horizontal piste suivante/précédente uniquement — pas de morph manuel.
+                            Modifier.offset { IntOffset(dragOffsetX.toInt(), 0) }
+                        } else {
+                            Modifier
+                                .offset {
+                                    IntOffset(
+                                        (dragOffsetX + artOffsetX.value).toInt(),
+                                        artOffsetY.value.toInt()
+                                    )
+                                }
+                                .graphicsLayer {
+                                    scaleX = artScale.value
+                                    scaleY = artScale.value
+                                }
+                        }
+                    )
                     .fillMaxWidth(0.82f)
                     .aspectRatio(1f)
-                    .graphicsLayer {
-                        scaleX = artScale.value
-                        scaleY = artScale.value
-                    }
-                    .border(1.dp, displayAccent.copy(alpha = 0.22f), RoundedCornerShape(SgRadius.xl))
-                    .clip(RoundedCornerShape(SgRadius.xl))
-                    .background(SurfaceElevated)
+                    .sgSharedAlbumArt(key = "album_art_${song.id}")
                     .pointerInput(player.mediaItemCount) {
                         detectHorizontalDragGestures(
                             onDragEnd = {
@@ -430,24 +608,49 @@ fun PlayerScreen(
                     },
                 contentAlignment = Alignment.Center
             ) {
-                if (song.albumArtUri != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(song.albumArtUri)
-                            .crossfade(SgMotion.MediumMs)
-                            .build(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_songs),
-                        contentDescription = null,
-                        tint = TextSecondary,
-                        modifier = Modifier.size(80.dp)
-                    )
+                Crossfade(
+                    targetState = vinylModeEnabled,
+                    animationSpec = SgMotion.tweenMediumOf(),
+                    label = "vinylMode"
+                ) { vinylOn ->
+                    if (vinylOn) {
+                        VinylDisc(
+                            song = song,
+                            accentColor = displayAccent,
+                            rotationDegrees = vinylRotation.value,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .border(1.dp, displayAccent.copy(alpha = 0.22f), RoundedCornerShape(SgRadius.xl))
+                                .clip(RoundedCornerShape(SgRadius.xl))
+                                .background(SurfaceElevated),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (song.albumArtUri != null) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(song.albumArtUri)
+                                        .crossfade(SgMotion.MediumMs)
+                                        .build(),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_songs),
+                                    contentDescription = null,
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(80.dp)
+                                )
+                            }
+                        }
+                    }
                 }
+
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -473,7 +676,11 @@ fun PlayerScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .sgSharedBounds(key = "track_meta_${song.id}")
+                    ) {
                         Text(
                             text = song.title,
                             color = TextPrimary,
@@ -502,8 +709,24 @@ fun PlayerScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
+            // Indicateur discret des réglages actifs — une seule pilule tappable
+            // ouvrant la sheet Options (gapless/crossfade/sleep regroupés là-bas).
+            PlayerActiveModesIndicator(
+                gaplessEnabled = gaplessEnabled,
+                crossfadeDurationMs = crossfadeDurationMs,
+                sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
+                playbackSpeed = playbackSpeed,
+                playbackPitch = playbackPitch,
+                equalizerEnabled = equalizerEnabled,
+                equalizerPresetLabel = equalizerPresetLabel,
+                vinylModeEnabled = vinylModeEnabled,
+                accentColor = displayAccent,
+                onClick = onOpenPlayerOptions
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
             // Slider
             var isSeeking by remember { mutableStateOf(false) }
             var seekPosition by remember { mutableStateOf(0f) }
@@ -629,106 +852,220 @@ fun PlayerScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
+            // Accès secondaires essentiels : file d'attente + paroles (le reste
+            // vit dans la sheet Options, bouton header ⋯).
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier.fillMaxWidth(0.88f),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                PlayerActionButton(
-                    iconRes = if (isFavorite) R.drawable.ic_favorite_filled else R.drawable.ic_favorite_outline,
-                    label = "Favori",
-                    tint = if (isFavorite) FavoritePink else TextSecondary,
-                    onClick = onToggleFavorite
-                )
-                PlayerActionButton(
-                    iconRes = R.drawable.ic_queue,
-                    label = "File",
-                    tint = TextSecondary,
-                    onClick = onOpenQueue
-                )
-                PlayerActionButton(
-                    iconRes = R.drawable.ic_sort,
-                    label = if (playbackSpeed == playbackSpeed.toLong().toFloat()) {
-                        "Vitesse ${playbackSpeed.toLong()}x"
-                    } else {
-                        "Vitesse ${playbackSpeed}x"
-                    },
-                    tint = if (playbackSpeed != 1f) displayAccent else TextSecondary,
-                    onClick = onOpenPlaybackSpeed
-                )
-                PlayerActionButton(
-                    iconRes = R.drawable.ic_songs,
-                    label = "Infos",
-                    tint = TextSecondary,
-                    onClick = onShowInfo
-                )
-                PlayerActionButton(
-                    icon = Icons.Filled.Lyrics,
-                    label = "Paroles",
-                    tint = TextSecondary,
-                    onClick = onOpenLyrics
-                )
+                SgTapTarget(
+                    onClick = onOpenQueue,
+                    modifier = Modifier.weight(0.35f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(SgRadius.pill))
+                            .background(GlassSurface.copy(alpha = 0.55f))
+                            .border(1.dp, GlassBorder.copy(alpha = 0.35f), RoundedCornerShape(SgRadius.pill))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_queue),
+                            contentDescription = "File d'attente",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("File", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+                SgTapTarget(
+                    onClick = onOpenLyrics,
+                    modifier = Modifier.weight(0.65f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(SgRadius.pill))
+                            .background(displayAccent.copy(alpha = 0.18f))
+                            .border(1.dp, displayAccent.copy(alpha = 0.4f), RoundedCornerShape(SgRadius.pill))
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Lyrics,
+                            contentDescription = "Paroles",
+                            tint = displayAccent,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Paroles", color = displayAccent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
             }
         }
     }
 }
 
+/**
+ * Pilule discrète affichée uniquement quand au moins un réglage secondaire est
+ * actif (crossfade, minuterie, vitesse, EQ, vinyle…). Un tap ouvre la sheet
+ * Options — pas de rangée de chips permanente sur le viewport principal.
+ */
 @Composable
-private fun PlayerActionButton(
-    iconRes: Int,
-    label: String,
-    tint: Color,
+private fun PlayerActiveModesIndicator(
+    gaplessEnabled: Boolean,
+    crossfadeDurationMs: Int,
+    sleepTimerRemainingSeconds: Int?,
+    playbackSpeed: Float,
+    playbackPitch: Float,
+    equalizerEnabled: Boolean,
+    equalizerPresetLabel: String,
+    vinylModeEnabled: Boolean,
+    accentColor: Color,
     onClick: () -> Unit
 ) {
-    Column(
-        // Cible tactile ≥48dp (Fitts's Law — lawsofux.com/fittss-law) : le glyphe
-        // reste petit (22dp) mais la zone cliquable respecte le minimum M3.
+    val tokens = buildList {
+        if (crossfadeDurationMs > 0) {
+            add(PlaybackPreferences.crossfadeLabel(crossfadeDurationMs))
+        } else if (!gaplessEnabled) {
+            add("Sans gapless")
+        }
+        formatSleepTimerDisplay(sleepTimerRemainingSeconds)?.let { add(it) }
+        if (playbackSpeed != 1f) {
+            add(if (playbackSpeed == playbackSpeed.toLong().toFloat()) "${playbackSpeed.toLong()}x" else "${playbackSpeed}x")
+        }
+        if (playbackPitch != 1f) {
+            add("Pitch ${if (playbackPitch == playbackPitch.toLong().toFloat()) playbackPitch.toLong() else playbackPitch}x")
+        }
+        if (equalizerEnabled && equalizerPresetLabel != "Normal") {
+            add(equalizerPresetLabel)
+        } else if (!equalizerEnabled) {
+            add("EQ off")
+        }
+        if (vinylModeEnabled) add("Vinyle")
+    }
+    if (tokens.isEmpty()) return
+
+    val summary = tokens.take(2).joinToString(" · ")
+    val overflow = tokens.size - 2
+
+    Row(
         modifier = Modifier
-            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
             .clip(RoundedCornerShape(SgRadius.pill))
+            .background(accentColor.copy(alpha = 0.12f))
+            .border(1.dp, accentColor.copy(alpha = 0.3f), RoundedCornerShape(SgRadius.pill))
             .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            painter = painterResource(iconRes),
-            contentDescription = label,
-            tint = tint,
-            modifier = Modifier.size(22.dp)
+            imageVector = Icons.Filled.Tune,
+            contentDescription = null,
+            tint = accentColor,
+            modifier = Modifier.size(14.dp)
         )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(label, color = TextSecondary, fontSize = 11.sp)
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = if (overflow > 0) "$summary +$overflow" else summary,
+            color = accentColor,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
-
+/**
+ * Disque vinyle : pochette rendue comme le "label" central d'un disque circulaire
+ * avec sillons concentriques et trou d'axe, tournant en continu tant que la
+ * lecture est active (cf. `vinylRotation` dans PlayerScreen — la rotation se
+ * fige à l'angle courant sur pause, ne revient pas à 0).
+ */
 @Composable
-private fun PlayerActionButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    tint: Color,
-    onClick: () -> Unit
+private fun VinylDisc(
+    song: Song,
+    accentColor: Color,
+    rotationDegrees: Float,
+    modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = Modifier
-            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-            .clip(RoundedCornerShape(SgRadius.pill))
-            .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    Box(
+        modifier = modifier
+            .graphicsLayer { rotationZ = rotationDegrees }
+            .clip(CircleShape)
+            .background(
+                Brush.radialGradient(
+                    listOf(Color(0xFF2E2E2E), Color(0xFF0C0C0C), Color.Black)
+                )
+            )
+            .border(1.dp, accentColor.copy(alpha = 0.3f), CircleShape),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = tint,
-            modifier = Modifier.size(22.dp)
+        // Sillons du vinyle : anneaux concentriques discrets.
+        Box(
+            modifier = Modifier
+                .fillMaxSize(0.92f)
+                .clip(CircleShape)
+                .border(1.dp, Color.White.copy(alpha = 0.06f), CircleShape)
         )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(label, color = TextSecondary, fontSize = 11.sp)
+        Box(
+            modifier = Modifier
+                .fillMaxSize(0.80f)
+                .clip(CircleShape)
+                .border(1.dp, Color.White.copy(alpha = 0.06f), CircleShape)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize(0.68f)
+                .clip(CircleShape)
+                .border(1.dp, Color.White.copy(alpha = 0.05f), CircleShape)
+        )
+
+        // Label central = pochette de l'album.
+        Box(
+            modifier = Modifier
+                .fillMaxSize(0.56f)
+                .clip(CircleShape)
+                .border(1.dp, accentColor.copy(alpha = 0.4f), CircleShape)
+                .background(SurfaceElevated),
+            contentAlignment = Alignment.Center
+        ) {
+            if (song.albumArtUri != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(song.albumArtUri)
+                        .crossfade(SgMotion.MediumMs)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(
+                    painter = painterResource(R.drawable.ic_songs),
+                    contentDescription = null,
+                    tint = TextSecondary,
+                    modifier = Modifier.size(48.dp)
+                )
+            }
+        }
+
+        // Trou de l'axe.
+        Box(
+            modifier = Modifier
+                .fillMaxSize(0.06f)
+                .clip(CircleShape)
+                .background(GraphiteAbyss)
+                .border(1.dp, accentColor.copy(alpha = 0.5f), CircleShape)
+        )
     }
 }
 

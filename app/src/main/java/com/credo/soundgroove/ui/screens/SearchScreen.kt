@@ -40,6 +40,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.components.SongListItem
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.util.MediaPermissions
@@ -193,10 +194,8 @@ fun SearchScreen(
             }
 
             if (!hasPermission) {
-                SearchEmptyState(
-                    icon = {
-                        Icon(Icons.Default.Lock, null, tint = accentColor, modifier = Modifier.size(52.dp))
-                    },
+                SgEmptyState(
+                    icon = Icons.Default.Lock,
                     title = "Accès à la musique requis",
                     subtitle = "Autorisez SoundGroove à lire vos fichiers audio pour rechercher dans votre bibliothèque.",
                     actionLabel = "Accorder la permission",
@@ -216,17 +215,16 @@ fun SearchScreen(
                         contentPadding = PaddingValues(horizontal = SgSpacing.lg, vertical = SgSpacing.md)
                     ) {
                         item {
-                            SearchEmptyState(
-                                icon = {
-                                    Icon(Icons.Default.Search, null, tint = accentColor.copy(alpha = 0.85f), modifier = Modifier.size(48.dp))
-                                },
+                            SgEmptyState(
+                                icon = Icons.Default.Search,
                                 title = "Rechercher dans votre bibliothèque",
                                 subtitle = if (selectedFilter != null) {
                                     "Filtre « ${selectedFilter!!.label} » actif — saisissez un mot-clé."
                                 } else {
                                     "Saisissez un titre, un album, un artiste, une playlist ou un dossier."
                                 },
-                                compact = true
+                                compact = true,
+                                accentColor = accentColor
                             )
                             Spacer(modifier = Modifier.height(SgSpacing.lg))
                             Row(
@@ -281,10 +279,8 @@ fun SearchScreen(
                     ) {
                     if (!hasResults) {
                         item {
-                            SearchEmptyState(
-                                icon = {
-                                    Icon(Icons.Default.SearchOff, null, tint = TextTertiary, modifier = Modifier.size(48.dp))
-                                },
+                            SgEmptyState(
+                                icon = Icons.Default.SearchOff,
                                 title = "Aucun résultat pour « $searchQuery »",
                                 subtitle = when (selectedFilter) {
                                     SearchFilter.Songs -> "Essayez un autre titre ou artiste."
@@ -408,59 +404,6 @@ private fun SearchFilterRow(
                     onFilterSelected(if (selectedFilter == filter) null else filter)
                 }
             )
-        }
-    }
-}
-
-@Composable
-private fun SearchEmptyState(
-    icon: @Composable () -> Unit,
-    title: String,
-    subtitle: String,
-    modifier: Modifier = Modifier,
-    compact: Boolean = false,
-    actionLabel: String? = null,
-    accentColor: Color = TextPrimary,
-    onAction: (() -> Unit)? = null
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .then(
-                if (compact) Modifier.padding(vertical = SgSpacing.xl)
-                else Modifier.fillMaxHeight().padding(horizontal = SgSpacing.xl)
-            ),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = if (compact) Arrangement.Top else Arrangement.Center
-    ) {
-        icon()
-        Spacer(modifier = Modifier.height(SgSpacing.md))
-        Text(
-            text = title,
-            color = TextPrimary,
-            fontWeight = FontWeight.SemiBold,
-            style = MaterialTheme.typography.titleMedium,
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(SgSpacing.xs))
-        Text(
-            text = subtitle,
-            color = TextSecondary,
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center
-        )
-        if (actionLabel != null && onAction != null) {
-            Spacer(modifier = Modifier.height(SgSpacing.lg))
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(SgRadius.md))
-                    .background(accentColor)
-                    .clickable { onAction() }
-                    .padding(horizontal = SgSpacing.lg, vertical = SgSpacing.sm),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(actionLabel, color = Color.White, fontWeight = FontWeight.Bold)
-            }
         }
     }
 }

@@ -10,9 +10,9 @@ import androidx.compose.ui.graphics.Color
 
 /**
  * Trois identités visuelles distinctes :
- * - [NOIR_ABSOLU] : noir profond, accent cyan (identité icône)
- * - [GRAPHITE] : graphite mat, accent argent/platine
- * - [ARGENT_CLAIR] : thème clair (fond blanc, texte sombre)
+ * - [NOIR_ABSOLU] : noir profond, accent violet signature
+ * - [GRAPHITE] : graphite mat, accent violet atténué + argent
+ * - [ARGENT_CLAIR] : thème clair (fond blanc, violet profond WCAG)
  */
 enum class AppTheme {
     NOIR_ABSOLU,
@@ -34,7 +34,7 @@ private val NoirAbsoluSemantic = SgSemanticColors(
     glassHighlight = Color(0x1FFFFFFF),
     scrimOverlay = Color(0x99000000),
     sheetDeep = Color(0xFF000000),
-    heroGradientTop = Color(0xFF0A1520),
+    heroGradientTop = Color(0xFF12081A),
     heroGradientBottom = Color(0xFF000000),
     isLight = false,
 )
@@ -53,7 +53,7 @@ private val GraphiteSemantic = SgSemanticColors(
     glassHighlight = Color(0x18FFFFFF),
     scrimOverlay = Color(0x990A0A0C),
     sheetDeep = Color(0xFF0A0A0C),
-    heroGradientTop = Color(0xFF25262C),
+    heroGradientTop = Color(0xFF1A1228),
     heroGradientBottom = Color(0xFF0A0A0C),
     isLight = false,
 )
@@ -72,18 +72,18 @@ private val ArgentClairSemantic = SgSemanticColors(
     glassHighlight = Color(0x24FFFFFF),
     scrimOverlay = Color(0x661A1D23),
     sheetDeep = Color(0xFFEEF1F5),
-    heroGradientTop = Color(0xFFE8ECF1),
+    heroGradientTop = Color(0xFFF0EBFA),
     heroGradientBottom = Color(0xFFF7F8FA),
     isLight = true,
 )
 
 private val NoirAbsoluColors = darkColorScheme(
-    primary = BrandCyan,
-    onPrimary = Color(0xFF001820),
-    primaryContainer = Color(0xFF003544),
-    onPrimaryContainer = BrandCyan,
-    secondary = BrandCyan,
-    onSecondary = Color(0xFF001820),
+    primary = BrandPurple,
+    onPrimary = Color.White,
+    primaryContainer = BrandPurpleContainer,
+    onPrimaryContainer = BrandPurpleSoft,
+    secondary = BrandPurpleMuted,
+    onSecondary = Color.White,
     background = AbsoluteBlackBg,
     onBackground = NoirAbsoluSemantic.textPrimary,
     surface = NoirAbsoluSemantic.cardSurface,
@@ -96,11 +96,11 @@ private val NoirAbsoluColors = darkColorScheme(
 )
 
 private val GraphiteColors = darkColorScheme(
-    primary = SilverAccent,
-    onPrimary = Color(0xFF15161A),
-    primaryContainer = Color(0xFF3C4048),
-    onPrimaryContainer = IceAccent,
-    secondary = IceAccent,
+    primary = BrandPurpleMuted,
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF3B0764),
+    onPrimaryContainer = BrandPurpleSoft,
+    secondary = SilverAccent,
     onSecondary = Color(0xFF15161A),
     background = GraphiteAbyss,
     onBackground = GraphiteSemantic.textPrimary,
@@ -114,14 +114,14 @@ private val GraphiteColors = darkColorScheme(
 )
 
 private val ArgentClairColors = lightColorScheme(
-    primary = ArgentClairAccent,
+    primary = BrandPurpleDeep,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFB2EBF2),
-    onPrimaryContainer = Color(0xFF004D5A),
+    primaryContainer = Color(0xFFEDE9FE),
+    onPrimaryContainer = Color(0xFF4C1D95),
     secondary = SteelBlue,
     onSecondary = Color.White,
-    tertiary = BrandCyan,
-    onTertiary = Color(0xFF001820),
+    tertiary = BrandPurple,
+    onTertiary = Color.White,
     background = ArgentClairBg,
     onBackground = ArgentClairSemantic.textPrimary,
     surface = ArgentClairSemantic.cardSurface,
@@ -140,20 +140,20 @@ fun semanticColorsForTheme(appTheme: AppTheme): SgSemanticColors = when (appThem
 }
 
 fun accentColorForTheme(appTheme: AppTheme): Color = when (appTheme) {
-    AppTheme.NOIR_ABSOLU -> BrandCyan
-    AppTheme.ARGENT_CLAIR -> ArgentClairAccent
-    AppTheme.GRAPHITE -> SilverAccent
+    AppTheme.NOIR_ABSOLU -> BrandPurple
+    AppTheme.ARGENT_CLAIR -> BrandPurpleDeep
+    AppTheme.GRAPHITE -> BrandPurpleMuted
 }
 
 fun themeBackgroundBrush(appTheme: AppTheme): Brush = when (appTheme) {
     AppTheme.NOIR_ABSOLU -> Brush.verticalGradient(
-        listOf(Color(0xFF0A1014), Color(0xFF040404), Color(0xFF000000))
+        listOf(Color(0xFF12081A), Color(0xFF040404), Color(0xFF000000))
     )
     AppTheme.ARGENT_CLAIR -> Brush.verticalGradient(
         listOf(Color(0xFFFFFFFF), Color(0xFFF7F8FA), Color(0xFFEEF1F5))
     )
     AppTheme.GRAPHITE -> Brush.verticalGradient(
-        listOf(Color(0xFF20222A), Color(0xFF0D0E10), Color(0xFF0A0A0C))
+        listOf(Color(0xFF1E1828), Color(0xFF0D0E10), Color(0xFF0A0A0C))
     )
 }
 

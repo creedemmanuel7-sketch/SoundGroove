@@ -39,6 +39,9 @@ import com.credo.soundgroove.MetadataOverrideEntity
 import com.credo.soundgroove.notifications.SmartNotificationManager
 import com.credo.soundgroove.ui.theme.AppTheme
 import com.credo.soundgroove.util.CoverArtStorage
+import com.credo.soundgroove.util.EqualizerBandInfo
+import com.credo.soundgroove.util.EqualizerManager
+import com.credo.soundgroove.util.EqualizerPreset
 import com.credo.soundgroove.util.MetadataEditor
 import com.credo.soundgroove.util.PlaybackPreferences
 import com.credo.soundgroove.util.PlayerGuards
@@ -151,6 +154,18 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _crossfadeDurationMs = MutableStateFlow(prefs.getInt(PlaybackPreferences.KEY_CROSSFADE_MS, 0))
     val crossfadeDurationMs: StateFlow<Int> = _crossfadeDurationMs.asStateFlow()
+
+    private val _vinylModeEnabled = MutableStateFlow(prefs.getBoolean(PlaybackPreferences.KEY_VINYL_MODE_ENABLED, false))
+    val vinylModeEnabled: StateFlow<Boolean> = _vinylModeEnabled.asStateFlow()
+
+    private val _equalizerEnabled = MutableStateFlow(PlaybackPreferences.isEqualizerEnabled(getApplication()))
+    val equalizerEnabled: StateFlow<Boolean> = _equalizerEnabled.asStateFlow()
+
+    private val _equalizerPreset = MutableStateFlow(PlaybackPreferences.equalizerPreset(getApplication()))
+    val equalizerPreset: StateFlow<EqualizerPreset> = _equalizerPreset.asStateFlow()
+
+    private val _equalizerBands = MutableStateFlow<List<EqualizerBandInfo>>(emptyList())
+    val equalizerBands: StateFlow<List<EqualizerBandInfo>> = _equalizerBands.asStateFlow()
 
     private val _metadataOverrides = MutableStateFlow<Map<Long, MetadataOverrideEntity>>(emptyMap())
     val metadataOverrides: StateFlow<Map<Long, MetadataOverrideEntity>> = _metadataOverrides.asStateFlow()
@@ -430,6 +445,8 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                     .setArtist(artist)
                     .setAlbumTitle(album)
                     .setArtworkUri(display.albumArtUri)
+                    .setIsPlayable(true)
+                    .setIsBrowsable(false)
                     .build()
             )
             .build()
@@ -600,8 +617,12 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     fun skipPrevious() {
         val controller = _mediaController.value ?: return
-        if (controller.mediaItemCount > 0 && controller.currentMediaItemIndex > 0) {
+        if (controller.currentPosition > PREVIOUS_RESTART_THRESHOLD_MS) {
+            controller.seekTo(0)
+        } else if (controller.hasPreviousMediaItem()) {
             controller.seekToPreviousMediaItem()
+        } else {
+            controller.seekTo(0)
         }
     }
     fun seekTo(position: Long) = _mediaController.value?.seekTo(position)
@@ -626,13 +647,48 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     fun setGaplessEnabled(enabled: Boolean) {
         _gaplessEnabled.value = enabled
         prefs.edit().putBoolean(PlaybackPreferences.KEY_GAPLESS_ENABLED, enabled).apply()
+        PlaybackService.instance?.refreshPlaybackSettings()
     }
 
     fun setCrossfadeDurationMs(ms: Int) {
-        val valid = PlaybackPreferences.CROSSFADE_OPTIONS_MS.find { it == ms } ?: 0
+        val valid = PlaybackPreferences.CROSSFADE_OPTIONS_MS.find { it == ms }
+            ?: PlaybackPreferences.CROSSFADE_OPTIONS_MS.minByOrNull { kotlin.math.abs(it - ms) }
+            ?: 0
         _crossfadeDurationMs.value = valid
         prefs.edit().putInt(PlaybackPreferences.KEY_CROSSFADE_MS, valid).apply()
+        PlaybackService.instance?.refreshPlaybackSettings()
     }
+
+    fun setVinylModeEnabled(enabled: Boolean) {
+        _vinylModeEnabled.value = enabled
+        prefs.edit().putBoolean(PlaybackPreferences.KEY_VINYL_MODE_ENABLED, enabled).apply()
+    }
+
+    fun toggleVinylMode() = setVinylModeEnabled(!_vinylModeEnabled.value)
+
+    fun refreshEqualizerBands() {
+        _equalizerBands.value = EqualizerManager.getBandInfos()
+    }
+
+    fun setEqualizerEnabled(enabled: Boolean) {
+        _equalizerEnabled.value = enabled
+        EqualizerManager.setEnabled(getApplication(), enabled)
+    }
+
+    fun setEqualizerPreset(preset: EqualizerPreset) {
+        _equalizerPreset.value = preset
+        EqualizerManager.applyPreset(getApplication(), preset)
+        refreshEqualizerBands()
+    }
+
+    fun setEqualizerBandLevel(bandIndex: Int, levelMillibels: Short) {
+        EqualizerManager.setBandLevel(getApplication(), bandIndex, levelMillibels)
+        _equalizerPreset.value = EqualizerPreset.CUSTOM
+        refreshEqualizerBands()
+    }
+
+    fun playbackModeLabel(): String =
+        PlaybackPreferences.playbackModeLabel(_gaplessEnabled.value, _crossfadeDurationMs.value)
 
     fun clearMetadataEditMessage() {
         _metadataEditMessage.value = null
@@ -896,5 +952,6 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     companion object {
         private const val RESUME_REMINDER_DELAY_MS = 15 * 60 * 1000L
         private const val SESSION_SUMMARY_THRESHOLD_SECONDS = 20 * 60
+        private const val PREVIOUS_RESTART_THRESHOLD_MS = 3_000L
     }
 }

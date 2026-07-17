@@ -1,19 +1,100 @@
-# Shared element mini-player → player (reporté)
+# Shared element mini-player → Player (livré)
 
-## Livré (scénario C)
-- Transition **scale + slide** améliorée sur la route `player` dans `AppNavigation.kt` (entrée/sortie plus fluide).
-- `MiniPlayer.kt` accepte un `albumArtModifier` optionnel pour brancher un shared element ultérieurement.
+## Contexte
 
-## Non livré (volontairement)
-- **SharedTransitionLayout / sharedElement** entre le mini-player overlay et `PlayerScreen`.
+Précédemment (voir historique git), cette fonctionnalité avait été **reportée** :
+le mini-player étant rendu en overlay hors des destinations `NavHost`, il ne
+disposait pas de l'`AnimatedVisibilityScope` requis par `Modifier.sharedElement`.
+Un morph manuel (scale + offset sur la pochette du Player) servait de filet de
+sécurité en attendant.
 
-## Raison
-Le mini-player est rendu **en dehors** des destinations `NavHost` (overlay en bas d'écran). L'API `Modifier.sharedElement` exige un `AnimatedVisibilityScope` fourni par chaque destination Compose Navigation. L'overlay n'a pas ce scope sans refactor (déplacer le mini-player dans une route dédiée ou dupliquer la logique player).
+Cette passe **AGENT PLAYER EXPERIENCE** livre l'implémentation réelle.
 
-Modifier `PlayerScreen` (gestes swipe horizontal/vertical, queue) pour expérimental `@ExperimentalSharedTransitionApi` augmente le risque de régression avec le travail **AGENT STABILITÉ**.
+## Livré
 
-## Piste d'implémentation future
-1. Envelopper `NavHost` dans `SharedTransitionLayout`.
-2. Utiliser la même clé (`rememberSharedContentState("album_art")`) sur la pochette du mini-player et celle du player.
-3. Obtenir `AnimatedVisibilityScope` via la destination courante (`LocalAnimatedVisibilityScope`) ou migrer le mini-player vers une route `mini_player` transparente.
-4. Référence : [Share element transitions with Navigation Compose](https://developer.android.com/develop/ui/compose/animation/shared-elements/navigation)
+- **`SharedTransitionLayout` réel** (Compose Animation 1.7, `@ExperimentalSharedTransitionApi`)
+  enveloppant tout le contenu de `AppNavigation` (NavHost + overlays), au lieu du
+  morph manuel seul.
+- La pochette **morphe réellement** (position + taille interpolées nativement par
+  Compose, pas par des `Animatable` gérés à la main) entre :
+  - le mini-player overlay de `AppNavigation` (affiché sur Recherche, Album,
+    Artiste, Playlist, Dossier…) ;
+  - le mini-player **intégré à `MainScreen`** (onglet Accueil) ;
+  - la pochette plein écran de `PlayerScreen` (destination `player` du `NavHost`).
+- **Fallback conservé** : si le contexte `SharedTransitionScope`/`AnimatedVisibilityScope`
+  n'est pas disponible (ex. preview, futur call site non raccordé), `PlayerScreen`
+  retombe automatiquement sur son ancien morph manuel scale + position. Aucune
+  régression possible sur un appelant non migré.
+
+## Implémentation
+
+### CompositionLocal plutôt que paramètres (`ui/theme/Motion.kt`)
+
+Le mini-player existe à **deux endroits distincts** (overlay `AppNavigation` et
+overlay interne à `MainScreen`/`LegacyMainHost`) et la pochette plein écran vit
+dans une destination `NavHost`. Faire remonter le `SharedTransitionScope` par
+paramètre à travers toute la hiérarchie d'appel (`MainScreen`, `LegacyMainHost`…)
+aurait nécessité de modifier de nombreuses signatures pour un simple pass-through.
+
+La documentation officielle recommande explicitement une alternative dans ce cas :
+
+> In order to use multiple scopes, save your required scopes in a
+> `CompositionLocal`, use context receivers in Kotlin, or pass the scopes as
+> parameters to your functions.
+> — [Shared element transitions in Compose](https://developer.android.com/develop/ui/compose/animation/shared-elements)
+
+D'où deux `CompositionLocal` ajoutés dans `Motion.kt` :
+
+- `LocalSharedTransitionScope` — le `SharedTransitionScope` actif (fourni une
+  seule fois, au niveau `AppNavigation`).
+- `LocalSgAnimatedVisibilityScope` — l'`AnimatedVisibilityScope` du point
+  d'entrée courant (fourni à chaque call site : destination `player` du
+  `NavHost`, `AnimatedVisibility` du mini-player overlay, `AnimatedVisibility`
+  du mini-player intégré à `MainScreen`).
+
+Deux fonctions exposent ce contexte **sans jamais faire fuiter de type
+expérimental dans une signature publique** (donc sans forcer `PlayerScreen` ou
+`MiniPlayer` à s'annoter `@OptIn(ExperimentalSharedTransitionApi::class)`) :
+
+- `rememberSgSharedElementActive(): Boolean` — pour désactiver un comportement
+  alternatif (ici : le morph manuel de `PlayerScreen`).
+- `Modifier.sgSharedAlbumArt(key: String): Modifier` — applique
+  `Modifier.sharedElement(...)` si le contexte est disponible, sinon no-op.
+
+### Câblage
+
+- **`AppNavigation.kt`** : `@OptIn(ExperimentalSharedTransitionApi::class)`,
+  tout le contenu enveloppé dans `SharedTransitionLayout { ... }`, qui fournit
+  `LocalSharedTransitionScope`. La destination `player` fournit
+  `LocalSgAnimatedVisibilityScope` via `this@composable` (l'`AnimatedContentScope`
+  du `NavHost`, qui implémente `AnimatedVisibilityScope`). Le mini-player overlay
+  est passé d'un simple `if` à un `AnimatedVisibility` pour exposer son propre scope.
+- **`MainScreen.kt`** : le mini-player intégré (onglet Accueil) fournit lui aussi
+  `LocalSgAnimatedVisibilityScope` via son `AnimatedVisibility` existant — aucun
+  changement de signature, juste un `CompositionLocalProvider` autour de l'appel.
+- **`MiniPlayer.kt`** : `albumArtModifier` a désormais pour valeur par défaut
+  `Modifier.sgSharedAlbumArt(key = "album_art_${song.id}")` — le shared element
+  est donc actif par défaut partout où `MiniPlayer` est utilisé, sans qu'aucun
+  appelant n'ait à y penser.
+- **`PlayerScreen.kt`** : la pochette applique le même `sgSharedAlbumArt` (même
+  clé, basée sur `song.id`, donc stable entre mini-player et plein écran pour un
+  même morceau). `rememberSgSharedElementActive()` désactive l'animation manuelle
+  `artScale`/`artOffsetY` quand le shared element réel prend le relais (sinon les
+  deux animations se cumuleraient et produiraient un à-coup) ; le fondu du
+  "chrome" (titre, slider, contrôles) reste géré manuellement dans tous les cas.
+
+### Pourquoi c'est sûr
+
+- Aucune signature publique n'expose de type `@ExperimentalSharedTransitionApi` :
+  seuls `Motion.kt` (déclaration) et `AppNavigation.kt` (utilisation directe de
+  `SharedTransitionLayout`) portent l'annotation `@OptIn`.
+  `PlayerScreen`/`MiniPlayer`/`MainScreen` restent inchangés sur ce plan.
+- Le fallback manuel (scale + position) reste intact et continue de fonctionner
+  pour tout appelant hors contexte `SharedTransitionLayout`.
+- Les gestes existants de `PlayerScreen` (swipe horizontal = piste suivante/
+  précédente, swipe vertical = fermer/ouvrir la file) sont inchangés : le
+  shared element est appliqué en plus du `pointerInput` existant, pas à sa place.
+
+## Référence
+
+[Navigation with shared elements — Android Developers](https://developer.android.com/develop/ui/compose/animation/shared-elements/navigation)

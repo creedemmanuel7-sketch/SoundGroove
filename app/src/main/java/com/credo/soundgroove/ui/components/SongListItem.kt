@@ -44,7 +44,11 @@ fun SongListItem(
     accentColor: Color,
     onClick: () -> Unit,
     onMenuClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // Distinct de `isCurrentSong` (qui peut rester vrai en pause) : pilote seulement
+    // l'anim des barres du badge "en lecture". Par défaut = isCurrentSong pour les
+    // appelants qui ne suivent pas encore l'état play/pause (comportement inchangé).
+    isPlaying: Boolean = isCurrentSong
 ) {
     val titleColor by animateColorAsState(
         targetValue = if (isCurrentSong) accentColor else TextPrimary,
@@ -75,14 +79,22 @@ fun SongListItem(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text(
-                text = song.title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = titleColor,
-                fontWeight = if (isCurrentSong) FontWeight.SemiBold else FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Piste en cours : badge barres d'égaliseur animées, pas juste un titre
+                // teinté — beaucoup plus visible en scan rapide d'une longue liste.
+                if (isCurrentSong) {
+                    NowPlayingBadge(isPlaying = isPlaying, accentColor = accentColor)
+                }
+                Text(
+                    text = song.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = titleColor,
+                    fontWeight = if (isCurrentSong) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
             Text(
                 text = song.artist,
                 style = MaterialTheme.typography.bodySmall,

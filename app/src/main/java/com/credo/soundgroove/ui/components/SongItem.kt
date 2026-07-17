@@ -143,14 +143,22 @@ fun SongItem(
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = song.title,
-                    color = if (isPlaying) accentColor else TextPrimary,
-                    fontSize = 14.sp,
-                    fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Normal,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Cf. SongListItem : même badge barres animées, pour une identité "en
+                    // lecture" cohérente partout où une chanson peut apparaître en tête de liste.
+                    if (isPlaying) {
+                        NowPlayingBadge(isPlaying = true, accentColor = accentColor)
+                    }
+                    Text(
+                        text = song.title,
+                        color = if (isPlaying) accentColor else TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
                 Text(
                     text = song.artist,
                     color = TextSecondary,

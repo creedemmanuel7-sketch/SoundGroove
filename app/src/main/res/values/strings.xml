@@ -13,4 +13,6 @@
     <string name="widget_no_track">Aucun morceau</string>
     <string name="widget_album_art">Pochette album</string>
     <string name="widget_play_pause">Lecture / Pause</string>
+    <string name="widget_previous">Piste précédente</string>
+    <string name="widget_next">Piste suivante</string>
 </resources>

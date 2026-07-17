@@ -30,6 +30,7 @@ import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.AlbumArtThumb
+import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.components.EditMetadataBottomSheet
 import com.credo.soundgroove.ui.components.SongContextMenuSheet
 import com.credo.soundgroove.ui.components.SongInfoBottomSheet
@@ -308,40 +309,21 @@ fun PlaylistDetailScreen(
             // ── Song List ────────────────────────────────────────────────────
             if (playlist.songs.isEmpty()) {
                 item {
-                    Box(
+                    SgEmptyState(
+                        iconPainter = painterResource(
+                            if (playlist.isSmart) R.drawable.ic_shuffle else R.drawable.ic_songs
+                        ),
+                        title = if (playlist.isSmart) "Playlist vide pour l'instant" else "Cette playlist est vide",
+                        subtitle = if (playlist.isSmart) {
+                            "Écoute de la musique pour remplir cette playlist automatiquement."
+                        } else {
+                            "Appuie sur ⋮ sur une chanson pour l'ajouter ici."
+                        },
+                        compact = true,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                painter = painterResource(
-                                    if (playlist.isSmart) R.drawable.ic_shuffle else R.drawable.ic_songs
-                                ),
-                                contentDescription = null,
-                                tint = TextSecondary,
-                                modifier = Modifier.size(52.dp)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                if (playlist.isSmart) "Playlist vide pour l'instant" else "Cette playlist est vide",
-                                color = TextPrimary,
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                if (playlist.isSmart) {
-                                    "Écoute de la musique pour remplir cette playlist automatiquement."
-                                } else {
-                                    "Appuie sur ⋮ sur une chanson pour l'ajouter ici."
-                                },
-                                color = TextSecondary.copy(0.85f),
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
+                            .padding(vertical = SgSpacing.xxl)
+                    )
                 }
             } else {
                 itemsIndexed(playlist.songs) { index, song ->
@@ -472,6 +454,7 @@ fun PlaylistDetailScreen(
                 song = song,
                 accentColor = accentColor,
                 onSave = { title, artist, album -> onSaveMetadata(song, title, artist, album) },
+                onSetCoverArt = { launchCoverPicker(song) },
                 onDismiss = { editSong = null }
             )
         }
