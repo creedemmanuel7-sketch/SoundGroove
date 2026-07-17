@@ -139,7 +139,27 @@ intermittence pendant cette passe).
 
 ---
 
-## 7. Sources consultées
+## 7. Références (sources prioritaires)
+
+| Source | Lien | Principe appliqué |
+|---|---|---|
+| **M3 Motion — how it works** | https://m3.material.io/styles/motion/overview/how-it-works | Motion guide l’attention ; enter decelerate / exit accelerate ; un porteur de mouvement dominant. |
+| **M3 Easing & duration** | https://m3.material.io/styles/motion/easing-and-duration | Tokens Short/Medium (~150/250/350 ms) → `FastMs` / `MediumMs` / `SlowMs` ; courbes Emphasized + Standard dans `SgMotion`. |
+| **NN/g — Animation duration** | https://www.nngroup.com/articles/animation-duration/ | UI ≤ ~100–400 ms (plafond pratique **≤ 350 ms** / `SlowMs`) ; ease-out à l’entrée, ease-in à la sortie ; respecter reduce motion. |
+| **Compose shared elements** | https://developer.android.com/develop/ui/compose/animation/shared-elements | `SharedTransitionLayout` + `sharedElement` / `sharedBounds` ; Customize : `boundsTransform` + `OverlayClip`. |
+| **Navigation + shared elements** | https://developer.android.com/develop/ui/compose/animation/shared-elements/navigation | Scopes via NavHost / CompositionLocal ; fade-only où le morph shared porte le mouvement. |
+
+### Principes appliqués (checklist)
+
+1. **Durées uniquement via tokens `SgMotion`** — pas de ms inventés hors `FastMs` (150), `MediumMs` (250), `SlowMs` (350), `PlayerMorphMs` (220), `ProgressMs` (500), springs existants.
+2. **Easing M3** — enter = Emphasized/Standard decelerate ; exit = Emphasized/Standard accelerate ; Linear réservé à la barre de progression.
+3. **Un seul porteur** — Player / album / artiste : shared morph + fade NavHost (pas de double slide).
+4. **Reduced motion** — `rememberSgReducedMotion()` (système OR Mode perf) snappe overlays, nav, shared, press scale, ThemeReveal, coils.
+5. **Micro-interactions** — `sgPressScale` (SpringSnappy + FastMs) sur CTA Lecture/Aléatoire, chips, bottom nav, contrôles file.
+
+---
+
+## 8. Sources consultées (historique)
 
 - Laws of UX — https://lawsofux.com
 - NN/g Articles — https://www.nngroup.com/articles/

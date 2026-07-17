@@ -174,7 +174,7 @@ private fun AppNavigationContent(
         showQueue = true
         scope.launch {
             if (reducedMotion) queueBannerProgress.snapTo(1f)
-            else queueBannerProgress.animateTo(1f, animationSpec = tween(SgMotion.MediumMs, easing = SgMotion.EmphasizedDecelerate))
+            else queueBannerProgress.animateTo(1f, animationSpec = tween(SgMotion.FastMs, easing = SgMotion.EmphasizedDecelerate))
         }
     }
 
@@ -183,7 +183,7 @@ private fun AppNavigationContent(
             if (reducedMotion) {
                 queueBannerProgress.snapTo(0f)
             } else {
-                queueBannerProgress.animateTo(0f, animationSpec = tween(SgMotion.MediumMs, easing = SgMotion.EmphasizedAccelerate))
+                queueBannerProgress.animateTo(0f, animationSpec = tween(SgMotion.FastMs, easing = SgMotion.EmphasizedAccelerate))
             }
             showQueue = false
         }
@@ -230,7 +230,7 @@ private fun AppNavigationContent(
             if (reducedMotion) {
                 lyricsPeekProgress.snapTo(0f)
             } else {
-                lyricsPeekProgress.animateTo(0f, animationSpec = tween(SgMotion.MediumMs, easing = SgMotion.EmphasizedAccelerate))
+                lyricsPeekProgress.animateTo(0f, animationSpec = tween(SgMotion.FastMs, easing = SgMotion.EmphasizedAccelerate))
             }
             if (lyricsPeekProgress.value <= 0.001f) lyricsMounted = false
         }
@@ -497,26 +497,49 @@ private fun AppNavigationContent(
                 val playlistId = backStackEntry.arguments?.getString("playlistId")?.toLongOrNull()
                 val playlist = playlists.find { it.id == playlistId }
 
-                playlist?.let {
+                if (playlist == null) {
+                    // Playlist absente (supprimée / id invalide) : ne jamais laisser un
+                    // composable vide (= écran blanc) sur cette route.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(com.credo.soundgroove.ui.theme.GraphiteAbyss)
+                    )
+                    LaunchedEffect(playlistId) {
+                        navController.popBackStack()
+                    }
+                } else {
                     PlaylistDetailScreen(
-                        playlist = it,
+                        playlist = playlist,
+                        librarySongs = songs,
                         currentSong = currentSong,
                         isPlaying = isPlaying,
                         favoriteSongs = favoriteSongs,
                         accentColor = accentColor,
                         onBack = { navController.popBackStack() },
-                        onPlaySong = { song -> viewModel.playPlaylist(it, song) },
+                        onPlaySong = { song -> viewModel.playPlaylist(playlist, song) },
                         onShufflePlay = {
-                            val shuffled = it.copy(songs = it.songs.shuffled())
+                            val shuffled = playlist.copy(songs = playlist.songs.shuffled())
                             viewModel.playPlaylist(shuffled)
                         },
                         onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
-                        onRemoveSongFromPlaylist = { songId -> viewModel.removeSongFromPlaylist(it.id, songId) },
-                        onDeletePlaylist = {
-                            viewModel.deletePlaylist(it.id)
-                            navController.popBackStack()
+                        onRemoveSongFromPlaylist = { songId ->
+                            viewModel.removeSongFromPlaylist(playlist.id, songId)
                         },
-                        onRenamePlaylist = { newName -> viewModel.renamePlaylist(it.id, newName) },
+                        onDeletePlaylist = {
+                            // Pop d'abord pour quitter le détail avant que le Flow
+                            // n'enlève la playlist (évite race écran blanc).
+                            navController.popBackStack()
+                            viewModel.deletePlaylist(playlist.id)
+                        },
+                        onRenamePlaylist = { newName -> viewModel.renamePlaylist(playlist.id, newName) },
+                        onAddSongsToPlaylist = { selected ->
+                            viewModel.addSongsToPlaylist(
+                                playlist.id,
+                                selected,
+                                startPosition = playlist.songs.size
+                            )
+                        },
                         onPlayNext = { song -> viewModel.playNext(song) },
                         onAddToQueue = { song -> viewModel.addToQueue(song) },
                         onAddToPlaylist = { /* sélecteur de playlist non disponible depuis le détail */ },

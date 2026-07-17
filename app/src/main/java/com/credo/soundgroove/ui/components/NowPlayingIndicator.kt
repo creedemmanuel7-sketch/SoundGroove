@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.credo.soundgroove.ui.theme.SgMotion
+import com.credo.soundgroove.ui.theme.rememberSgReducedMotion
 
 /**
  * Badge "en lecture" — remplace un simple titre coloré par un indicateur beaucoup
@@ -72,6 +73,7 @@ fun NowPlayingBars(
     modifier: Modifier = Modifier,
     barHeight: androidx.compose.ui.unit.Dp = 12.dp
 ) {
+    val reducedMotion = rememberSgReducedMotion()
     Box(
         modifier = modifier.height(barHeight),
         contentAlignment = Alignment.BottomCenter
@@ -82,19 +84,24 @@ fun NowPlayingBars(
         ) {
             repeat(3) { index ->
                 val infiniteTransition = rememberInfiniteTransition(label = "nowPlayingBar$index")
-                val heightFraction by infiniteTransition.animateFloat(
-                    initialValue = 0.28f,
-                    targetValue = 1f,
+                val animatedFraction by infiniteTransition.animateFloat(
+                    initialValue = 0.28f + index * 0.08f,
+                    targetValue = 1f - index * 0.05f,
                     animationSpec = infiniteRepeatable(
-                        animation = tween(380 + index * 130, easing = SgMotion.Standard),
+                        animation = tween(SgMotion.SlowMs, easing = SgMotion.Standard),
                         repeatMode = RepeatMode.Reverse
                     ),
                     label = "nowPlayingBarHeight$index"
                 )
+                val heightFraction = when {
+                    reducedMotion -> 0.42f + index * 0.12f
+                    isPlaying -> animatedFraction
+                    else -> 0.42f
+                }
                 Box(
                     modifier = Modifier
                         .width(3.dp)
-                        .height(barHeight * (if (isPlaying) heightFraction else 0.42f))
+                        .height(barHeight * heightFraction)
                         .background(accentColor, RoundedCornerShape(1.dp))
                 )
             }

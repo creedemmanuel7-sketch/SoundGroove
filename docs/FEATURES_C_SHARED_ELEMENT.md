@@ -107,12 +107,20 @@ expérimental dans une signature publique** (donc sans forcer `PlayerScreen` ou
 
 Helpers dans `Motion.kt`. Radius : albums `SgRadius.xl` (~24dp) des deux côtés ; artistes `CircleShape`.
 
+**Customize (Compose)** : `sgSharedAlbumArt` / `sgSharedBounds` utilisent `boundsTransform` tokenisé
+(`PlayerMorphMs` / `MediumMs` + Emphasized decelerate) et `OverlayClip` (`SgAlbumArtSharedClip`,
+`SgAlbumCoverSharedClip`, `SgArtistAvatarSharedClip`, `CircleShape` pour play) — cf.
+[Customize shared element transitions](https://developer.android.com/develop/ui/compose/animation/shared-elements#customize).
+
 **Nav** : destinations `album/{…}` et `artist/{…}` en **fade only** (comme le Player) pour éviter double-morph avec le slide H `navForward`. `HOME`/`SEARCH` sortent en fade vers ces routes. Scopes `LocalSgAnimatedVisibilityScope` fournis sur `HOME`, `SEARCH`, `ALBUM_DETAIL`, `ARTIST_DETAIL`, `PLAYER` et les `AnimatedVisibility` mini-player.
 
-**Sources shared album/artiste** : Bibliothèque (`LibraryTab`) **et** Recherche (`SearchScreen` — rows résultats Albums / Artistes, mêmes clés `sgAlbumCoverSharedKey` / `sgArtistAvatarSharedKey`). Les chansons Recherche lancent la lecture sans ouvrir `Player` → pas de câblage `album_art_` / `play_control_` sur ces rows.
+**Sources shared album/artiste** : Bibliothèque (`LibraryTab`) **et** Recherche (`SearchScreen` — rows résultats Albums / Artistes, mêmes clés `sgAlbumCoverSharedKey` / `sgArtistAvatarSharedKey`). Accueil : pas de tuiles album détail → pas de câblage `album_cover_` (skip volontaire). Les chansons Recherche lancent la lecture sans ouvrir `Player` → pas de câblage `album_art_` / `play_control_` sur ces rows (sauf `SongListItem` avec `enablePlayerSharedElements`).
 
 **Reduced motion / Mode performance** : `sgShared*` et `rememberSgSharedElementActive()` no-op / snap (inchangé).
 
 ## Référence
 
-[Navigation with shared elements — Android Developers](https://developer.android.com/develop/ui/compose/animation/shared-elements/navigation)
+[Shared element transitions in Compose](https://developer.android.com/develop/ui/compose/animation/shared-elements) ·
+[Navigation with shared elements](https://developer.android.com/develop/ui/compose/animation/shared-elements/navigation) ·
+[M3 Easing & duration](https://m3.material.io/styles/motion/easing-and-duration) ·
+[NN/g Animation duration](https://www.nngroup.com/articles/animation-duration/)

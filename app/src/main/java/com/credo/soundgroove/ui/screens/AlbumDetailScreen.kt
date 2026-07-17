@@ -81,7 +81,10 @@ fun AlbumDetailScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .sgSharedBounds(key = sgAlbumCoverSharedKey(albumName))
+                            .sgSharedBounds(
+                                key = sgAlbumCoverSharedKey(albumName),
+                                clipShape = SgAlbumCoverSharedClip,
+                            )
                             .clip(RoundedCornerShape(SgRadius.xl))
                     ) {
                         if (albumCover != null) {

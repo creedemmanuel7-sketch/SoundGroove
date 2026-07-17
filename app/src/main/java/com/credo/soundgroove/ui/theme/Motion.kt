@@ -5,6 +5,8 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -12,6 +14,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -111,7 +114,7 @@ object SgMotion {
 
     fun navForwardEnter(): EnterTransition =
         slideInHorizontally(initialOffsetX = { it / 2 }, animationSpec = tweenMediumOf()) +
-            fadeIn(tweenMediumOf())
+            fadeIn(tweenFastOf())
 
     fun navForwardExit(): ExitTransition =
         slideOutHorizontally(targetOffsetX = { -it / 4 }, animationSpec = tweenFastAccelOf()) +
@@ -119,13 +122,14 @@ object SgMotion {
 
     fun navPopEnter(): EnterTransition =
         slideInHorizontally(initialOffsetX = { -it / 4 }, animationSpec = tweenMediumOf()) +
-            fadeIn(tweenMediumOf())
+            fadeIn(tweenFastOf())
 
     fun navPopExit(): ExitTransition =
-        slideOutHorizontally(targetOffsetX = { it / 2 }, animationSpec = tweenMediumAccelOf()) +
+        slideOutHorizontally(targetOffsetX = { it / 2 }, animationSpec = tweenFastAccelOf()) +
             fadeOut(tweenFastAccelOf())
 
-    fun fadeEnter(): EnterTransition = fadeIn(tweenMediumOf())
+    /** Fade chrome / overlay / détail : FastMs pour une prise en compte immédiate. */
+    fun fadeEnter(): EnterTransition = fadeIn(tweenFastOf())
     fun fadeExit(): ExitTransition = fadeOut(tweenFastAccelOf())
 
     // ── Player (mini-player → plein écran) ──────────────────────────────────
@@ -209,43 +213,67 @@ object SgMotion {
     // dès que la sheet devient visible — cf. §1 "apparition micro-anim courte,
     // pas un pop brutal".
 
-    /** Apparition contenu sheet : scale+fade court, découplé du slide natif. */
-    fun sheetContentEnterSpec(): AnimationSpec<Float> = tween(MediumMs, easing = EmphasizedDecelerate)
+    /** Apparition contenu sheet : scale+fade FastMs, découplé du slide natif. */
+    fun sheetContentEnterSpec(): AnimationSpec<Float> = tween(FastMs, easing = EmphasizedDecelerate)
+
+    /** Sortie contenu sheet : accelerate (M3 exit). */
+    fun sheetContentExitSpec(): AnimationSpec<Float> = tween(FastMs, easing = EmphasizedAccelerate)
 
     /** Échelle de départ du contenu (proche de 1 : effet subtil, pas un "zoom"). */
     const val SheetContentInitialScale = 0.94f
 
     // ── Overlays (mini-player, queue, sheets) ───────────────────────────────
+    // Enter decelerate / exit accelerate (M3) ; durées ≤ MediumMs (NN/g 200–300 ms
+    // pour changements d'écran substantiels, jamais > SlowMs).
 
     fun slideUpEnter(): EnterTransition =
-        slideInVertically(initialOffsetY = { it }, animationSpec = tweenMediumOf()) +
-            fadeIn(tweenMediumOf())
+        slideInVertically(initialOffsetY = { it }, animationSpec = tweenFastOf()) +
+            fadeIn(tweenFastOf())
 
     fun slideUpExit(): ExitTransition =
         slideOutVertically(targetOffsetY = { it }, animationSpec = tweenFastAccelOf()) +
             fadeOut(tweenFastAccelOf())
 
     fun queueEnter(): EnterTransition =
-        slideInVertically(initialOffsetY = { it / 2 }, animationSpec = tweenMediumOf()) +
+        slideInVertically(initialOffsetY = { it / 2 }, animationSpec = tweenFastOf()) +
             fadeIn(tweenFastOf())
 
     fun queueExit(): ExitTransition =
         slideOutVertically(targetOffsetY = { it / 2 }, animationSpec = tweenFastAccelOf()) +
             fadeOut(tweenFastAccelOf())
 
+    /** Overlay enter respectant reduced motion / Mode perf (snap). */
+    fun slideUpEnter(reducedMotion: Boolean): EnterTransition =
+        if (reducedMotion) EnterTransition.None else slideUpEnter()
+
+    fun slideUpExit(reducedMotion: Boolean): ExitTransition =
+        if (reducedMotion) ExitTransition.None else slideUpExit()
+
+    fun queueEnter(reducedMotion: Boolean): EnterTransition =
+        if (reducedMotion) EnterTransition.None else queueEnter()
+
+    fun queueExit(reducedMotion: Boolean): ExitTransition =
+        if (reducedMotion) ExitTransition.None else queueExit()
+
     // ── Paroles (Player ↔ Lyrics) ───────────────────────────────────────────
     // Écrans "pairs" plein écran : glissement horizontal (pas vertical, pour ne
     // pas se confondre avec l'ouverture/fermeture du Player lui-même) — cohérent
     // avec le swipe horizontal qui bascule entre les deux (cf. PlayerScreen /
-    // LyricsScreen).
+    // LyricsScreen). Enter ≤ SlowMs (M3 Medium3 / NN/g plafond ~350–400 ms).
 
     fun lyricsEnter(): EnterTransition =
         slideInHorizontally(initialOffsetX = { it }, animationSpec = tweenSlowOf()) +
-            fadeIn(tweenMediumOf())
+            fadeIn(tweenFastOf())
 
     fun lyricsExit(): ExitTransition =
         slideOutHorizontally(targetOffsetX = { it }, animationSpec = tweenMediumAccelOf()) +
             fadeOut(tweenFastAccelOf())
+
+    fun lyricsEnter(reducedMotion: Boolean): EnterTransition =
+        if (reducedMotion) EnterTransition.None else lyricsEnter()
+
+    fun lyricsExit(reducedMotion: Boolean): ExitTransition =
+        if (reducedMotion) ExitTransition.None else lyricsExit()
 
     // ── Tab / chip content ──────────────────────────────────────────────────
 
@@ -262,12 +290,12 @@ object SgMotion {
             toTab < fromTab -> -1
             else -> 0
         }
-        val enter = fadeIn(tweenMediumOf()) +
+        val enter = fadeIn(tweenFastOf()) +
             slideInHorizontally(
                 initialOffsetX = { direction * it / 10 },
-                animationSpec = tweenMediumOf()
+                animationSpec = tweenFastOf()
             ) +
-            scaleIn(initialScale = 0.985f, animationSpec = tweenMediumOf())
+            scaleIn(initialScale = 0.985f, animationSpec = tweenFastOf())
         val exit = fadeOut(tweenFastAccelOf()) +
             slideOutHorizontally(
                 targetOffsetX = { -direction * it / 10 },
@@ -442,16 +470,43 @@ fun rememberSgSharedElementActive(): Boolean {
 }
 
 /**
+ * BoundsTransform SgMotion pour shared elements — remplace le spring défaut
+ * Compose par un tween tokenisé (Customize :
+ * https://developer.android.com/develop/ui/compose/animation/shared-elements#customize).
+ * Enter-feel decelerate ; durée [PlayerMorphMs] (≤ SlowMs).
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+val SgSharedElementBoundsTransform = BoundsTransform { _, _ ->
+    tween(durationMillis = SgMotion.PlayerMorphMs, easing = SgMotion.EmphasizedDecelerate)
+}
+
+/** BoundsTransform plus court pour sharedBounds texte / CTA (FastMs). */
+@OptIn(ExperimentalSharedTransitionApi::class)
+val SgSharedBoundsTransform = BoundsTransform { _, _ ->
+    tween(durationMillis = SgMotion.FastMs, easing = SgMotion.EmphasizedDecelerate)
+}
+
+/** Clip overlay pochette mini (sm) → Player (xl) pendant le morph. */
+val SgAlbumArtSharedClip: Shape = RoundedCornerShape(SgRadius.xl)
+
+/** Clip overlay grille album → détail. */
+val SgAlbumCoverSharedClip: Shape = RoundedCornerShape(SgRadius.xl)
+
+/** Clip overlay avatar artiste (cercle des deux côtés). */
+val SgArtistAvatarSharedClip: Shape = CircleShape
+
+/**
  * Applique un vrai `Modifier.sharedElement` (pochette mini-player ↔ Player plein
  * écran, morph de position + taille géré nativement par Compose) si le contexte
  * [LocalSharedTransitionScope]/[LocalSgAnimatedVisibilityScope] est disponible.
  *
- * Sinon ne fait rien : c'est le filet de sécurité qui permet à `MiniPlayer` et
- * `PlayerScreen` de rester utilisables hors SharedTransitionLayout (previews,
- * futurs call sites non encore raccordés) — dans ce cas, `PlayerScreen` retombe
- * sur son morph manuel scale+position existant (cf. `runEnterAnimation`).
+ * Customisé (doc Customize) : [SgSharedElementBoundsTransform] +
+ * [clipInOverlayDuringTransition] ([SgAlbumArtSharedClip]) pour un morph de
+ * coins cohérent pendant l'overlay — un seul porteur de mouvement (pas de
+ * slide NavHost en parallèle, cf. [SgMotion.playerEnter]).
  *
- * Mode perf / reduced motion : no-op (snap, pas de morph).
+ * Sinon ne fait rien : filet de sécurité hors SharedTransitionLayout (previews…)
+ * — `PlayerScreen` retombe sur son morph manuel. Mode perf / reduced : no-op.
  */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -462,32 +517,50 @@ fun Modifier.sgSharedAlbumArt(key: String): Modifier {
     return with(sharedTransitionScope) {
         this@sgSharedAlbumArt.sharedElement(
             rememberSharedContentState(key = key),
-            animatedVisibilityScope = animatedVisibilityScope
+            animatedVisibilityScope = animatedVisibilityScope,
+            boundsTransform = SgSharedElementBoundsTransform,
+            clipInOverlayDuringTransition = OverlayClip(SgAlbumArtSharedClip),
         )
     }
 }
 
 /**
- * Variante `sharedBounds` (pas `sharedElement`) pour les éléments texte partagés
- * entre le mini-player et le Player plein écran (titre, artiste) : le CONTENU
- * diffère (taille de police, mise en page) entre les deux, seules les BORNES
- * (position + taille du conteneur) doivent être interpolées nativement — c'est
- * exactement la distinction que fait la doc officielle entre les deux API :
+ * Variante `sharedBounds` (pas `sharedElement`) pour contenu visuellement
+ * différent (titre/artiste, play, couverture album, avatar) : seules les BORNES
+ * sont interpolées — distinction officielle sharedElement vs sharedBounds :
  * https://developer.android.com/develop/ui/compose/animation/shared-elements
  *
- * Même filet de sécurité que [sgSharedAlbumArt] : no-op hors contexte
- * `SharedTransitionLayout`/`AnimatedVisibilityScope`. Mode perf : no-op.
+ * [clipShape] optionnel active [OverlayClip] pendant la transition (radius /
+ * cercle). Enter/exit contenu : fade decelerate / accelerate (M3). Mode perf : no-op.
  */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun Modifier.sgSharedBounds(key: String): Modifier {
+fun Modifier.sgSharedBounds(
+    key: String,
+    clipShape: Shape? = null,
+): Modifier {
     if (rememberSgReducedMotion()) return this
     val sharedTransitionScope = LocalSharedTransitionScope.current ?: return this
     val animatedVisibilityScope = LocalSgAnimatedVisibilityScope.current ?: return this
     return with(sharedTransitionScope) {
-        this@sgSharedBounds.sharedBounds(
-            rememberSharedContentState(key = key),
-            animatedVisibilityScope = animatedVisibilityScope
-        )
+        val state = rememberSharedContentState(key = key)
+        if (clipShape != null) {
+            this@sgSharedBounds.sharedBounds(
+                state,
+                animatedVisibilityScope = animatedVisibilityScope,
+                enter = fadeIn(SgMotion.tweenFastOf()),
+                exit = fadeOut(SgMotion.tweenFastAccelOf()),
+                boundsTransform = SgSharedBoundsTransform,
+                clipInOverlayDuringTransition = OverlayClip(clipShape),
+            )
+        } else {
+            this@sgSharedBounds.sharedBounds(
+                state,
+                animatedVisibilityScope = animatedVisibilityScope,
+                enter = fadeIn(SgMotion.tweenFastOf()),
+                exit = fadeOut(SgMotion.tweenFastAccelOf()),
+                boundsTransform = SgSharedBoundsTransform,
+            )
+        }
     }
 }

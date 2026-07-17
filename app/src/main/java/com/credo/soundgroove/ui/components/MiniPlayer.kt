@@ -77,7 +77,10 @@ fun MiniPlayer(
     modifier: Modifier = Modifier,
     albumArtModifier: Modifier = Modifier.sgSharedAlbumArt(key = "album_art_${song.id}"),
     trackMetaModifier: Modifier = Modifier.sgSharedBounds(key = "track_meta_${song.id}"),
-    playControlModifier: Modifier = Modifier.sgSharedBounds(key = sgPlayControlSharedKey(song.id)),
+    playControlModifier: Modifier = Modifier.sgSharedBounds(
+        key = sgPlayControlSharedKey(song.id),
+        clipShape = CircleShape,
+    ),
     @Suppress("UNUSED_PARAMETER") gaplessEnabled: Boolean = true,
     @Suppress("UNUSED_PARAMETER") crossfadeDurationMs: Int = 0,
     albumCoverAccentEnabled: Boolean = false,

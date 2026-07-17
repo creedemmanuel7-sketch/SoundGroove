@@ -3,6 +3,7 @@ package com.credo.soundgroove.ui.components
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -68,7 +69,10 @@ fun SongListItem(
         Modifier
     }
     val playControlMod = if (enablePlayerSharedElements) {
-        Modifier.sgSharedBounds(key = sgPlayControlSharedKey(song.id))
+        Modifier.sgSharedBounds(
+            key = sgPlayControlSharedKey(song.id),
+            clipShape = CircleShape,
+        )
     } else {
         Modifier
     }
@@ -162,6 +166,21 @@ fun SongListItem(
                         modifier = Modifier.size(14.dp)
                     )
                 }
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onMenuClick),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_options),
+                    contentDescription = "Options",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }

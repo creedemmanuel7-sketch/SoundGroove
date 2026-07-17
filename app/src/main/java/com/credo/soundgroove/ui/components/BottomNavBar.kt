@@ -108,6 +108,7 @@ fun BottomNavBar(selectedTab: Int, accentColor: Color, onTabSelected: (Int) -> U
                 }
                 tabs.forEachIndexed { index, item ->
                     val selected = selectedTab == index
+                    val tabInteraction = remember(index) { MutableInteractionSource() }
                     // Pill sélection : couleurs FastMs (Mode perf = snap).
                     val tabBg by animateColorAsState(
                         targetValue = if (selected) accentColor.copy(alpha = 0.20f) else Color.Transparent,
@@ -122,9 +123,13 @@ fun BottomNavBar(selectedTab: Int, accentColor: Color, onTabSelected: (Int) -> U
                     Box(
                         modifier = Modifier
                             .weight(1f)
+                            .sgPressScale(tabInteraction, pressedScale = 0.94f, pressedAlpha = 0.85f)
                             .clip(RoundedCornerShape(SgRadius.pill))
                             .background(tabBg)
-                            .clickable { onTabSelected(index) }
+                            .clickable(
+                                interactionSource = tabInteraction,
+                                indication = null,
+                            ) { onTabSelected(index) }
                             .padding(vertical = SgSpacing.sm, horizontal = SgSpacing.xs),
                         contentAlignment = Alignment.Center
                     ) {

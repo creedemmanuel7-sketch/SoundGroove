@@ -171,9 +171,17 @@ fun LegacyMainHost(
             onHideFolder = { viewModel.hideFolder(it) },
             onUnhideFolder = { viewModel.unhideFolder(it) },
             onToggleFavorite = { viewModel.toggleFavorite(it) },
-            onCreatePlaylist = { viewModel.createPlaylist(it) },
+            onCreatePlaylist = { name, onCreated -> viewModel.createPlaylist(name, onCreated) },
             onPlaylistAddSong = { playlist, song ->
                 viewModel.addSongToPlaylist(playlist.id, song, playlist.songs.size)
+            },
+            onAddSongsToPlaylist = { playlistId, songsToAdd ->
+                val playlist = viewModel.playlists.value.find { it.id == playlistId }
+                viewModel.addSongsToPlaylist(
+                    playlistId,
+                    songsToAdd,
+                    startPosition = playlist?.songs?.size ?: 0
+                )
             },
             onPlaylistDelete = { viewModel.deletePlaylist(it.id) },
             onPlaylistRename = { playlist, newName -> viewModel.renamePlaylist(playlist.id, newName) },

@@ -333,7 +333,8 @@ fun SearchScreen(
                                         cornerRadius = SgRadius.xl,
                                         accentColor = accentColor,
                                         modifier = Modifier.sgSharedBounds(
-                                            key = sgAlbumCoverSharedKey(albumName)
+                                            key = sgAlbumCoverSharedKey(albumName),
+                                            clipShape = SgAlbumCoverSharedClip,
                                         )
                                     )
                                 }
@@ -361,7 +362,8 @@ fun SearchScreen(
                                         size = 46.dp,
                                         accentColor = accentColor,
                                         modifier = Modifier.sgSharedBounds(
-                                            key = sgArtistAvatarSharedKey(artistName)
+                                            key = sgArtistAvatarSharedKey(artistName),
+                                            clipShape = SgArtistAvatarSharedClip,
                                         )
                                     )
                                 }

@@ -2,8 +2,11 @@ package com.credo.soundgroove.ui.screens
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -83,6 +86,8 @@ import com.credo.soundgroove.ui.theme.SilverAccent
 import com.credo.soundgroove.ui.theme.SurfaceElevated
 import com.credo.soundgroove.ui.theme.TextPrimary
 import com.credo.soundgroove.ui.theme.sgPressScale
+import com.credo.soundgroove.ui.theme.sgCoilCrossfadeMs
+import com.credo.soundgroove.ui.theme.rememberSgReducedMotion
 import com.credo.soundgroove.ui.theme.sgSheetGradientBrush
 import com.credo.soundgroove.util.displayArtist
 import com.credo.soundgroove.util.displayTitle
@@ -105,12 +110,14 @@ fun QueueScreen(
     var itemDragOffset by remember { mutableStateOf(0f) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val reducedMotion = rememberSgReducedMotion()
     val safeCurrentIndex = currentIndex.coerceIn(0, (playlist.size - 1).coerceAtLeast(0))
     val currentSong = playlist.getOrNull(safeCurrentIndex)
 
-    LaunchedEffect(playlist.size, safeCurrentIndex) {
+    LaunchedEffect(playlist.size, safeCurrentIndex, reducedMotion) {
         if (playlist.isNotEmpty() && safeCurrentIndex in playlist.indices) {
-            listState.animateScrollToItem(safeCurrentIndex)
+            if (reducedMotion) listState.scrollToItem(safeCurrentIndex)
+            else listState.animateScrollToItem(safeCurrentIndex)
         }
     }
 
@@ -161,11 +168,11 @@ fun QueueScreen(
 
             AnimatedVisibility(
                 visible = currentSong != null,
-                enter = fadeIn(SgMotion.tweenFastOf()) + scaleIn(
+                enter = if (reducedMotion) EnterTransition.None else fadeIn(SgMotion.tweenFastOf()) + scaleIn(
                     initialScale = 0.96f,
                     animationSpec = SgMotion.tweenFastOf()
                 ),
-                exit = fadeOut(SgMotion.tweenFastAccelOf()) + scaleOut(
+                exit = if (reducedMotion) ExitTransition.None else fadeOut(SgMotion.tweenFastAccelOf()) + scaleOut(
                     targetScale = 0.96f,
                     animationSpec = SgMotion.tweenFastAccelOf()
                 )
@@ -184,8 +191,8 @@ fun QueueScreen(
 
             AnimatedVisibility(
                 visible = playlist.isNotEmpty(),
-                enter = fadeIn(SgMotion.tweenFastOf()),
-                exit = fadeOut(SgMotion.tweenFastAccelOf())
+                enter = if (reducedMotion) EnterTransition.None else fadeIn(SgMotion.tweenFastOf()),
+                exit = if (reducedMotion) ExitTransition.None else fadeOut(SgMotion.tweenFastAccelOf())
             ) {
                 Column {
                     Spacer(modifier = Modifier.height(SgSpacing.md))
@@ -198,11 +205,11 @@ fun QueueScreen(
             Box(modifier = Modifier.weight(1f)) {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = playlist.isEmpty(),
-                    enter = fadeIn(SgMotion.tweenMediumOf()) + scaleIn(
+                    enter = if (reducedMotion) EnterTransition.None else fadeIn(SgMotion.tweenFastOf()) + scaleIn(
                         initialScale = 0.94f,
-                        animationSpec = SgMotion.tweenMediumOf()
+                        animationSpec = SgMotion.tweenFastOf()
                     ),
-                    exit = fadeOut(SgMotion.tweenFastAccelOf()) + scaleOut(
+                    exit = if (reducedMotion) ExitTransition.None else fadeOut(SgMotion.tweenFastAccelOf()) + scaleOut(
                         targetScale = 0.94f,
                         animationSpec = SgMotion.tweenFastAccelOf()
                     ),
@@ -218,8 +225,8 @@ fun QueueScreen(
 
                 androidx.compose.animation.AnimatedVisibility(
                     visible = playlist.isNotEmpty(),
-                    enter = fadeIn(SgMotion.tweenFastOf()),
-                    exit = fadeOut(SgMotion.tweenFastAccelOf()),
+                    enter = if (reducedMotion) EnterTransition.None else fadeIn(SgMotion.tweenFastOf()),
+                    exit = if (reducedMotion) ExitTransition.None else fadeOut(SgMotion.tweenFastAccelOf()),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     LazyColumn(
@@ -384,6 +391,7 @@ private fun QueueNowPlayingBanner(
     isPlaying: Boolean,
     accentColor: Color
 ) {
+    val coilCrossfadeMs = sgCoilCrossfadeMs(SgMotion.FastMs)
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = SgRadius.md,
@@ -411,7 +419,7 @@ private fun QueueNowPlayingBanner(
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(song.albumArtUri)
-                            .crossfade(SgMotion.MediumMs)
+                            .crossfade(coilCrossfadeMs)
                             .build(),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
@@ -526,20 +534,24 @@ private fun QueueSwipeBackground(
     // Affiche « Retirer » seulement quand le swipe a une cible (évite le wash-out
     // du label blanc à travers la row au repos — row désormais opaque aussi).
     val revealed = !isCurrent && dismissState.targetValue != SwipeToDismissBoxValue.Settled
+    val reducedMotion = rememberSgReducedMotion()
+    val colorSpec = if (reducedMotion) snap<Color>() else SgMotion.tweenFastOf<Color>()
+    val floatSpec = if (reducedMotion) snap<Float>() else SgMotion.tweenFastOf()
+    val scaleSpec = if (reducedMotion) snap<Float>() else SgMotion.SpringSnappy
 
     val color by animateColorAsState(
         targetValue = if (revealed) ErrorRed.copy(alpha = 0.88f) else Color.Transparent,
-        animationSpec = SgMotion.tweenFastOf(),
+        animationSpec = colorSpec,
         label = "swipe_color"
     )
     val iconScale by animateFloatAsState(
         targetValue = if (revealed) 1f else 0.7f,
-        animationSpec = SgMotion.SpringSnappy,
+        animationSpec = scaleSpec,
         label = "swipe_icon_scale"
     )
     val labelAlpha by animateFloatAsState(
         targetValue = if (revealed) 1f else 0f,
-        animationSpec = SgMotion.tweenFastOf(),
+        animationSpec = floatSpec,
         label = "swipe_label_alpha"
     )
 
@@ -595,6 +607,7 @@ private fun QueueItemRow(
 ) {
     val scope = rememberCoroutineScope()
     val handleInteraction = remember { MutableInteractionSource() }
+    val coilCrossfadeMs = sgCoilCrossfadeMs(SgMotion.FastMs)
     val metaColor = TextPrimary.copy(alpha = 0.72f)
     val borderColor by animateColorAsState(
         targetValue = when {
@@ -675,7 +688,7 @@ private fun QueueItemRow(
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(song.albumArtUri)
-                            .crossfade(SgMotion.MediumMs)
+                            .crossfade(coilCrossfadeMs)
                             .build(),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
@@ -804,6 +817,7 @@ fun PlayerQueueBanner(
     val prevInteraction = remember { MutableInteractionSource() }
     val playInteraction = remember { MutableInteractionSource() }
     val nextInteraction = remember { MutableInteractionSource() }
+    val coilCrossfadeMs = sgCoilCrossfadeMs(SgMotion.FastMs)
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -836,7 +850,7 @@ fun PlayerQueueBanner(
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(song.albumArtUri)
-                                .crossfade(SgMotion.MediumMs)
+                                .crossfade(coilCrossfadeMs)
                                 .build(),
                             contentDescription = null,
                             contentScale = ContentScale.Crop,

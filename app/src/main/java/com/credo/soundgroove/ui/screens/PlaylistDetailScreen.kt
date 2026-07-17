@@ -31,6 +31,7 @@ import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.SmartPlaylistIds
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.AlbumArtThumb
+import com.credo.soundgroove.ui.components.AddSongsToPlaylistSheet
 import com.credo.soundgroove.ui.components.DualCtaBar
 import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.components.EditMetadataBottomSheet
@@ -45,6 +46,7 @@ import com.credo.soundgroove.util.displayTitle
 @Composable
 fun PlaylistDetailScreen(
     playlist: Playlist,
+    librarySongs: List<Song>,
     currentSong: Song?,
     isPlaying: Boolean,
     favoriteSongs: List<Song>,
@@ -56,6 +58,7 @@ fun PlaylistDetailScreen(
     onRemoveSongFromPlaylist: (Long) -> Unit,
     onDeletePlaylist: () -> Unit,
     onRenamePlaylist: (String) -> Unit,
+    onAddSongsToPlaylist: (List<Song>) -> Unit = {},
     onPlayNext: (Song) -> Unit = {},
     onAddToQueue: (Song) -> Unit = {},
     onAddToPlaylist: (Song) -> Unit = {},
@@ -65,11 +68,13 @@ fun PlaylistDetailScreen(
     var showRenameSheet by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showOptionsMenu by remember { mutableStateOf(false) }
+    var showAddSongsSheet by remember { mutableStateOf(false) }
     var songMenuTarget by remember { mutableStateOf<Song?>(null) }
     var infoSong by remember { mutableStateOf<Song?>(null) }
     var editSong by remember { mutableStateOf<Song?>(null) }
     val context = LocalContext.current
     val launchCoverPicker = rememberSongCoverArtPicker(onCoverSelected = onSetCoverArt)
+    val canEditContent = !playlist.isSmart
 
     Box(
         modifier = Modifier
@@ -166,7 +171,7 @@ fun PlaylistDetailScreen(
                             )
                         }
 
-                        if (!playlist.isSmart) {
+                        if (canEditContent) {
                             Box {
                                 Box(
                                     modifier = Modifier
@@ -187,6 +192,18 @@ fun PlaylistDetailScreen(
                                     onDismissRequest = { showOptionsMenu = false },
                                     modifier = Modifier.background(SurfaceElevated)
                                 ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Ajouter des titres", color = TextPrimary) },
+                                        onClick = { showOptionsMenu = false; showAddSongsSheet = true },
+                                        leadingIcon = {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_add),
+                                                contentDescription = null,
+                                                tint = TextSecondary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    )
                                     DropdownMenuItem(
                                         text = { Text("Renommer", color = TextPrimary) },
                                         onClick = { showOptionsMenu = false; showRenameSheet = true },
@@ -272,9 +289,12 @@ fun PlaylistDetailScreen(
                             playlist.isSmart ->
                                 "Écoute de la musique pour remplir cette playlist automatiquement."
                             else ->
-                                "Appuie sur ⋮ sur une chanson pour l'ajouter ici."
+                                "Ajoute des titres depuis ta bibliothèque pour commencer."
                         },
                         compact = true,
+                        actionLabel = if (canEditContent) "Ajouter des titres" else null,
+                        accentColor = accentColor,
+                        onAction = if (canEditContent) {{ showAddSongsSheet = true }} else null,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = SgSpacing.xxl)
@@ -424,6 +444,21 @@ fun PlaylistDetailScreen(
             )
         }
 
+        if (showAddSongsSheet && canEditContent) {
+            AddSongsToPlaylistSheet(
+                playlistName = playlist.name,
+                librarySongs = librarySongs,
+                alreadyInPlaylistIds = playlist.songs.map { it.id }.toSet(),
+                accentColor = accentColor,
+                onConfirm = { selected ->
+                    onAddSongsToPlaylist(selected)
+                    showAddSongsSheet = false
+                },
+                onDismiss = { showAddSongsSheet = false },
+                skipLabel = "Annuler"
+            )
+        }
+
         // Delete confirmation dialog
         if (showDeleteDialog) {
             AlertDialog(
@@ -432,7 +467,12 @@ fun PlaylistDetailScreen(
                 title = { Text("Supprimer la playlist ?", color = TextPrimary, fontWeight = FontWeight.Bold) },
                 text = { Text("\"${playlist.name}\" sera supprimée définitivement.", color = TextSecondary) },
                 confirmButton = {
-                    TextButton(onClick = { showDeleteDialog = false; onDeletePlaylist(); onBack() }) {
+                    TextButton(onClick = {
+                        showDeleteDialog = false
+                        // Navigation gérée par onDeletePlaylist (un seul pop — pas de double
+                        // popBackStack avec onBack, qui vidait la pile → écran blanc).
+                        onDeletePlaylist()
+                    }) {
                         Text("Supprimer", color = ErrorRed, fontWeight = FontWeight.Bold)
                     }
                 },

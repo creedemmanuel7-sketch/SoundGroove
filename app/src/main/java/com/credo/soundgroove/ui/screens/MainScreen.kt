@@ -153,14 +153,16 @@ fun MainScreen(
     onHideFolder: (String) -> Unit = {},
     onUnhideFolder: (String) -> Unit = {},
     onToggleFavorite: (Song) -> Unit = {},
-    onCreatePlaylist: (String) -> Unit = {},
+    onCreatePlaylist: (name: String, onCreated: (Long) -> Unit) -> Unit = { _, _ -> },
     onPlaylistAddSong: (Playlist, Song) -> Unit = { _, _ -> },
+    onAddSongsToPlaylist: (playlistId: Long, songs: List<Song>) -> Unit = { _, _ -> },
     onPlaylistDelete: (Playlist) -> Unit = {},
     onPlaylistRename: (Playlist, String) -> Unit = { _, _ -> },
     onRemoveSongFromPlaylist: (Playlist, Long) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val reducedMotion = rememberSgReducedMotion()
     var localCurrentSong by remember { mutableStateOf<Song?>(null) }
     var localIsPlaying by remember { mutableStateOf(false) }
     var showRecentlyPlayed by remember { mutableStateOf(false) }
@@ -343,7 +345,6 @@ fun MainScreen(
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f)) {
-                val reducedMotion = rememberSgReducedMotion()
                 AnimatedContent(
                     targetState = selectedTab,
                     transitionSpec = {
@@ -421,6 +422,7 @@ fun MainScreen(
                         playlists = playlists,
                         onPlaylistCreate = onCreatePlaylist,
                         onPlaylistAddSong = onPlaylistAddSong,
+                        onAddSongsToPlaylist = onAddSongsToPlaylist,
                         onSongClick = { song ->
                             localCurrentSong = song
                             playSong(song, songs)
@@ -508,8 +510,8 @@ fun MainScreen(
             }
             AnimatedVisibility(
                 visible = persistentMiniPlayerEnabled && !showRecentlyPlayed && activeSong != null,
-                enter = SgMotion.slideUpEnter(),
-                exit = SgMotion.slideUpExit()
+                enter = SgMotion.slideUpEnter(reducedMotion),
+                exit = SgMotion.slideUpExit(reducedMotion)
             ) {
                 // Fournit l'AnimatedVisibilityScope de ce mini-player "intégré" (onglet
                 // Accueil) au shared element pochette, au même titre que l'overlay de
@@ -555,8 +557,8 @@ fun MainScreen(
 
     AnimatedVisibility(
         visible = showRecentlyPlayed,
-        enter = SgMotion.slideUpEnter(),
-        exit = SgMotion.slideUpExit()
+        enter = SgMotion.slideUpEnter(reducedMotion),
+        exit = SgMotion.slideUpExit(reducedMotion)
     ) {
         RecentlyPlayedScreen(
             songs = recentlyPlayed,
@@ -572,8 +574,8 @@ fun MainScreen(
 
     AnimatedVisibility(
         visible = showSettings,
-        enter = SgMotion.slideUpEnter(),
-        exit = SgMotion.slideUpExit()
+        enter = SgMotion.slideUpEnter(reducedMotion),
+        exit = SgMotion.slideUpExit(reducedMotion)
     ) {
         com.credo.soundgroove.ui.screens.SettingsScreen(
             currentTheme = currentTheme,
@@ -682,8 +684,8 @@ fun MainScreen(
     // Overlay infos chanson
     AnimatedVisibility(
         visible = showSongInfo && overlayedSong != null,
-        enter = SgMotion.queueEnter(),
-        exit = SgMotion.queueExit()
+        enter = SgMotion.queueEnter(reducedMotion),
+        exit = SgMotion.queueExit(reducedMotion)
     ) {
         val song = overlayedSong!!
         Box(
@@ -813,8 +815,8 @@ fun MainScreen(
 
     AnimatedVisibility(
         visible = showPlaylistPicker && overlayedSong != null,
-        enter = SgMotion.queueEnter(),
-        exit = SgMotion.queueExit()
+        enter = SgMotion.queueEnter(reducedMotion),
+        exit = SgMotion.queueExit(reducedMotion)
     ) {
         val song = overlayedSong!!
         Box(

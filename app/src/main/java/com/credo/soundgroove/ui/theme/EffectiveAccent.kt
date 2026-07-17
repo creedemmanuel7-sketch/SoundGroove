@@ -2,7 +2,7 @@ package com.credo.soundgroove.ui.theme
 
 import android.net.Uri
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -30,9 +30,10 @@ fun rememberEffectiveAccentColor(
         albumCoverAccentEnabled = albumCoverAccentEnabled,
         albumArtUri = albumArtUri,
     )
+    val reducedMotion = rememberSgReducedMotion()
     return animateColorAsState(
         targetValue = rolePalette.primary,
-        animationSpec = tween(SgMotion.MediumMs),
+        animationSpec = if (reducedMotion) snap() else SgMotion.tweenMediumOf(),
         label = "effectiveAccent",
     ).value
 }

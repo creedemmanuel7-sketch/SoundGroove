@@ -2,6 +2,7 @@ package com.credo.soundgroove.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,6 +60,7 @@ import com.credo.soundgroove.ui.theme.SgSpacing
 import com.credo.soundgroove.ui.theme.TextPrimary
 import com.credo.soundgroove.ui.theme.TextSecondary
 import com.credo.soundgroove.ui.theme.TextTertiary
+import com.credo.soundgroove.ui.theme.sgPressScale
 import com.credo.soundgroove.ui.theme.themeSecondaryAccent
 import com.credo.soundgroove.ui.util.tracksCountLabel
 import com.credo.soundgroove.util.displayArtist
@@ -542,13 +544,19 @@ private fun ResumeButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val interaction = remember { MutableInteractionSource() }
     // CTA primary fill unique (pas de ghost / label nu secondaire)
     Row(
         modifier = modifier
             .height(SgSpacing.buttonHeight)
+            .sgPressScale(interaction, pressedScale = 0.96f)
             .clip(RoundedCornerShape(SgRadius.lg))
             .background(if (filled) accentColor else Color.Transparent)
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+            )
             .padding(horizontal = SgSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center

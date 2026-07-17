@@ -108,7 +108,8 @@ fun ArtistDetailScreen(
                             size = 128.dp,
                             accentColor = accentColor,
                             modifier = Modifier.sgSharedBounds(
-                                key = sgArtistAvatarSharedKey(artistName)
+                                key = sgArtistAvatarSharedKey(artistName),
+                                clipShape = SgArtistAvatarSharedClip,
                             )
                         )
 

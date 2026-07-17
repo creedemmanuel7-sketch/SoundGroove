@@ -70,6 +70,7 @@ import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.PlayerInlineLyricsPreview
 import com.credo.soundgroove.ui.components.SgSeekBar
 import com.credo.soundgroove.ui.components.formatDuration
 import com.credo.soundgroove.ui.theme.*
@@ -892,7 +893,10 @@ fun PlayerScreen(
                         .size(68.dp)
                         .then(
                             if (hasRealSharedTransition && !interactiveDismissActive) {
-                                Modifier.sgSharedBounds(key = sgPlayControlSharedKey(song.id))
+                                Modifier.sgSharedBounds(
+                                    key = sgPlayControlSharedKey(song.id),
+                                    clipShape = CircleShape,
+                                )
                             } else {
                                 Modifier
                             }
@@ -956,6 +960,15 @@ fun PlayerScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            // Aperçu paroles sync (style Spotify) — tap → écran Paroles plein.
+            // Sans LRC : rien (bouton Paroles ci-dessous reste le CTA).
+            PlayerInlineLyricsPreview(
+                song = song,
+                playbackPositionMs = currentPosition,
+                accentColor = lyricsActionColor,
+                onOpenLyrics = onOpenLyrics
+            )
 
             // Accès secondaires essentiels : file d'attente + paroles (le reste
             // vit dans la sheet Options, bouton header ⋯).

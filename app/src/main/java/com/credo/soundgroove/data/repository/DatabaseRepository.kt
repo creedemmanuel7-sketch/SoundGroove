@@ -145,6 +145,22 @@ class DatabaseRepository(
         )
     }
 
+    suspend fun addSongsToPlaylist(playlistId: Long, songs: List<Song>, startPosition: Int) {
+        if (SmartPlaylistIds.isSmart(playlistId) || songs.isEmpty()) return
+        val existingIds = playlistDao.getAllPlaylistSongsOnce()
+            .asSequence()
+            .filter { it.playlistId == playlistId }
+            .map { it.songId }
+            .toHashSet()
+        var position = startPosition
+        songs.forEach { song ->
+            if (song.id in existingIds) return@forEach
+            addSongToPlaylist(playlistId, song, position)
+            existingIds.add(song.id)
+            position++
+        }
+    }
+
     suspend fun removeSongFromPlaylist(playlistId: Long, songId: Long) {
         if (SmartPlaylistIds.isSmart(playlistId)) return
         playlistDao.removeSong(playlistId, songId)

@@ -874,12 +874,13 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun createPlaylist(name: String) {
+    fun createPlaylist(name: String, onCreated: ((Long) -> Unit)? = null) {
         viewModelScope.launch {
             val trimmed = name.trim()
             if (trimmed.isBlank()) return@launch
-            dbRepository.createPlaylist(trimmed)
+            val id = dbRepository.createPlaylist(trimmed)
             _playlistMessage.value = "Playlist « $trimmed » créée"
+            onCreated?.invoke(id)
         }
     }
 
@@ -898,6 +899,17 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         if (SmartPlaylistIds.isSmart(playlistId)) return
         viewModelScope.launch {
             dbRepository.addSongToPlaylist(playlistId, song, position)
+        }
+    }
+
+    fun addSongsToPlaylist(playlistId: Long, songs: List<Song>, startPosition: Int = 0) {
+        if (SmartPlaylistIds.isSmart(playlistId) || songs.isEmpty()) return
+        viewModelScope.launch {
+            dbRepository.addSongsToPlaylist(playlistId, songs, startPosition)
+            _playlistMessage.value = when (songs.size) {
+                1 -> "1 titre ajouté à la playlist"
+                else -> "${songs.size} titres ajoutés à la playlist"
+            }
         }
     }
 

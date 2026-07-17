@@ -87,8 +87,9 @@ fun LibraryTab(
     isPlaying: Boolean,
     favoriteSongs: List<Song>,
     playlists: List<Playlist>,
-    onPlaylistCreate: (String) -> Unit,
+    onPlaylistCreate: (name: String, onCreated: (Long) -> Unit) -> Unit,
     onPlaylistAddSong: (Playlist, Song) -> Unit,
+    onAddSongsToPlaylist: (playlistId: Long, songs: List<Song>) -> Unit = { _, _ -> },
     onSongClick: (Song) -> Unit,
     onPlayPlaylist: (Song, List<Song>) -> Unit,
     onToggleFavorite: (Song) -> Unit,
@@ -261,7 +262,10 @@ fun LibraryTab(
 
             androidx.compose.foundation.pager.HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                // Défaut = CenterVertically : avec peu d'items (ex. Favoris), la liste
+                // flotte au milieu et laisse un grand vide au-dessus. Ancrage en haut.
+                verticalAlignment = Alignment.Top
             ) { page ->
                 when (page) {
                     0 -> {
@@ -409,7 +413,10 @@ fun LibraryTab(
                                     modifier = Modifier
                                         .weight(1f)
                                         .aspectRatio(1f)
-                                        .sgSharedBounds(key = sgAlbumCoverSharedKey(albumName))
+                                        .sgSharedBounds(
+                                            key = sgAlbumCoverSharedKey(albumName),
+                                            clipShape = SgAlbumCoverSharedClip,
+                                        )
                                         .clickable { onNavigateToAlbum(albumName) },
                                     cornerRadius = SgRadius.xl
                                 ) {
@@ -513,7 +520,8 @@ fun LibraryTab(
                                         size = 48.dp,
                                         accentColor = accentColor,
                                         modifier = Modifier.sgSharedBounds(
-                                            key = sgArtistAvatarSharedKey(artist)
+                                            key = sgArtistAvatarSharedKey(artist),
+                                            clipShape = SgArtistAvatarSharedClip,
                                         )
                                     )
                                 }
@@ -542,6 +550,7 @@ fun LibraryTab(
 
                 3 -> {
                     var showCreateSheet by remember { mutableStateOf(false) }
+                    var addSongsTarget by remember { mutableStateOf<Pair<Long, String>?>(null) }
                     val manualPlaylists = playlists.filter { !it.isSmart }
 
                     Box(modifier = Modifier.fillMaxSize()) {
@@ -834,9 +843,32 @@ fun LibraryTab(
                             com.credo.soundgroove.ui.components.CreatePlaylistSheet(
                                 onDismiss = { showCreateSheet = false },
                                 onCreate = { name ->
-                                    onPlaylistCreate(name)
                                     showCreateSheet = false
+                                    onPlaylistCreate(name) { playlistId ->
+                                        addSongsTarget = playlistId to name
+                                    }
                                 }
+                            )
+                        }
+
+                        addSongsTarget?.let { (playlistId, playlistName) ->
+                            val existingIds = playlists
+                                .find { it.id == playlistId }
+                                ?.songs
+                                ?.map { it.id }
+                                ?.toSet()
+                                .orEmpty()
+                            com.credo.soundgroove.ui.components.AddSongsToPlaylistSheet(
+                                playlistName = playlistName,
+                                librarySongs = songs,
+                                alreadyInPlaylistIds = existingIds,
+                                accentColor = accentColor,
+                                onConfirm = { selected ->
+                                    onAddSongsToPlaylist(playlistId, selected)
+                                    addSongsTarget = null
+                                },
+                                onDismiss = { addSongsTarget = null },
+                                skipLabel = "Plus tard"
                             )
                         }
                     }
@@ -974,6 +1006,7 @@ fun LibraryTab(
                 }
 
                 5 -> {
+                    var menuSong by remember { mutableStateOf<Song?>(null) }
                     if (favoriteSongs.isEmpty()) {
                         SgEmptyState(
                             iconPainter = painterResource(R.drawable.ic_favorite_outline),
@@ -982,82 +1015,119 @@ fun LibraryTab(
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(SgSpacing.listItemGap),
-                            contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)
-                        ) {
-                            items(favoriteSongs, key = { it.id }) { song ->
-                                GlassCard(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { onPlayPlaylist(song, favoriteSongs) },
-                                    cornerRadius = 14.dp
-                                ) {
-                                    Row(
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(SgSpacing.listItemGap),
+                                contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)
+                            ) {
+                                items(favoriteSongs, key = { it.id }) { song ->
+                                    GlassCard(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .background(
-                                                Brush.linearGradient(
-                                                    listOf(
-                                                        FavoritePink.copy(
-                                                            0.1f
-                                                        ), Color.Transparent
+                                            .clickable { onPlayPlaylist(song, favoriteSongs) },
+                                        cornerRadius = 14.dp
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(
+                                                    Brush.linearGradient(
+                                                        listOf(
+                                                            FavoritePink.copy(0.1f),
+                                                            Color.Transparent
+                                                        )
                                                     )
                                                 )
-                                            )
-                                            .padding(10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(46.dp)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .background(GraphiteCard),
-                                            contentAlignment = Alignment.Center
+                                                .padding(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            if (song.albumArtUri != null) {
-                                                AsyncImage(
-                                                    model = ImageRequest.Builder(LocalContext.current)
-                                                        .data(song.albumArtUri)
-                                                        .crossfade(true)
-                                                        .build(),
-                                                    contentDescription = null,
-                                                    contentScale = ContentScale.Crop,
-                                                    modifier = Modifier.fillMaxSize()
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(46.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(GraphiteCard),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (song.albumArtUri != null) {
+                                                    AsyncImage(
+                                                        model = ImageRequest.Builder(LocalContext.current)
+                                                            .data(song.albumArtUri)
+                                                            .crossfade(true)
+                                                            .build(),
+                                                        contentDescription = null,
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                } else {
+                                                    Icon(
+                                                        painter = painterResource(R.drawable.ic_songs),
+                                                        contentDescription = null,
+                                                        tint = SilverAccent,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = song.displayTitle(),
+                                                    color = TextPrimary,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
-                                            } else {
-                                                Icon(painter = painterResource(R.drawable.ic_songs), contentDescription = null, tint = SilverAccent, modifier = Modifier.size(18.dp))
+                                                Text(
+                                                    text = song.displayArtist(),
+                                                    color = TextSecondary,
+                                                    fontSize = 12.sp,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_favorite_filled),
+                                                contentDescription = "Retirer des favoris",
+                                                tint = FavoritePink,
+                                                modifier = Modifier
+                                                    .size(22.dp)
+                                                    .clickable { onToggleFavorite(song) }
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(36.dp)
+                                                    .clip(CircleShape)
+                                                    .clickable { menuSong = song },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.ic_options),
+                                                    contentDescription = "Options",
+                                                    tint = TextSecondary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
                                             }
                                         }
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = song.displayTitle(),
-                                                color = TextPrimary,
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Text(
-                                                text = song.displayArtist(),
-                                                color = TextSecondary,
-                                                fontSize = 12.sp,
-                                                maxLines = 1
-                                            )
-                                        }
-                                        Icon(
-                                            painter = painterResource(R.drawable.ic_favorite_filled),
-                                            contentDescription = "Retirer des favoris",
-                                            tint = FavoritePink,
-                                            modifier = Modifier
-                                                .size(22.dp)
-                                                .clickable { onToggleFavorite(song) }
-                                        )
                                     }
                                 }
+                                item { Spacer(modifier = Modifier.height(16.dp)) }
                             }
-                            item { Spacer(modifier = Modifier.height(16.dp)) }
+
+                            menuSong?.let { song ->
+                                com.credo.soundgroove.ui.components.SongContextMenuSheet(
+                                    song = song,
+                                    isFavorite = true,
+                                    onToggleFavorite = { onToggleFavorite(song) },
+                                    onPlayNext = { onPlayNext(song); menuSong = null },
+                                    onAddToQueue = { onAddToQueue(song); menuSong = null },
+                                    onAddToPlaylist = { onShowPlaylistPicker(song); menuSong = null },
+                                    onViewInfo = { onShowSongInfo(song); menuSong = null },
+                                    onShareCard = { onShareCard(song); menuSong = null },
+                                    onEditMetadata = { onEditMetadata(song); menuSong = null },
+                                    onSetCoverArt = { launchCoverPicker(song); menuSong = null },
+                                    onDismiss = { menuSong = null }
+                                )
+                            }
                         }
                     }
                 }
