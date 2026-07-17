@@ -29,7 +29,9 @@ object LyricsRepository {
 
         val content = parseRaw(raw, file.extension)
         if (isComplete(content)) {
-            LyricsCacheStore.write(context, song.id, raw)
+            if (LyricsCacheStore.write(context, song.id, raw)) {
+                LyricsAvailability.notifyChanged()
+            }
         }
         content
     }.getOrElse { LyricsContent.NotFound }
@@ -42,7 +44,9 @@ object LyricsRepository {
         val online = LrcLibClient.fetchLyrics(song) ?: return@runCatching LyricsContent.NotFound
         val raw = online.bestRawText() ?: return@runCatching LyricsContent.NotFound
 
-        LyricsCacheStore.write(context, song.id, raw)
+        if (LyricsCacheStore.write(context, song.id, raw)) {
+            LyricsAvailability.notifyChanged()
+        }
         LyricsFileResolver.tryWriteLyricsFile(context, song, raw)
 
         val content = parseRaw(raw)
@@ -57,7 +61,37 @@ object LyricsRepository {
             throw IllegalStateException("Impossible d'enregistrer les paroles en cache.")
         }
         LyricsFileResolver.tryWriteLyricsFile(context, song, trimmed)
+        LyricsAvailability.notifyChanged()
         return parseRaw(trimmed)
+    }
+
+    /**
+     * Morceaux pour lesquels des paroles sont disponibles localement
+     * (cache app et/ou fichier `.lrc`/`.txt` voisin).
+     */
+    fun filterSongsWithLyrics(context: Context, songs: List<Song>): List<Song> {
+        if (songs.isEmpty()) return emptyList()
+        val cachedIds = LyricsCacheStore.cachedSongIds(context)
+        return songs.filter { song ->
+            song.id in cachedIds || LyricsFileResolver.findLyricsFile(context, song) != null
+        }
+    }
+
+    /** Texte brut persisté (cache puis fichier voisin), pour l'éditeur. */
+    fun readRawText(context: Context, song: Song): String? {
+        LyricsCacheStore.read(context, song.id)?.takeIf { it.isNotBlank() }?.let { return it }
+        val file = LyricsFileResolver.findLyricsFile(context, song) ?: return null
+        return runCatching { file.readText() }.getOrNull()?.trim()?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * Dissocie / efface les paroles du morceau : cache app + fichier voisin si accessible.
+     * Ne touche jamais au fichier audio.
+     */
+    fun deleteLyrics(context: Context, song: Song) {
+        LyricsCacheStore.delete(context, song.id)
+        LyricsFileResolver.tryDeleteLyricsFile(context, song)
+        LyricsAvailability.notifyChanged()
     }
 
     fun isComplete(content: LyricsContent): Boolean = when (content) {

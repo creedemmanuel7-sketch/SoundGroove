@@ -4,6 +4,7 @@ import android.content.Context
 import android.webkit.CookieManager
 import android.webkit.WebStorage
 import android.webkit.WebView
+import com.credo.soundgroove.lyrics.LyricsAvailability
 import com.credo.soundgroove.lyrics.LyricsCacheStore
 import java.io.File
 import java.util.Locale
@@ -56,6 +57,7 @@ object StorageMaintenance {
      */
     fun clearClearableCaches(context: Context) {
         LyricsCacheStore.clearAll(context)
+        LyricsAvailability.notifyChanged()
         ShareCardGenerator.clearShareCache(context)
         clearWebViewCache(context)
     }

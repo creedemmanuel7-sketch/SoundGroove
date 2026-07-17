@@ -12,6 +12,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -70,22 +71,22 @@ import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.SgEmptyState
+import com.credo.soundgroove.ui.theme.CardSurface
 import com.credo.soundgroove.ui.theme.ErrorRed
 import com.credo.soundgroove.ui.theme.GlassBorder
 import com.credo.soundgroove.ui.theme.GlassCard
-import com.credo.soundgroove.ui.theme.GlassSurface
 import com.credo.soundgroove.ui.theme.GraphiteCard
 import com.credo.soundgroove.ui.theme.SgMotion
 import com.credo.soundgroove.ui.theme.SgRadius
 import com.credo.soundgroove.ui.theme.SgSpacing
 import com.credo.soundgroove.ui.theme.SilverAccent
+import com.credo.soundgroove.ui.theme.SurfaceElevated
 import com.credo.soundgroove.ui.theme.TextPrimary
-import com.credo.soundgroove.ui.theme.TextSecondary
+import com.credo.soundgroove.ui.theme.sgPressScale
 import com.credo.soundgroove.ui.theme.sgSheetGradientBrush
 import com.credo.soundgroove.util.displayArtist
 import com.credo.soundgroove.util.displayTitle
 import kotlinx.coroutines.launch
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QueueScreen(
@@ -317,6 +318,7 @@ private fun QueueHeader(
     accentColor: Color,
     onClose: () -> Unit
 ) {
+    val closeInteraction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -325,9 +327,14 @@ private fun QueueHeader(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .background(GlassSurface, CircleShape)
-                .border(1.dp, GlassBorder, CircleShape)
-                .clickable { onClose() },
+                .sgPressScale(closeInteraction, pressedScale = 0.94f)
+                .background(SurfaceElevated, CircleShape)
+                .border(1.dp, GlassBorder.copy(alpha = 0.55f), CircleShape)
+                .clickable(
+                    interactionSource = closeInteraction,
+                    indication = null,
+                    onClick = onClose
+                ),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -453,7 +460,7 @@ private fun QueueNowPlayingBanner(
                 )
                 Text(
                     text = song.displayArtist(),
-                    color = TextSecondary,
+                    color = TextPrimary.copy(alpha = 0.72f),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -465,11 +472,14 @@ private fun QueueNowPlayingBanner(
 
 @Composable
 private fun QueueHintRow() {
+    // Fond opaque SurfaceElevated + texte ~AA (évite le wash GlassSurface clair).
+    val hintColor = TextPrimary.copy(alpha = 0.78f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(SgRadius.sm))
-            .background(GlassSurface.copy(alpha = 0.5f))
+            .background(SurfaceElevated.copy(alpha = 0.92f))
+            .border(1.dp, GlassBorder.copy(alpha = 0.35f), RoundedCornerShape(SgRadius.sm))
             .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
@@ -477,31 +487,31 @@ private fun QueueHintRow() {
         Icon(
             painter = painterResource(R.drawable.ic_trash),
             contentDescription = null,
-            tint = TextSecondary.copy(alpha = 0.7f),
+            tint = hintColor,
             modifier = Modifier.size(14.dp)
         )
         Spacer(modifier = Modifier.width(SgSpacing.xs))
         Text(
             text = "Glisser vers la gauche pour retirer",
-            color = TextSecondary,
+            color = hintColor,
             style = MaterialTheme.typography.labelSmall,
             textAlign = TextAlign.Center
         )
         Text(
             text = " · ",
-            color = TextSecondary.copy(alpha = 0.5f),
+            color = hintColor.copy(alpha = 0.55f),
             style = MaterialTheme.typography.labelSmall
         )
         Icon(
             painter = painterResource(R.drawable.ic_drag),
             contentDescription = null,
-            tint = TextSecondary.copy(alpha = 0.7f),
+            tint = hintColor,
             modifier = Modifier.size(14.dp)
         )
         Spacer(modifier = Modifier.width(SgSpacing.xs))
         Text(
             text = "Poignée pour réordonner",
-            color = TextSecondary,
+            color = hintColor,
             style = MaterialTheme.typography.labelSmall,
             textAlign = TextAlign.Center
         )
@@ -513,19 +523,24 @@ private fun QueueSwipeBackground(
     dismissState: androidx.compose.material3.SwipeToDismissBoxState,
     isCurrent: Boolean
 ) {
+    // Affiche « Retirer » seulement quand le swipe a une cible (évite le wash-out
+    // du label blanc à travers la row au repos — row désormais opaque aussi).
+    val revealed = !isCurrent && dismissState.targetValue != SwipeToDismissBoxValue.Settled
+
     val color by animateColorAsState(
-        targetValue = when {
-            isCurrent -> Color.Transparent
-            dismissState.targetValue != SwipeToDismissBoxValue.Settled -> ErrorRed.copy(alpha = 0.85f)
-            else -> Color.Transparent
-        },
+        targetValue = if (revealed) ErrorRed.copy(alpha = 0.88f) else Color.Transparent,
         animationSpec = SgMotion.tweenFastOf(),
         label = "swipe_color"
     )
     val iconScale by animateFloatAsState(
-        targetValue = if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) 1f else 0.7f,
+        targetValue = if (revealed) 1f else 0.7f,
         animationSpec = SgMotion.SpringSnappy,
         label = "swipe_icon_scale"
+    )
+    val labelAlpha by animateFloatAsState(
+        targetValue = if (revealed) 1f else 0f,
+        animationSpec = SgMotion.tweenFastOf(),
+        label = "swipe_label_alpha"
     )
 
     Box(
@@ -542,6 +557,7 @@ private fun QueueSwipeBackground(
                 modifier = Modifier.graphicsLayer {
                     scaleX = iconScale
                     scaleY = iconScale
+                    alpha = labelAlpha
                 }
             ) {
                 Icon(
@@ -578,11 +594,13 @@ private fun QueueItemRow(
     onDragCancel: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val handleInteraction = remember { MutableInteractionSource() }
+    val metaColor = TextPrimary.copy(alpha = 0.72f)
     val borderColor by animateColorAsState(
         targetValue = when {
             isDragging -> accentColor.copy(alpha = 0.55f)
             isCurrent -> accentColor.copy(alpha = 0.35f)
-            else -> GlassBorder.copy(alpha = 0.6f)
+            else -> GlassBorder.copy(alpha = 0.45f)
         },
         animationSpec = SgMotion.tweenFastOf(),
         label = "item_border"
@@ -598,7 +616,9 @@ private fun QueueItemRow(
         label = "drag_elevation"
     )
 
-    GlassCard(
+    // Fond opaque (CardSurface) : évite le wash-out du label « Retirer » du swipe
+    // à travers le GlassCard translucide.
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer {
@@ -606,18 +626,18 @@ private fun QueueItemRow(
                 scaleY = dragScale
                 shadowElevation = dragElevation
             }
-            .offset { IntOffset(x = 0, y = itemDragOffset.toInt()) },
-        cornerRadius = SgRadius.md,
-        accentColor = accentColor
+            .offset { IntOffset(x = 0, y = itemDragOffset.toInt()) }
+            .clip(RoundedCornerShape(SgRadius.md))
+            .background(CardSurface.copy(alpha = 0.97f))
+            .border(
+                width = if (isCurrent || isDragging) 1.dp else 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(SgRadius.md)
+            )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(
-                    width = if (isCurrent || isDragging) 1.dp else 0.dp,
-                    color = borderColor,
-                    shape = RoundedCornerShape(SgRadius.md)
-                )
                 .background(
                     if (isCurrent) {
                         Brush.linearGradient(
@@ -628,12 +648,17 @@ private fun QueueItemRow(
                     }
                 )
                 .clickable { onPlay() }
-                .padding(start = SgSpacing.md, top = SgSpacing.sm + 2.dp, bottom = SgSpacing.sm + 2.dp, end = SgSpacing.sm),
+                .padding(
+                    start = SgSpacing.md,
+                    top = SgSpacing.sm + 2.dp,
+                    bottom = SgSpacing.sm + 2.dp,
+                    end = SgSpacing.sm
+                ),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = "${index + 1}",
-                color = if (isCurrent) accentColor else TextSecondary.copy(alpha = 0.65f),
+                color = if (isCurrent) accentColor else metaColor,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.width(24.dp)
@@ -665,9 +690,6 @@ private fun QueueItemRow(
                     )
                 }
                 if (isCurrent) {
-                    // Barres d'égaliseur animées plutôt qu'une simple icône play statique —
-                    // beaucoup plus visible qu'un pictogramme figé (cf. demande "pas trop
-                    // discret"), et distingue en plus lecture/pause via leur mouvement.
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -696,24 +718,29 @@ private fun QueueItemRow(
                 )
                 Text(
                     text = song.displayArtist(),
-                    color = TextSecondary,
+                    color = metaColor,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
+            Spacer(modifier = Modifier.width(SgSpacing.md))
+
+            // Poignée sobre (SurfaceElevated) — séparée du contenu, sans carré gris clair.
             Box(
                 modifier = Modifier
-                    .size(width = 44.dp, height = 48.dp)
+                    .size(width = 36.dp, height = 40.dp)
+                    .sgPressScale(handleInteraction, pressedScale = 0.94f, pressedAlpha = 0.78f)
                     .clip(RoundedCornerShape(SgRadius.sm))
                     .background(
-                        if (isDragging) accentColor.copy(alpha = 0.18f)
-                        else GlassSurface.copy(alpha = 0.65f)
+                        if (isDragging) accentColor.copy(alpha = 0.16f)
+                        else SurfaceElevated
                     )
                     .border(
                         width = 1.dp,
-                        color = if (isDragging) accentColor.copy(alpha = 0.35f) else GlassBorder.copy(alpha = 0.5f),
+                        color = if (isDragging) accentColor.copy(alpha = 0.4f)
+                        else GlassBorder.copy(alpha = 0.4f),
                         shape = RoundedCornerShape(SgRadius.sm)
                     )
                     .pointerInput(index) {
@@ -731,17 +758,17 @@ private fun QueueItemRow(
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.5.dp)
                 ) {
                     repeat(3) {
                         Box(
                             modifier = Modifier
-                                .width(16.dp)
-                                .height(2.dp)
+                                .width(14.dp)
+                                .height(1.5.dp)
                                 .clip(RoundedCornerShape(1.dp))
                                 .background(
                                     if (isDragging) accentColor
-                                    else TextSecondary.copy(alpha = 0.55f)
+                                    else TextPrimary.copy(alpha = 0.55f)
                                 )
                         )
                     }
@@ -774,6 +801,9 @@ fun PlayerQueueBanner(
     onExpand: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val prevInteraction = remember { MutableInteractionSource() }
+    val playInteraction = remember { MutableInteractionSource() }
+    val nextInteraction = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -789,8 +819,6 @@ fun PlayerQueueBanner(
                     .padding(horizontal = SgSpacing.xl),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Poignée visuelle : rappelle qu'on peut taper pour ré-expanser, cohérent
-                // avec le "drag handle" utilisé sur les bottom sheets de l'app.
                 Box(
                     modifier = Modifier
                         .size(width = 4.dp, height = 36.dp)
@@ -835,7 +863,7 @@ fun PlayerQueueBanner(
                     )
                     Text(
                         text = song.displayArtist(),
-                        color = TextSecondary,
+                        color = TextPrimary.copy(alpha = 0.72f),
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -849,11 +877,12 @@ fun PlayerQueueBanner(
                     Box(
                         modifier = Modifier
                             .size(38.dp)
-                            // `combinedClickable`/`clickable` imbriqué : ces contrôles doivent
-                            // rester utilisables sans déclencher `onExpand` (cf. Modifier
-                            // parent du Box racine) — Compose route l'évènement au plus
-                            // profond, ce clic-ci gagne sur celui du parent.
-                            .clickable { onSkipPrevious() },
+                            .sgPressScale(prevInteraction, pressedScale = 0.9f)
+                            .clickable(
+                                interactionSource = prevInteraction,
+                                indication = null,
+                                onClick = onSkipPrevious
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -866,9 +895,14 @@ fun PlayerQueueBanner(
                     Box(
                         modifier = Modifier
                             .size(40.dp)
+                            .sgPressScale(playInteraction, pressedScale = 0.9f)
                             .clip(CircleShape)
                             .background(accentColor)
-                            .clickable { onPlayPause() },
+                            .clickable(
+                                interactionSource = playInteraction,
+                                indication = null,
+                                onClick = onPlayPause
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -881,7 +915,12 @@ fun PlayerQueueBanner(
                     Box(
                         modifier = Modifier
                             .size(38.dp)
-                            .clickable { onSkipNext() },
+                            .sgPressScale(nextInteraction, pressedScale = 0.9f)
+                            .clickable(
+                                interactionSource = nextInteraction,
+                                indication = null,
+                                onClick = onSkipNext
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(

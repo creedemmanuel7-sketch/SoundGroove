@@ -53,6 +53,26 @@ object LyricsFileResolver {
         }.getOrDefault(false)
     }
 
+    /**
+     * Tente de supprimer les fichiers `.lrc` / `.txt` voisins de l'audio.
+     * Échoue silencieusement si le stockage n'est pas accessible en écriture.
+     */
+    fun tryDeleteLyricsFile(context: Context, song: Song): Boolean {
+        val audioPath = resolveAudioFilePath(context, song) ?: return false
+        val audioFile = File(audioPath)
+        val parent = audioFile.parentFile ?: return false
+        if (!runCatching { parent.canWrite() }.getOrDefault(false)) return false
+
+        var deleted = false
+        for (extension in SUPPORTED_EXTENSIONS) {
+            val candidate = File(parent, "${audioFile.nameWithoutExtension}.$extension")
+            if (runCatching { candidate.exists() && candidate.delete() }.getOrDefault(false)) {
+                deleted = true
+            }
+        }
+        return deleted
+    }
+
     private fun resolveAudioFilePath(context: Context, song: Song): String? = runCatching {
         context.contentResolver.query(
             song.uri,

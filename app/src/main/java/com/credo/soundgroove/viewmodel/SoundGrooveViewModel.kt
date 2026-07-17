@@ -23,6 +23,8 @@ import com.credo.soundgroove.data.repository.MusicRepository
 import com.credo.soundgroove.data.repository.SearchHistoryRepository
 import com.credo.soundgroove.data.backup.BackupManager
 import com.credo.soundgroove.data.backup.BackupSnapshot
+import com.credo.soundgroove.lyrics.LyricsAvailability
+import com.credo.soundgroove.lyrics.LyricsRepository
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Job
@@ -32,6 +34,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import android.net.Uri
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -47,6 +50,7 @@ import com.credo.soundgroove.util.MetadataEditor
 import com.credo.soundgroove.util.PlaybackPreferences
 import com.credo.soundgroove.util.PlayerGuards
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.room.withTransaction
 
 class SoundGrooveViewModel(application: Application) : AndroidViewModel(application) {
@@ -128,6 +132,8 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
     val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
+
+    private val _songsWithLyrics = MutableStateFlow<List<Song>>(emptyList())
 
     // Player State
     private val _currentSong = MutableStateFlow<Song?>(null)
@@ -504,19 +510,30 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                 .collect { _recentlyPlayed.value = it }
         }
         viewModelScope.launch {
+            combine(_allSongs, LyricsAvailability.revision, _metadataOverrides) { songs, _, _ ->
+                songs.map { applyMetadataOverride(it) }
+            }.collectLatest { songs ->
+                _songsWithLyrics.value = withContext(Dispatchers.IO) {
+                    LyricsRepository.filterSongsWithLyrics(getApplication(), songs)
+                }
+            }
+        }
+        viewModelScope.launch {
             combine(
                 dbRepository.getAllPlaylists(),
                 dbRepository.getRecentlyPlayed(),
                 dbRepository.getOftenPlayed(),
+                _songsWithLyrics,
                 _metadataOverrides
-            ) { manualPlaylists, recent, often, overrides ->
+            ) { manualPlaylists, recent, often, withLyrics, _ ->
                 val applyOverride: (Song) -> Song = { applyMetadataOverride(it) }
                 SmartPlaylistBuilder.merge(
                     manualPlaylists = manualPlaylists.map { playlist ->
                         playlist.copy(songs = playlist.songs.map(applyOverride))
                     },
                     recentlyPlayed = recent.map(applyOverride),
-                    oftenPlayed = often.map(applyOverride)
+                    oftenPlayed = often.map(applyOverride),
+                    withLyrics = withLyrics
                 )
             }.collect { _playlists.value = it }
         }

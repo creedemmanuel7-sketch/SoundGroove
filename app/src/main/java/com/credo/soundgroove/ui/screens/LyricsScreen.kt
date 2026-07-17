@@ -4,9 +4,11 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -31,10 +33,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsOff
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,21 +48,29 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.animation.core.snap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -82,14 +95,14 @@ import com.credo.soundgroove.ui.theme.SgRadius
 import com.credo.soundgroove.ui.theme.SgSpacing
 import com.credo.soundgroove.ui.theme.rememberSgReducedMotion
 import com.credo.soundgroove.ui.theme.sgCoilCrossfadeMs
-import androidx.compose.animation.core.snap
-import androidx.compose.foundation.gestures.animateScrollBy
 import com.credo.soundgroove.util.LyricsChromePrimaryText
 import com.credo.soundgroove.util.LyricsPalette
 import com.credo.soundgroove.util.PlayerGuards
 import com.credo.soundgroove.util.displayArtist
 import com.credo.soundgroove.util.displayTitle
 import com.credo.soundgroove.util.rememberLyricsPalette
+import kotlin.math.abs
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /**
@@ -126,6 +139,7 @@ fun LyricsScreen(
     var verticalDragOffset by remember { mutableStateOf(0f) }
     var autoScrollEnabled by remember { mutableStateOf(true) }
     var screenWidthPx by remember { mutableStateOf(1f) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     // Bouton "toggle" clair vers le Player (icône) + geste natif : back système
     // et swipe (bas) doivent produire exactement le même résultat. `enabled` sur le
@@ -315,6 +329,7 @@ fun LyricsScreen(
                         initialDraft = editingDraft,
                         isSaving = isSaving,
                         saveError = saveError,
+                        isEditMode = content is LyricsContent.Synced || content is LyricsContent.PlainText,
                         onCancel = { viewModel.cancelEditing() },
                         onSave = { raw -> viewModel.saveLyrics(song, raw) }
                     )
@@ -330,7 +345,10 @@ fun LyricsScreen(
                     )
                     content is LyricsContent.PlainText -> PlainTextLyrics(
                         text = (content as LyricsContent.PlainText).text,
-                        palette = palette
+                        palette = palette,
+                        playbackPosition = playbackPosition,
+                        durationMs = song.duration,
+                        autoScrollEnabled = autoScrollEnabled
                     )
                     else -> EmptyLyricsState(
                         accentColor = effectiveAccent,
@@ -339,6 +357,18 @@ fun LyricsScreen(
                         onPasteLyrics = { viewModel.startEditing() }
                     )
                 }
+            }
+
+            val hasEditableLyrics = !isEditing &&
+                (content is LyricsContent.Synced || content is LyricsContent.PlainText)
+            if (hasEditableLyrics) {
+                Spacer(modifier = Modifier.height(4.dp))
+                LyricsManageActions(
+                    accentColor = effectiveAccent,
+                    palette = palette,
+                    onEdit = { viewModel.startEditingExisting(song) },
+                    onDelete = { showDeleteConfirm = true }
+                )
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -372,6 +402,87 @@ fun LyricsScreen(
             Toast.makeText(context, "Paroles enregistrées", Toast.LENGTH_SHORT).show()
         }
         wasEditing = isEditing
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = {
+                Text("Supprimer les paroles ?", color = palette.primaryText)
+            },
+            text = {
+                Text(
+                    "Les paroles associées à ce morceau seront effacées du cache. " +
+                        "La lecture audio n'est pas affectée. Vous pourrez en rechercher ou en coller de nouvelles.",
+                    color = palette.secondaryText
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        viewModel.deleteLyrics(song)
+                        Toast.makeText(context, "Paroles supprimées", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("Supprimer", color = Color(0xFFFF6B6B), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Annuler", color = palette.secondaryText)
+                }
+            },
+            containerColor = palette.surfaceElevated,
+            titleContentColor = palette.primaryText,
+            textContentColor = palette.secondaryText
+        )
+    }
+}
+
+@Composable
+private fun LyricsManageActions(
+    accentColor: Color,
+    palette: LyricsPalette,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        OutlinedButton(
+            onClick = onEdit,
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(SgRadius.pill),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.primaryText),
+            border = BorderStroke(1.dp, palette.glassBorder)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Edit,
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Modifier", fontWeight = FontWeight.SemiBold)
+        }
+        OutlinedButton(
+            onClick = onDelete,
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(SgRadius.pill),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF6B6B)),
+            border = BorderStroke(1.dp, Color(0xFFFF6B6B).copy(alpha = 0.45f))
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Delete,
+                contentDescription = null,
+                tint = Color(0xFFFF6B6B),
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Supprimer", fontWeight = FontWeight.SemiBold)
+        }
     }
 }
 
@@ -524,6 +635,7 @@ private fun PasteLyricsEditor(
     initialDraft: String,
     isSaving: Boolean,
     saveError: String?,
+    isEditMode: Boolean = false,
     onCancel: () -> Unit,
     onSave: (String) -> Unit
 ) {
@@ -535,7 +647,7 @@ private fun PasteLyricsEditor(
             .padding(horizontal = 4.dp)
     ) {
         Text(
-            text = "Coller ou saisir les paroles",
+            text = if (isEditMode) "Modifier les paroles" else "Coller ou saisir les paroles",
             color = palette.primaryText,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
@@ -544,7 +656,11 @@ private fun PasteLyricsEditor(
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Copiez depuis Genius, AZLyrics ou un autre site, puis collez ici. Format LRC avec horodatages accepté.",
+            text = if (isEditMode) {
+                "Modifiez le texte puis enregistrez. Les horodatages LRC ([mm:ss.xx]) sont conservés s'ils restent présents."
+            } else {
+                "Copiez depuis Genius, AZLyrics ou un autre site, puis collez ici. Format LRC avec horodatages accepté."
+            },
             color = palette.secondaryText,
             fontSize = 12.sp,
             lineHeight = 17.sp,
@@ -753,13 +869,64 @@ private fun SyncedLyricsList(
 }
 
 @Composable
-private fun PlainTextLyrics(text: String, palette: LyricsPalette) {
+private fun PlainTextLyrics(
+    text: String,
+    palette: LyricsPalette,
+    playbackPosition: Long,
+    durationMs: Long,
+    autoScrollEnabled: Boolean
+) {
+    val scrollState = rememberScrollState()
+    val reducedMotion = rememberSgReducedMotion()
+    var userPausedUntilMs by remember { mutableLongStateOf(0L) }
+
+    val userScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && available.y != 0f) {
+                    userPausedUntilMs = System.currentTimeMillis() + PLAIN_TEXT_AUTO_SCROLL_RESUME_MS
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    // Défilement proportionnel au progrès de lecture (pas de sync ligne-à-ligne).
+    LaunchedEffect(autoScrollEnabled, durationMs, text, reducedMotion) {
+        if (!autoScrollEnabled || durationMs <= 0L) return@LaunchedEffect
+        snapshotFlow { playbackPosition }
+            .distinctUntilChanged { old, new -> abs(old - new) < 80L }
+            .collect { positionMs ->
+                if (System.currentTimeMillis() < userPausedUntilMs) return@collect
+                val maxScroll = scrollState.maxValue
+                if (maxScroll <= 0) return@collect
+                val progress = (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+                val target = (maxScroll * progress).toInt()
+                val gap = abs(scrollState.value - target)
+                if (gap < 2) return@collect
+                when {
+                    reducedMotion || gap < 48 -> scrollState.scrollTo(target)
+                    gap > maxScroll / 4 -> scrollState.animateScrollTo(
+                        target,
+                        animationSpec = SgMotion.tweenMedium()
+                    )
+                    else -> scrollState.animateScrollTo(
+                        target,
+                        animationSpec = SgMotion.tweenProgress()
+                    )
+                }
+            }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .nestedScroll(userScrollConnection)
+            .verticalScroll(scrollState)
             .padding(horizontal = 24.dp, vertical = 12.dp)
     ) {
+        // Marges haut/bas pour que le début et la fin du texte aient une zone de scroll utile.
+        Spacer(modifier = Modifier.height(48.dp))
         Text(
             text = text.ifBlank { "Aucune parole trouvée." },
             color = palette.primaryText,
@@ -768,9 +935,11 @@ private fun PlainTextLyrics(text: String, palette: LyricsPalette) {
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(120.dp))
     }
 }
+
+private const val PLAIN_TEXT_AUTO_SCROLL_RESUME_MS = 4_000L
 
 @Composable
 private fun LoadingLyricsState(accentColor: Color) {

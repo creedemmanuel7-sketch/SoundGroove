@@ -62,6 +62,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
+import com.credo.soundgroove.data.model.SmartPlaylistIds
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.SongItem
 import com.credo.soundgroove.ui.components.SgEmptyState
@@ -678,10 +679,14 @@ fun LibraryTab(
                                                     }
                                                 }
                                                 Text(
-                                                    text = if (playlist.songs.isEmpty()) {
-                                                        if (playlist.isSmart) "Se remplit en écoutant" else "Vide"
-                                                    } else {
-                                                        songsCountLabel(playlist.songs.size)
+                                                    text = when {
+                                                        playlist.songs.isNotEmpty() ->
+                                                            songsCountLabel(playlist.songs.size)
+                                                        playlist.id == SmartPlaylistIds.WITH_LYRICS ->
+                                                            "Aucun morceau avec paroles"
+                                                        playlist.isSmart ->
+                                                            "Se remplit en écoutant"
+                                                        else -> "Vide"
                                                     },
                                                     color = TextSecondary,
                                                     fontSize = 12.sp

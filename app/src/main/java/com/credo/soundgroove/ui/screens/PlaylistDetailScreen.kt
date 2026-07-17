@@ -28,6 +28,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
+import com.credo.soundgroove.data.model.SmartPlaylistIds
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.AlbumArtThumb
 import com.credo.soundgroove.ui.components.DualCtaBar
@@ -230,8 +231,14 @@ fun PlaylistDetailScreen(
                         }
                         Text(
                             text = when {
-                                playlist.songs.isEmpty() && playlist.isSmart -> "Se remplit automatiquement"
-                                else -> com.credo.soundgroove.ui.util.songsCountLabel(playlist.songs.size)
+                                playlist.songs.isNotEmpty() ->
+                                    com.credo.soundgroove.ui.util.songsCountLabel(playlist.songs.size)
+                                playlist.id == SmartPlaylistIds.WITH_LYRICS ->
+                                    "Aucun morceau avec paroles"
+                                playlist.isSmart ->
+                                    "Se remplit automatiquement"
+                                else ->
+                                    com.credo.soundgroove.ui.util.songsCountLabel(0)
                             },
                             color = Color.White.copy(0.7f),
                             fontSize = 14.sp
@@ -259,10 +266,13 @@ fun PlaylistDetailScreen(
                             if (playlist.isSmart) R.drawable.ic_shuffle else R.drawable.ic_songs
                         ),
                         title = if (playlist.isSmart) "Playlist vide pour l'instant" else "Cette playlist est vide",
-                        subtitle = if (playlist.isSmart) {
-                            "Écoute de la musique pour remplir cette playlist automatiquement."
-                        } else {
-                            "Appuie sur ⋮ sur une chanson pour l'ajouter ici."
+                        subtitle = when {
+                            playlist.id == SmartPlaylistIds.WITH_LYRICS ->
+                                "Ajoute ou télécharge des paroles pour qu'elles apparaissent ici."
+                            playlist.isSmart ->
+                                "Écoute de la musique pour remplir cette playlist automatiquement."
+                            else ->
+                                "Appuie sur ⋮ sur une chanson pour l'ajouter ici."
                         },
                         compact = true,
                         modifier = Modifier

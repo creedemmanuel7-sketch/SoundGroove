@@ -29,6 +29,16 @@ object LrcParser {
         return lines.sortedBy { it.timeMs }
     }
 
+    /** Reconstruit un LRC minimal à partir des lignes synchronisées (édition de secours). */
+    fun format(lines: List<LyricLine>): String =
+        lines.joinToString("\n") { line ->
+            val totalMs = line.timeMs.coerceAtLeast(0L)
+            val minutes = totalMs / 60_000L
+            val seconds = (totalMs % 60_000L) / 1_000L
+            val centis = (totalMs % 1_000L) / 10L
+            "[%02d:%02d.%02d] %s".format(minutes, seconds, centis, line.text)
+        }
+
     private fun toMillis(match: MatchResult): Long? {
         val minutes = match.groupValues[1].toLongOrNull() ?: return null
         val seconds = match.groupValues[2].toLongOrNull() ?: return null

@@ -345,10 +345,15 @@ fun sgCoilCrossfadeMs(defaultMs: Int = SgMotion.FastMs): Int {
     return if (reduced) 0 else defaultMs.coerceAtMost(SgMotion.FastMs)
 }
 
-/** Scale léger au press pour boutons play / chips. */
+/**
+ * Scale + fade léger au press (boutons play / chips / contrôles queue).
+ * Scale : [SgMotion.SpringSnappy] ; alpha : [SgMotion.FastMs] (tween) pour un
+ * décalage de quelques ms vs le ressort — reduced motion / Mode perf : no-op.
+ */
 fun Modifier.sgPressScale(
     interactionSource: MutableInteractionSource,
-    pressedScale: Float = 0.92f
+    pressedScale: Float = 0.92f,
+    pressedAlpha: Float = 0.72f,
 ): Modifier = composed {
     val reducedMotion = rememberSgReducedMotion()
     if (reducedMotion) return@composed this
@@ -358,9 +363,15 @@ fun Modifier.sgPressScale(
         animationSpec = SgMotion.SpringSnappy,
         label = "sgPressScale"
     )
+    val alpha by animateFloatAsState(
+        targetValue = if (pressed) pressedAlpha else 1f,
+        animationSpec = SgMotion.tweenFastOf(),
+        label = "sgPressAlpha"
+    )
     graphicsLayer {
         scaleX = scale
         scaleY = scale
+        this.alpha = alpha
     }
 }
 

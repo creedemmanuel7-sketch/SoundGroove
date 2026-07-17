@@ -102,6 +102,21 @@ class LyricsViewModel(application: Application) : AndroidViewModel(application) 
         _isEditing.value = true
     }
 
+    /** Ouvre l'éditeur avec le texte déjà associé au morceau (LRC brut si disponible). */
+    fun startEditingExisting(song: Song) {
+        if (_isSaving.value) return
+        viewModelScope.launch {
+            val raw = withContext(Dispatchers.IO) {
+                LyricsRepository.readRawText(getApplication(), song)
+            } ?: when (val content = _lyricsContent.value) {
+                is LyricsContent.Synced -> LrcParser.format(content.lines)
+                is LyricsContent.PlainText -> content.text
+                else -> ""
+            }
+            startEditing(raw)
+        }
+    }
+
     fun cancelEditing() {
         _saveError.value = null
         _editingDraft.value = ""
@@ -129,6 +144,24 @@ class LyricsViewModel(application: Application) : AndroidViewModel(application) 
                     _saveError.value = error.message ?: "Impossible d'enregistrer les paroles."
                 }
             )
+        }
+    }
+
+    /**
+     * Supprime les paroles associées au morceau et affiche l'état vide
+     * (sans relancer la recherche LRCLIB automatique).
+     */
+    fun deleteLyrics(song: Song) {
+        if (_isSaving.value) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                LyricsRepository.deleteLyrics(getApplication(), song)
+            }
+            _isEditing.value = false
+            _editingDraft.value = ""
+            _saveError.value = null
+            _currentLineIndex.value = -1
+            _lyricsContent.value = LyricsContent.NotFound
         }
     }
 

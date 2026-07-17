@@ -68,6 +68,18 @@ object LyricsCacheStore {
     fun fileCount(context: Context): Int =
         runCatching { cacheDir(context).listFiles()?.size ?: 0 }.getOrDefault(0)
 
+    /** IDs des morceaux présents dans le cache (fichiers non vides). */
+    fun cachedSongIds(context: Context): Set<Long> =
+        runCatching {
+            cacheDir(context).listFiles()
+                ?.mapNotNull { file ->
+                    if (!file.isFile || file.length() <= 0L) return@mapNotNull null
+                    file.nameWithoutExtension.toLongOrNull()
+                }
+                ?.toSet()
+                ?: emptySet()
+        }.getOrDefault(emptySet())
+
     /** Vide tout le cache paroles (ne touche jamais aux fichiers .lrc/.txt voisins de l'audio). */
     fun clearAll(context: Context): Int =
         runCatching {
