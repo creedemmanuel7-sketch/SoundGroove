@@ -21,3 +21,9 @@ local.properties
 /website/out
 /website/.env*.local
 /website/public/downloads/*.apk
+
+# Desktop Tauri (desktop-web/)
+/desktop-web/node_modules
+/desktop-web/dist
+/desktop-web/src-tauri/target
+/desktop-web/src-tauri/gen

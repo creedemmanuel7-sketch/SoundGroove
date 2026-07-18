@@ -1,0 +1,205 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=Syne:wght@700;800&display=swap");
+
+:root {
+  --bg-0: #0c1412;
+  --bg-1: #143028;
+  --bg-2: #1f4a3c;
+  --ink: #e8f2ec;
+  --muted: #9bb5a8;
+  --accent: #3dd68c;
+  --accent-dim: #1f8f5a;
+  --danger: #ff7a7a;
+  --radius: 12px;
+  font-family: "DM Sans", sans-serif;
+  color: var(--ink);
+  background: var(--bg-0);
+  line-height: 1.45;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #1a4d3a 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, #0e2a40 0%, transparent 50%),
+    linear-gradient(160deg, var(--bg-0), var(--bg-1) 45%, #0a1218 100%);
+}
+
+.shell {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 4rem;
+}
+
+.hero {
+  min-height: min(70vh, 520px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  animation: rise 700ms ease-out both;
+}
+
+.brand {
+  margin: 0;
+  font-family: "Syne", sans-serif;
+  font-size: clamp(2.4rem, 8vw, 4.2rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.hero h1 {
+  margin: 0;
+  font-family: "Syne", sans-serif;
+  font-size: clamp(1.2rem, 3vw, 1.6rem);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.lede {
+  margin: 0;
+  color: var(--muted);
+  max-width: 36rem;
+}
+
+.cta,
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+}
+
+button {
+  appearance: none;
+  border: 0;
+  border-radius: 10px;
+  padding: 0.7rem 1.1rem;
+  background: var(--accent);
+  color: #062015;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 160ms ease, background 160ms ease, opacity 160ms ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: #55e09e;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--ink);
+  outline: 1px solid color-mix(in srgb, var(--ink) 28%, transparent);
+}
+
+.player,
+.library {
+  margin-top: 1.75rem;
+  animation: rise 800ms ease-out 120ms both;
+}
+
+.player {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem 0;
+}
+
+.meta {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.label {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.library h2 {
+  margin: 0 0 0.35rem;
+  font-family: "Syne", sans-serif;
+}
+
+.library ul {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.track {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  text-align: left;
+  background: color-mix(in srgb, var(--bg-2) 55%, transparent);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.track:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-dim) 55%, transparent);
+}
+
+.ext {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+.error {
+  margin-top: 1rem;
+  color: var(--danger);
+  animation: rise 240ms ease-out both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .shell {
+    padding-top: 1.5rem;
+  }
+
+  .hero {
+    min-height: 55vh;
+  }
+}

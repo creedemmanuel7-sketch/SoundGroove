@@ -1,0 +1,72 @@
+# Permissions explicites pour les commandes invoke de SoundGroove.
+# Les identifiants `allow-*` correspondent à ceux référencés dans capabilities/default.json.
+
+[[permission]]
+identifier = "allow-mpv-ensure"
+description = "Autorise mpv_ensure"
+commands.allow = ["mpv_ensure"]
+
+[[permission]]
+identifier = "allow-mpv-quit"
+description = "Autorise mpv_quit"
+commands.allow = ["mpv_quit"]
+
+[[permission]]
+identifier = "allow-mpv-load"
+description = "Autorise mpv_load"
+commands.allow = ["mpv_load"]
+
+[[permission]]
+identifier = "allow-mpv-play"
+description = "Autorise mpv_play"
+commands.allow = ["mpv_play"]
+
+[[permission]]
+identifier = "allow-mpv-pause"
+description = "Autorise mpv_pause"
+commands.allow = ["mpv_pause"]
+
+[[permission]]
+identifier = "allow-mpv-toggle-pause"
+description = "Autorise mpv_toggle_pause"
+commands.allow = ["mpv_toggle_pause"]
+
+[[permission]]
+identifier = "allow-mpv-stop"
+description = "Autorise mpv_stop"
+commands.allow = ["mpv_stop"]
+
+[[permission]]
+identifier = "allow-mpv-seek"
+description = "Autorise mpv_seek"
+commands.allow = ["mpv_seek"]
+
+[[permission]]
+identifier = "allow-mpv-set-volume"
+description = "Autorise mpv_set_volume"
+commands.allow = ["mpv_set_volume"]
+
+[[permission]]
+identifier = "allow-mpv-get-status"
+description = "Autorise mpv_get_status"
+commands.allow = ["mpv_get_status"]
+
+[[permission]]
+identifier = "allow-open-audio-path"
+description = "Autorise open_audio_path"
+commands.allow = ["open_audio_path"]
+
+[[permission]]
+identifier = "allow-pick-audio-file"
+description = "Autorise pick_audio_file (dialogue async)"
+commands.allow = ["pick_audio_file"]
+
+[[permission]]
+identifier = "allow-pick-music-folder"
+description = "Autorise pick_music_folder (dialogue async)"
+commands.allow = ["pick_music_folder"]
+
+[[permission]]
+identifier = "allow-scan-music-folder"
+description = "Autorise scan_music_folder (scan IO hors thread UI)"
+commands.allow = ["scan_music_folder"]

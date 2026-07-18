@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capabilities SoundGroove desktop — core, dialogues, et toutes les commandes invoke (mpv_*, open/pick/scan).",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "allow-mpv-ensure",
+    "allow-mpv-quit",
+    "allow-mpv-load",
+    "allow-mpv-play",
+    "allow-mpv-pause",
+    "allow-mpv-toggle-pause",
+    "allow-mpv-stop",
+    "allow-mpv-seek",
+    "allow-mpv-set-volume",
+    "allow-mpv-get-status",
+    "allow-open-audio-path",
+    "allow-pick-audio-file",
+    "allow-pick-music-folder",
+    "allow-scan-music-folder"
+  ]
+}
