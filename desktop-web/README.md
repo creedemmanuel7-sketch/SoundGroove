@@ -8,7 +8,7 @@ Shell **Tauri 2** + React/Vite pour SoundGroove. Lecture audio via **mpv** (IPC)
 
 | Plateforme | Outils |
 |---|---|
-| **Tous** | Node 18+, Rust (rustup), npm |
+| **Tous** | Node 18+, Rust stable récent via rustup (≥ 1.85 ; `rust-toolchain.toml`), npm |
 | **Windows** (cible principale desktop) | Visual Studio Build Tools (C++), WebView2, **mpv** dans le `PATH` |
 | **Linux** (smoke CI / cloud) | `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `patchelf` ; mpv optionnel pour `cargo check` |
 
