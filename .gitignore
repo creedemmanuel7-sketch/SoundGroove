@@ -21,3 +21,8 @@ local.properties
 /website/out
 /website/.env*.local
 /website/public/downloads/*.apk
+
+# SoundGroove desktop (Tauri)
+/desktop-web/node_modules
+/desktop-web/src-tauri/target
+/desktop-web/dist
