@@ -1,0 +1,20 @@
+{
+  "name": "soundgroove-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "SoundGroove desktop (Tauri) — bibliothèque locale, tags ID3/FLAC et pochettes",
+  "scripts": {
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:dev:win": "tauri dev",
+    "tauri:build": "tauri build",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
+  }
+}
