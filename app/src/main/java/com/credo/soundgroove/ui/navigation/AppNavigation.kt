@@ -1,5 +1,8 @@
 package com.credo.soundgroove.ui.navigation
 
+// Contrat navigation + mini-player : docs/NAVIGATION_CONTRACT.md
+// Visibilité mini-player : MiniPlayerVisibility (source unique de vérité)
+
 import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Animatable
@@ -90,6 +93,7 @@ fun AppNavigation(
     val playbackQueue by viewModel.playbackQueue.collectAsState()
     val playbackQueueIndex by viewModel.playbackQueueIndex.collectAsState()
     val performanceModeEnabled by viewModel.performanceModeEnabled.collectAsState()
+    val persistentMiniPlayerEnabled by viewModel.persistentMiniPlayerEnabled.collectAsState()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val context = LocalContext.current
@@ -122,6 +126,7 @@ fun AppNavigation(
         playbackQueue = playbackQueue,
         playbackQueueIndex = playbackQueueIndex,
         currentRoute = currentRoute,
+        persistentMiniPlayerEnabled = persistentMiniPlayerEnabled,
         context = context,
         scope = scope
     )
@@ -156,10 +161,13 @@ private fun AppNavigationContent(
     playbackQueue: List<com.credo.soundgroove.data.model.Song>,
     playbackQueueIndex: Int,
     currentRoute: String?,
+    persistentMiniPlayerEnabled: Boolean,
     context: android.content.Context,
     scope: kotlinx.coroutines.CoroutineScope
 ) {
     val reducedMotion = rememberSgReducedMotion()
+    // Overlay Accueil « Récemment joué » : masque le mini sur HOME uniquement.
+    var homeMiniPlayerSuppressed by remember { mutableStateOf(false) }
 
     // File d'attente : PAS un overlay qui cache le Player (cf. correction utilisateur) —
     // le Player se réduit en bandeau (~1/4 écran, cf. PlayerQueueBanner) pendant que la
@@ -292,8 +300,8 @@ private fun AppNavigationContent(
     // Shared element réel (cf. docs/FEATURES_C_SHARED_ELEMENT.md) : tout le contenu
     // (NavHost + mini-player overlay) vit dans le même SharedTransitionLayout, afin
     // que la pochette puisse morpher entre le mini-player et le Player plein écran
-    // quel que soit le point d'entrée (overlay ci-dessous, ou celui intégré à
-    // MainScreen — cf. LocalSharedTransitionScope, ambiant depuis ce niveau).
+    // quel que soit le point d'entrée — cf. LocalSharedTransitionScope, ambiant depuis
+    // ce niveau ; mini-player unique via MiniPlayerVisibility.
     SharedTransitionLayout {
     val sharedTransitionScope = this
     CompositionLocalProvider(LocalSharedTransitionScope provides sharedTransitionScope) {
@@ -354,7 +362,8 @@ private fun AppNavigationContent(
                     },
                     onNavigateToPlayer = {
                         navController.navigate(Routes.PLAYER)
-                    }
+                    },
+                    onHomeMiniPlayerSuppressedChange = { homeMiniPlayerSuppressed = it }
                 )
                 }
             }
@@ -436,9 +445,8 @@ private fun AppNavigationContent(
                 if (song != null && player != null) {
                     // Fournit l'AnimatedContentScope de cette destination NavHost comme
                     // AnimatedVisibilityScope du shared element (cf. Motion.kt) : c'est ce
-                    // scope, combiné à celui du mini-player (AnimatedVisibility ci-dessous
-                    // ou dans MainScreen), qui permet à Modifier.sharedElement de savoir
-                    // que la pochette "entre" ici et "sort" de l'autre côté.
+                    // scope, combiné à celui du mini-player global (overlay AppNavigation),
+                    // qui permet à Modifier.sharedElement de morpher la pochette.
                     CompositionLocalProvider(LocalSgAnimatedVisibilityScope provides this@composable) {
                     // Réduction du Player en bandeau pendant que la Queue est ouverte : léger
                     // scale-down + fade + léger décalage vers le haut (PAS le même morph que
@@ -485,6 +493,7 @@ private fun AppNavigationContent(
                             sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
                             vinylModeEnabled = vinylModeEnabled,
                             albumCoverAccentEnabled = albumCoverAccentEnabled,
+                            queueOpen = showQueue || queueBannerProgress.value > 0.001f,
                         )
                     }
                     }
@@ -683,25 +692,23 @@ private fun AppNavigationContent(
             }
         }
 
-        // Le mini-player ne s'affiche jamais sur l'écran Player plein écran : deux
-        // surfaces "now playing" simultanées violeraient la loi de Jakob (l'utilisateur
-        // connaît déjà ce pattern via Spotify/Apple Music — un seul lecteur visible à
-        // la fois, mini en arrière-plan ou plein écran, jamais les deux).
-        // Enveloppé dans AnimatedVisibility (au lieu d'un simple if) pour deux raisons :
-        // une transition d'apparition/disparition plus douce, et surtout pour exposer
-        // l'AnimatedVisibilityScope requis par le shared element pochette (cf. Motion.kt).
+        // Mini-player global unique — cf. MiniPlayerVisibility + docs/NAVIGATION_CONTRACT.md
         currentSong?.let { song ->
+            val miniVisible = MiniPlayerVisibility.shouldShow(
+                currentRoute = currentRoute,
+                hasCurrentSong = true,
+                persistentEnabled = persistentMiniPlayerEnabled,
+                homeSuppressed = homeMiniPlayerSuppressed,
+            )
             AnimatedVisibility(
-                visible = currentRoute != Routes.HOME && currentRoute != Routes.PLAYER,
-                // Pas de fade/slide sur le conteneur : le morph shared element (pochette +
-                // métadonnées) est la seule animation au pop Player → mini — un fadeEnter
-                // en parallèle provoquait le "jump" de resynchronisation à la relâche.
+                visible = miniVisible,
+                // Pas de fade/slide conteneur : morph shared element pochette (Motion.kt).
                 enter = EnterTransition.None,
                 exit = ExitTransition.None,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(bottom = 8.dp)
+                    .padding(bottom = MiniPlayerVisibility.bottomPadding(currentRoute))
             ) {
                 CompositionLocalProvider(LocalSgAnimatedVisibilityScope provides this@AnimatedVisibility) {
                     val duration = song.duration.takeIf { it > 0L } ?: 1L

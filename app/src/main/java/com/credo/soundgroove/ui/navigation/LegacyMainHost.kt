@@ -25,7 +25,8 @@ fun LegacyMainHost(
     onNavigateToSearch: () -> Unit,
     onNavigateToAlbum: (String) -> Unit,
     onNavigateToArtist: (String) -> Unit,
-    onNavigateToPlayer: () -> Unit
+    onNavigateToPlayer: () -> Unit,
+    onHomeMiniPlayerSuppressedChange: (Boolean) -> Unit = {}
 ) {
     val controller by viewModel.mediaController.collectAsState()
     val currentTheme by viewModel.currentTheme.collectAsState()
@@ -55,6 +56,11 @@ fun LegacyMainHost(
     val smartNotificationsEnabled by viewModel.smartNotificationsEnabled.collectAsState()
     val persistentMiniPlayerEnabled by viewModel.persistentMiniPlayerEnabled.collectAsState()
     val performanceModeEnabled by viewModel.performanceModeEnabled.collectAsState()
+    val remoteHostEnabled by viewModel.remoteHostEnabled.collectAsState()
+    val remotePin by viewModel.remotePin.collectAsState()
+    val remoteLanIp by viewModel.remoteLanIp.collectAsState()
+    val remoteClientCount by viewModel.remoteClientCount.collectAsState()
+    val remoteHostError by viewModel.remoteHostError.collectAsState()
     val hiddenFolders by viewModel.hiddenFolders.collectAsState()
     val playbackQueue by viewModel.playbackQueue.collectAsState()
     val backupMessage by viewModel.backupMessage.collectAsState()
@@ -131,6 +137,7 @@ fun LegacyMainHost(
             onNavigateToAlbum = onNavigateToAlbum,
             onNavigateToArtist = onNavigateToArtist,
             onNavigateToPlayer = onNavigateToPlayer,
+            onHomeMiniPlayerSuppressedChange = onHomeMiniPlayerSuppressedChange,
             songs = songs,
             sortedSongs = sortedSongs,
             sortMode = sortMode,
@@ -159,6 +166,14 @@ fun LegacyMainHost(
             onPersistentMiniPlayerChange = { viewModel.setPersistentMiniPlayerEnabled(it) },
             performanceModeEnabled = performanceModeEnabled,
             onPerformanceModeChange = { viewModel.setPerformanceModeEnabled(it) },
+            remoteHostEnabled = remoteHostEnabled,
+            remotePin = remotePin,
+            remoteLanIp = remoteLanIp,
+            remotePort = viewModel.remotePort,
+            remoteClientCount = remoteClientCount,
+            remoteHostError = remoteHostError,
+            onRemoteHostChange = { viewModel.setRemoteHostEnabled(it) },
+            onRegenerateRemotePin = { viewModel.regenerateRemotePin() },
             onClearRecentlyPlayed = { viewModel.clearRecentlyPlayed() },
             onClearSearchHistory = { viewModel.clearSearchHistory() },
             onExportBackup = {

@@ -65,9 +65,7 @@ import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.data.repository.ListeningStats
 import com.credo.soundgroove.ui.components.BottomNavBar
 import com.credo.soundgroove.ui.components.InfoRow
-import com.credo.soundgroove.ui.components.MiniPlayer
 import com.credo.soundgroove.ui.components.formatDuration
-import com.credo.soundgroove.ui.theme.LocalSgAnimatedVisibilityScope
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.util.MediaPermissions
 import com.credo.soundgroove.util.PlayerGuards
@@ -97,6 +95,7 @@ fun MainScreen(
     onNavigateToAlbum: (String) -> Unit = {},
     onNavigateToArtist: (String) -> Unit = {},
     onNavigateToPlayer: () -> Unit = {},
+    onHomeMiniPlayerSuppressedChange: (Boolean) -> Unit = {},
     playbackSpeed: Float = 1f,
     playbackPitch: Float = 1f,
     onPlaybackSpeedChange: (Float) -> Unit = {},
@@ -145,6 +144,14 @@ fun MainScreen(
     onPersistentMiniPlayerChange: (Boolean) -> Unit = {},
     performanceModeEnabled: Boolean = false,
     onPerformanceModeChange: (Boolean) -> Unit = {},
+    remoteHostEnabled: Boolean = false,
+    remotePin: String? = null,
+    remoteLanIp: String? = null,
+    remotePort: Int = 3847,
+    remoteClientCount: Int = 0,
+    remoteHostError: String? = null,
+    onRemoteHostChange: (Boolean) -> Unit = {},
+    onRegenerateRemotePin: () -> Unit = {},
     onClearRecentlyPlayed: () -> Unit = {},
     onClearSearchHistory: () -> Unit = {},
     onExportBackup: () -> Unit = {},
@@ -278,6 +285,9 @@ fun MainScreen(
     BackHandler(enabled = showSongInfo) { showSongInfo = false }
     BackHandler(enabled = showPlaylistPicker) { showPlaylistPicker = false }
     BackHandler(enabled = showRecentlyPlayed) { showRecentlyPlayed = false }
+    LaunchedEffect(showRecentlyPlayed) {
+        onHomeMiniPlayerSuppressedChange(showRecentlyPlayed)
+    }
     var showSettings by remember { mutableStateOf(false) }
     BackHandler(enabled = showSettings) { showSettings = false }
     var showSleepTimerSheet by remember { mutableStateOf(false) }
@@ -508,37 +518,6 @@ fun MainScreen(
                 }
                 }
             }
-            AnimatedVisibility(
-                visible = persistentMiniPlayerEnabled && !showRecentlyPlayed && activeSong != null,
-                enter = SgMotion.slideUpEnter(reducedMotion),
-                exit = SgMotion.slideUpExit(reducedMotion)
-            ) {
-                // Fournit l'AnimatedVisibilityScope de ce mini-player "intégré" (onglet
-                // Accueil) au shared element pochette, au même titre que l'overlay de
-                // AppNavigation — cf. ui/theme/Motion.kt et docs/FEATURES_C_SHARED_ELEMENT.md.
-                CompositionLocalProvider(LocalSgAnimatedVisibilityScope provides this@AnimatedVisibility) {
-                    activeSong?.let { song ->
-                        val duration = song.duration.takeIf { it > 0L } ?: 1L
-                        MiniPlayer(
-                            song = song,
-                            isPlaying = activeIsPlaying,
-                            progress = (playbackPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f),
-                            accentColor = accentColor,
-                            onPlayPause = {
-                                if (activeIsPlaying) player.pause() else player.play()
-                                localIsPlaying = !activeIsPlaying
-                            },
-                            onSkipPrevious = { PlayerGuards.safeSeekToPrevious(player) },
-                            onSkipNext = { PlayerGuards.safeSeekToNext(player) },
-                            onOpen = onNavigateToPlayer,
-                            gaplessEnabled = gaplessEnabled,
-                            crossfadeDurationMs = crossfadeDurationMs,
-                            albumCoverAccentEnabled = albumCoverAccentEnabled,
-                        )
-                    }
-                }
-            }
-
 
                 BottomNavBar(
                     selectedTab = selectedTab,
@@ -615,6 +594,14 @@ fun MainScreen(
             onPersistentMiniPlayerChange = onPersistentMiniPlayerChange,
             performanceModeEnabled = performanceModeEnabled,
             onPerformanceModeChange = onPerformanceModeChange,
+            remoteHostEnabled = remoteHostEnabled,
+            remotePin = remotePin,
+            remoteLanIp = remoteLanIp,
+            remotePort = remotePort,
+            remoteClientCount = remoteClientCount,
+            remoteHostError = remoteHostError,
+            onRemoteHostChange = onRemoteHostChange,
+            onRegenerateRemotePin = onRegenerateRemotePin,
             onReloadMusic = onReloadMusic,
             onClearRecentlyPlayed = onClearRecentlyPlayed,
             onClearSearchHistory = onClearSearchHistory,

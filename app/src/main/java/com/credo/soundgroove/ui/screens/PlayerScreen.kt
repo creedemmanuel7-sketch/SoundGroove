@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -55,6 +56,10 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -83,6 +88,7 @@ import com.credo.soundgroove.util.ensureContrast
 import com.credo.soundgroove.util.rememberAlbumArtAccentColor
 import com.credo.soundgroove.util.rememberAlbumArtRolePalette
 import com.credo.soundgroove.util.rememberPlayerAmbiencePalette
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /** Interpolation linéaire simple — évite une dépendance à `androidx.compose.ui.util.lerp`. */
@@ -122,6 +128,8 @@ fun PlayerScreen(
     sleepTimerRemainingSeconds: Int? = null,
     vinylModeEnabled: Boolean = false,
     albumCoverAccentEnabled: Boolean = false,
+    /** Désactive le predictive back système quand la file d'attente overlay est ouverte. */
+    queueOpen: Boolean = false,
 ) {
     val surfaceBg = MaterialTheme.colorScheme.background
     val rolePalette = rememberAlbumArtRolePalette(
@@ -394,7 +402,25 @@ fun PlayerScreen(
         runEnterAnimation()
     }
 
-    BackHandler(onBack = { dismissPlayer() })
+    val predictiveBackEnabled =
+        !reducedMotion && !isExiting && lyricsPeekProgress < 0.001f && !queueOpen
+
+    // POC S3 : back prédictif Android 13+ — même morph interactif que le swipe bas
+    // (`applyDismissDrag`). Commit → BackHandler ci-dessous ; annulation → spring-back.
+    PredictiveBackHandler(enabled = predictiveBackEnabled) { progress ->
+        try {
+            progress.collect { backEvent ->
+                applyDismissDrag(backEvent.progress)
+            }
+        } catch (e: CancellationException) {
+            cancelDismissDrag()
+            throw e
+        }
+    }
+
+    BackHandler(onBack = {
+        dismissPlayer(fromInteractiveDrag = dismissMorphProgress >= dismissCommitFraction)
+    })
 
     LaunchedEffect(player) {
         while (true) {
@@ -418,6 +444,24 @@ fun PlayerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .semantics {
+                contentDescription =
+                    "Lecteur en cours. Glisser vers le bas pour réduire au mini-player."
+                customActions = listOf(
+                    CustomAccessibilityAction("Réduire au mini-player") {
+                        dismissPlayer()
+                        true
+                    },
+                    CustomAccessibilityAction("Ouvrir la file d'attente") {
+                        onSwipeUp()
+                        true
+                    },
+                    CustomAccessibilityAction("Afficher les paroles") {
+                        onOpenLyrics()
+                        true
+                    },
+                )
+            }
             .offset { IntOffset(0, dismissRootOffsetY.value.toInt()) }
             .onSizeChanged { screenWidthPx = it.width.toFloat().coerceAtLeast(1f) }
             // Peek horizontal Player → Paroles : le Player glisse vers la gauche au
@@ -551,22 +595,15 @@ fun PlayerScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Cible tactile 48dp (Fitts's Law) — la zone cliquable dépasse le glyphe visuel.
+                // Sortie secondaire : swipe bas + BackHandler = primaires ; cible 48dp
+                // conservée pour l'accessibilité (TalkBack, Fitts).
                 SgTapTarget(onClick = { dismissPlayer() }) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(GlassSurface, CircleShape)
-                            .border(1.dp, GlassBorder, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_close_down),
-                            contentDescription = "Fermer",
-                            tint = TextPrimary,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
+                    Icon(
+                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_close_down),
+                        contentDescription = "Réduire au mini-player",
+                        tint = TextSecondary.copy(alpha = 0.72f),
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
 
                 Text(

@@ -76,6 +76,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -93,12 +97,12 @@ import com.credo.soundgroove.lyrics.LyricsViewModel
 import com.credo.soundgroove.ui.theme.SgMotion
 import com.credo.soundgroove.ui.theme.SgRadius
 import com.credo.soundgroove.ui.theme.SgSpacing
+import com.credo.soundgroove.ui.theme.SgTapTarget
 import com.credo.soundgroove.ui.theme.rememberSgReducedMotion
 import com.credo.soundgroove.ui.theme.sgCoilCrossfadeMs
 import com.credo.soundgroove.util.LyricsChromePrimaryText
 import com.credo.soundgroove.util.LyricsPalette
 import com.credo.soundgroove.util.PlayerGuards
-import com.credo.soundgroove.util.displayArtist
 import com.credo.soundgroove.util.displayTitle
 import com.credo.soundgroove.util.rememberLyricsPalette
 import kotlin.math.abs
@@ -179,6 +183,16 @@ fun LyricsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .semantics {
+                contentDescription =
+                    "Paroles. Glisser vers le bas ou la droite pour revenir au lecteur."
+                customActions = listOf(
+                    CustomAccessibilityAction("Revenir au lecteur") {
+                        onClose()
+                        true
+                    },
+                )
+            }
             .onSizeChanged { screenWidthPx = it.width.toFloat().coerceAtLeast(1f) }
             // Peek symétrique de celui du Player (cf. PlayerScreen.graphicsLayer) :
             // Paroles entre/sort par la droite, translationX dérivé du même progrès
@@ -259,19 +273,14 @@ fun LyricsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(palette.glassSurface, CircleShape)
-                        .border(1.dp, palette.glassBorder, CircleShape)
-                        .clickable { onClose() },
-                    contentAlignment = Alignment.Center
-                ) {
+                // Sortie secondaire : gestes (swipe bas/droite) et BackHandler = primaires ;
+                // icône discrète mais cible 48dp conservée pour TalkBack / Fitts.
+                SgTapTarget(onClick = onClose) {
                     Icon(
                         painter = painterResource(R.drawable.ic_close_down),
                         contentDescription = "Revenir au lecteur",
-                        tint = palette.primaryText,
-                        modifier = Modifier.size(28.dp)
+                        tint = palette.secondaryText.copy(alpha = 0.72f),
+                        modifier = Modifier.size(22.dp)
                     )
                 }
                 Column(
@@ -373,11 +382,8 @@ fun LyricsScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Mini contrôles de lecture — permet de piloter précédent/pause/suivant
-            // sans quitter les Paroles (cf. demande §2). Branché directement sur le
-            // `player`/`isPlaying`/`onPlayPause` reçus en paramètres, comme le Player
-            // plein écran (PlayerGuards pour prev/next, callback dédié pour play/pause
-            // car géré côté ViewModel — crossfade, minuterie de sommeil...).
+            // Barre compacte façon Spotify : pochette discrète + play/pause central,
+            // sans prev/next (réservés au Player et au mini-player).
             LyricsPlaybackBar(
                 song = song,
                 isPlaying = isPlaying,
@@ -386,8 +392,6 @@ fun LyricsScreen(
                 palette = palette,
                 accentColor = effectiveAccent,
                 onPlayPause = onPlayPause,
-                onSkipPrevious = { PlayerGuards.safeSeekToPrevious(player) },
-                onSkipNext = { PlayerGuards.safeSeekToNext(player) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
@@ -487,10 +491,9 @@ private fun LyricsManageActions(
 }
 
 /**
- * Barre compacte de mini contrôles de lecture, ancrée en bas de l'écran Paroles —
- * pochette miniature + titre/artiste, précédent/play-pause/suivant, fine barre de
- * progression sur le bord supérieur (même langage visuel que [MiniPlayer], teinté
- * avec la palette Paroles plutôt que l'accent brut du thème).
+ * Barre compacte de lecture en bas de l'écran Paroles (style Spotify) —
+ * pochette discrète, play/pause central, fine barre de progression en tête.
+ * Prev/next restent sur [PlayerScreen] et le mini-player.
  */
 @Composable
 private fun LyricsPlaybackBar(
@@ -500,8 +503,6 @@ private fun LyricsPlaybackBar(
     palette: LyricsPalette,
     accentColor: Color,
     onPlayPause: () -> Unit,
-    onSkipPrevious: () -> Unit,
-    onSkipNext: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val animatedProgress by animateFloatAsState(
@@ -529,15 +530,14 @@ private fun LyricsPlaybackBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(32.dp)
                         .clip(RoundedCornerShape(SgRadius.sm))
-                        .background(palette.surfaceElevated),
+                        .background(palette.surfaceElevated.copy(alpha = 0.65f)),
                     contentAlignment = Alignment.Center
                 ) {
                     if (song.albumArtUri != null) {
@@ -555,73 +555,29 @@ private fun LyricsPlaybackBar(
                             painter = painterResource(R.drawable.ic_songs),
                             contentDescription = null,
                             tint = palette.secondaryText,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = song.displayTitle(),
-                        color = palette.primaryText,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = song.displayArtist(),
-                        color = palette.secondaryText,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
+                Spacer(modifier = Modifier.weight(1f))
+                SgTapTarget(onClick = onPlayPause, minSize = 44.dp) {
                     Box(
                         modifier = Modifier
-                            .size(38.dp)
-                            .clickable { onSkipPrevious() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_previous),
-                            contentDescription = "Précédent",
-                            tint = palette.primaryText,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
+                            .size(36.dp)
                             .clip(CircleShape)
-                            .background(accentColor)
-                            .clickable { onPlayPause() },
+                            .background(accentColor),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
                             contentDescription = if (isPlaying) "Pause" else "Lecture",
                             tint = Color.Black,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clickable { onSkipNext() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_next),
-                            contentDescription = "Suivant",
-                            tint = palette.primaryText,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(17.dp)
                         )
                     }
                 }
+                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.width(32.dp))
             }
         }
     }

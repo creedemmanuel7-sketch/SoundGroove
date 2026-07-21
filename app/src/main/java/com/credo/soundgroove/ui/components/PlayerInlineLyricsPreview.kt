@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -164,8 +163,6 @@ private fun InlineLyricLine(
         color = color,
         fontSize = if (active) 15.sp else 13.sp,
         fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
         textAlign = TextAlign.Center,
         modifier = Modifier
             .fillMaxWidth()
