@@ -186,7 +186,8 @@ private fun OnboardingWelcomeStep(
         verticalArrangement = Arrangement.Center
     ) {
         Box(modifier = Modifier.scale(logoScale)) {
-            SoundGrooveLogo(accentColor = accentColor)
+            // Violet sur noir — marque premium fixe, indépendante de l'accent thème.
+            SoundGrooveLogo()
         }
         Spacer(modifier = Modifier.height(SgSpacing.xl))
         Text(

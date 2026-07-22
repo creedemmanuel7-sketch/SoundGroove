@@ -13,12 +13,14 @@ import com.credo.soundgroove.ui.theme.SoundGrooveTheme
 import com.credo.soundgroove.ui.theme.rememberDynamicAccentBase
 import com.credo.soundgroove.ui.theme.rememberEffectiveAccentColor
 import com.credo.soundgroove.ui.theme.resolveAccentColor
+import com.credo.soundgroove.util.CoilImageConfig
 import com.credo.soundgroove.viewmodel.SoundGrooveViewModel
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CoilImageConfig.install(this)
         enableEdgeToEdge()
         setContent {
             val viewModel: SoundGrooveViewModel = viewModel()

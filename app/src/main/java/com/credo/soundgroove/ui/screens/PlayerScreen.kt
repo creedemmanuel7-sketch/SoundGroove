@@ -32,7 +32,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
@@ -75,6 +74,7 @@ import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.PlayerGestureHints
 import com.credo.soundgroove.ui.components.PlayerInlineLyricsPreview
 import com.credo.soundgroove.ui.components.SgSeekBar
 import com.credo.soundgroove.ui.components.formatDuration
@@ -89,10 +89,14 @@ import com.credo.soundgroove.util.rememberAlbumArtAccentColor
 import com.credo.soundgroove.util.rememberAlbumArtRolePalette
 import com.credo.soundgroove.util.rememberPlayerAmbiencePalette
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Interpolation linéaire simple — évite une dépendance à `androidx.compose.ui.util.lerp`. */
 private fun lerpFloat(start: Float, stop: Float, fraction: Float): Float = start + (stop - start) * fraction
+
+/** Délai sans interaction avant de masquer le chrome pendant la lecture. */
+private const val PLAYER_IDLE_CHROME_TIMEOUT_MS = 4_000L
 
 @Composable
 fun PlayerScreen(
@@ -130,6 +134,7 @@ fun PlayerScreen(
     albumCoverAccentEnabled: Boolean = false,
     /** Désactive le predictive back système quand la file d'attente overlay est ouverte. */
     queueOpen: Boolean = false,
+    lyricsSyncOffsetMs: Long = com.credo.soundgroove.lyrics.LyricsViewModel.DEFAULT_SYNC_OFFSET_MS,
 ) {
     val surfaceBg = MaterialTheme.colorScheme.background
     val rolePalette = rememberAlbumArtRolePalette(
@@ -168,6 +173,8 @@ fun PlayerScreen(
         themeBackground = MaterialTheme.colorScheme.background
     )
     var progress by remember { mutableStateOf(0f) }
+    var isSeeking by remember { mutableStateOf(false) }
+    var seekPosition by remember { mutableStateOf(0f) }
     var isShuffled by remember { mutableStateOf(false) }
     var repeatMode by remember { mutableStateOf(0) }
     var duration by remember { mutableStateOf(0L) }
@@ -204,9 +211,46 @@ fun PlayerScreen(
     val artOffsetX = remember { Animatable(0f) }
     val artOffsetY = remember { Animatable(SgMotion.PlayerArtEnterOffsetY) }
     val chromeAlpha = remember { Animatable(0f) }
+    /** 0 = chrome visible, 1 = chrome masqué après idle (lecture immersive). */
+    val idleChromeHidden = remember { Animatable(0f) }
+    var idleInteractionEpoch by remember { mutableIntStateOf(0) }
     val dismissRootOffsetY = remember { Animatable(0f) }
     var isExiting by remember { mutableStateOf(false) }
     val reducedMotion = rememberSgReducedMotion()
+
+    fun bumpIdleTimer() {
+        idleInteractionEpoch++
+        scope.launch {
+            if (idleChromeHidden.value > 0.01f) {
+                idleChromeHidden.animateTo(0f, animationSpec = SgMotion.playerChromeEnterSpec())
+            } else {
+                idleChromeHidden.snapTo(0f)
+            }
+        }
+    }
+
+    LaunchedEffect(
+        isPlaying,
+        idleInteractionEpoch,
+        reducedMotion,
+        isSeeking,
+        isExiting,
+        lyricsPeekProgress,
+        queueOpen,
+        isDismissDragging,
+    ) {
+        if (reducedMotion || !isPlaying || isSeeking || isExiting ||
+            lyricsPeekProgress > 0.001f || queueOpen || isDismissDragging
+        ) {
+            idleChromeHidden.snapTo(0f)
+            return@LaunchedEffect
+        }
+        delay(PLAYER_IDLE_CHROME_TIMEOUT_MS)
+        if (!isPlaying || isSeeking || isExiting || lyricsPeekProgress > 0.001f || queueOpen) {
+            return@LaunchedEffect
+        }
+        idleChromeHidden.animateTo(1f, animationSpec = SgMotion.playerChromeExitSpec())
+    }
 
     // Fondu des "lampes" (scrim ambiance) : évite le snap brutal quand Palette
     // Coil renvoie les couleurs extraites de la pochette.
@@ -447,20 +491,34 @@ fun PlayerScreen(
             .semantics {
                 contentDescription =
                     "Lecteur en cours. Glisser vers le bas pour réduire au mini-player."
-                customActions = listOf(
-                    CustomAccessibilityAction("Réduire au mini-player") {
-                        dismissPlayer()
-                        true
-                    },
-                    CustomAccessibilityAction("Ouvrir la file d'attente") {
-                        onSwipeUp()
-                        true
-                    },
-                    CustomAccessibilityAction("Afficher les paroles") {
-                        onOpenLyrics()
-                        true
-                    },
-                )
+                customActions = buildList {
+                    add(
+                        CustomAccessibilityAction("Réduire au mini-player") {
+                            dismissPlayer()
+                            true
+                        }
+                    )
+                    add(
+                        CustomAccessibilityAction("Ouvrir la file d'attente") {
+                            onSwipeUp()
+                            true
+                        }
+                    )
+                    add(
+                        CustomAccessibilityAction("Ouvrir les paroles (aperçu ou swipe gauche)") {
+                            onOpenLyrics()
+                            true
+                        }
+                    )
+                    if (idleChromeHidden.value > 0.01f) {
+                        add(
+                            CustomAccessibilityAction("Afficher tous les contrôles") {
+                                bumpIdleTimer()
+                                true
+                            }
+                        )
+                    }
+                }
             }
             .offset { IntOffset(0, dismissRootOffsetY.value.toInt()) }
             .onSizeChanged { screenWidthPx = it.width.toFloat().coerceAtLeast(1f) }
@@ -469,7 +527,7 @@ fun PlayerScreen(
             // `lyricsPeekProgress` partagé côté AppNavigation). `size` est la taille
             // réelle du layout au moment du dessin — pas besoin de re-mesurer.
             .graphicsLayer { translationX = -lyricsPeekProgress * size.width }
-            .pointerInput(Unit) { detectTapGestures { } }
+            .pointerInput(Unit) { detectTapGestures { bumpIdleTimer() } }
             .pointerInput(Unit) {
                 detectVerticalDragGestures(
                     onDragEnd = {
@@ -580,6 +638,7 @@ fun PlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .navigationBarsPadding()
                 .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -591,7 +650,7 @@ fun PlayerScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .graphicsLayer { alpha = chromeAlpha.value },
+                    .graphicsLayer { alpha = chromeAlpha.value * (1f - idleChromeHidden.value) },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -639,6 +698,14 @@ fun PlayerScreen(
             // pendant le dismiss interactif (dismissMorphProgress > 0), le morph manuel
             // prend le relais pour suivre le doigt sans conflit de bounds au pop.
             val interactiveDismissActive = dismissMorphProgress > 0f
+            // Conteneur flexible : absorbe la hauteur des paroles inline pour garder
+            // File ancré en bas (style Spotify), avec ou sans LRC.
+            Box(
+                modifier = Modifier
+                    .weight(1f, fill = true)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
             Box(
                 modifier = Modifier
                     // Doit rester AVANT `.offset{}` : voir le commentaire sur
@@ -746,14 +813,15 @@ fun PlayerScreen(
                 }
 
             }
+            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Chrome (titre, slider, contrôles, actions) : fondu après le morph de la pochette.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .graphicsLayer { alpha = chromeAlpha.value },
+                    .graphicsLayer { alpha = chromeAlpha.value * (1f - idleChromeHidden.value) },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
             // Titre + Favori
@@ -845,18 +913,17 @@ fun PlayerScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
             // Seek : thumb 16, track 4, hitSlop 44 (SgSeekBar custom).
-            var isSeeking by remember { mutableStateOf(false) }
-            var seekPosition by remember { mutableStateOf(0f) }
-
             SgSeekBar(
                 value = if (isSeeking) seekPosition else progress.coerceIn(0f, 1f),
                 onValueChange = { value ->
+                    if (!isSeeking) bumpIdleTimer()
                     isSeeking = true
                     seekPosition = value
                 },
                 onValueChangeFinished = {
                     player.seekTo((seekPosition * duration).toLong())
                     isSeeking = false
+                    bumpIdleTimer()
                 },
                 accentColor = displayAccent,
                 inactiveTrackColor = CardSurface,
@@ -946,7 +1013,10 @@ fun PlayerScreen(
                         .clickable(
                             interactionSource = playInteraction,
                             indication = null
-                        ) { onPlayPause() },
+                        ) {
+                            bumpIdleTimer()
+                            onPlayPause()
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Crossfade(
@@ -996,36 +1066,33 @@ fun PlayerScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Aperçu paroles sync (style Spotify) — tap → écran Paroles plein.
-            // Sans LRC : rien (bouton Paroles ci-dessous reste le CTA).
+            // Aperçu paroles sync — tap → LyricsScreen (plus de bouton Paroles).
+            // Au-dessus de File ; la pochette en weight absorbe la hauteur.
             PlayerInlineLyricsPreview(
                 song = song,
                 playbackPositionMs = currentPosition,
                 accentColor = lyricsActionColor,
+                lyricsSyncOffsetMs = lyricsSyncOffsetMs,
                 onOpenLyrics = onOpenLyrics
             )
 
-            // Accès secondaires essentiels : file d'attente + paroles (le reste
-            // vit dans la sheet Options, bouton header ⋯).
+            // File — toujours en dernier dans le chrome (accessible, style Spotify).
             Row(
-                modifier = Modifier.fillMaxWidth(0.88f),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SgTapTarget(
-                    onClick = onOpenQueue,
-                    modifier = Modifier.weight(0.35f)
-                ) {
-                    // Outline + surface-elevated + onSurface palette (≥ 4.5:1 sur fond lecteur)
+                SgTapTarget(onClick = onOpenQueue) {
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
                             .clip(RoundedCornerShape(SgRadius.pill))
                             .background(SurfaceElevated)
                             .border(1.dp, fileActionColor.copy(alpha = 0.35f), RoundedCornerShape(SgRadius.pill))
-                            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm + 2.dp),
+                            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -1033,7 +1100,7 @@ fun PlayerScreen(
                             painter = painterResource(R.drawable.ic_queue),
                             contentDescription = "File d'attente",
                             tint = fileActionColor,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
@@ -1044,33 +1111,109 @@ fun PlayerScreen(
                         )
                     }
                 }
-                SgTapTarget(
-                    onClick = onOpenLyrics,
-                    modifier = Modifier.weight(0.65f)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(SgRadius.pill))
-                            .background(lyricsActionColor.copy(alpha = 0.18f))
-                            .border(1.dp, lyricsActionColor.copy(alpha = 0.45f), RoundedCornerShape(SgRadius.pill))
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Lyrics,
-                            contentDescription = "Paroles",
-                            tint = lyricsActionColor,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Paroles", color = lyricsActionColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
             }
             }
         }
+
+        if (idleChromeHidden.value > 0.01f) {
+            PlayerImmersiveMiniControls(
+                progress = if (isSeeking) seekPosition else progress.coerceIn(0f, 1f),
+                isPlaying = isPlaying,
+                accentColor = displayAccent,
+                inactiveTrackColor = CardSurface,
+                visibility = idleChromeHidden.value,
+                reducedMotion = reducedMotion,
+                onPlayPause = {
+                    bumpIdleTimer()
+                    onPlayPause()
+                },
+                onSeek = { value ->
+                    if (!isSeeking) bumpIdleTimer()
+                    isSeeking = true
+                    seekPosition = value
+                },
+                onSeekFinished = {
+                    player.seekTo((seekPosition * duration).toLong())
+                    isSeeking = false
+                    bumpIdleTimer()
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+            )
+        }
+
+        if (!queueOpen && lyricsPeekProgress < 0.001f && !isExiting) {
+            PlayerGestureHints(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 16.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Contrôles minimaux affichés quand le chrome principal est masqué (mode immersif).
+ * Barre de progression ultra-fine + play/pause flottant — seek et lecture restent
+ * accessibles sans réafficher tout le chrome.
+ */
+@Composable
+private fun PlayerImmersiveMiniControls(
+    progress: Float,
+    isPlaying: Boolean,
+    accentColor: Color,
+    inactiveTrackColor: Color,
+    visibility: Float,
+    reducedMotion: Boolean,
+    onPlayPause: () -> Unit,
+    onSeek: (Float) -> Unit,
+    onSeekFinished: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = if (reducedMotion) snap() else SgMotion.tweenProgress(),
+        label = "immersiveProgress"
+    )
+    Column(
+        modifier = modifier
+            .graphicsLayer { alpha = visibility.coerceIn(0f, 1f) }
+            .semantics {
+                contentDescription = "Contrôles de lecture. Appuyer ailleurs pour afficher tous les contrôles."
+            },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        SgTapTarget(onClick = onPlayPause, minSize = 52.dp) {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .background(
+                        Brush.radialGradient(listOf(accentColor, accentColor.copy(alpha = 0.85f))),
+                        CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
+                    contentDescription = if (isPlaying) "Pause" else "Lecture",
+                    tint = Color.White,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+        SgSeekBar(
+            value = animatedProgress.coerceIn(0f, 1f),
+            onValueChange = onSeek,
+            onValueChangeFinished = onSeekFinished,
+            accentColor = accentColor,
+            inactiveTrackColor = inactiveTrackColor.copy(alpha = 0.35f),
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 

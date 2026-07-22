@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.graphics.graphicsLayer
 import com.credo.soundgroove.util.EqualizerBandInfo
 import com.credo.soundgroove.util.EqualizerPreset
+import com.credo.soundgroove.util.LyricsPreferences
 import com.credo.soundgroove.util.PlaybackPreferences
 import com.credo.soundgroove.ui.theme.*
 
@@ -1003,9 +1004,14 @@ fun EqualizerBottomSheet(
     onEnabledChange: (Boolean) -> Unit,
     onPresetSelected: (EqualizerPreset) -> Unit,
     onBandLevelChange: (Int, Short) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    hasCurrentTrack: Boolean = false,
+    pinForCurrentTrack: Boolean = false,
+    onPinForCurrentTrackChange: (Boolean) -> Unit = {},
+    onPresetSelectedForTrack: ((EqualizerPreset) -> Unit)? = null
 ) {
     val presetOptions = EqualizerPreset.entries.filter { it != EqualizerPreset.CUSTOM }
+    var pinForTrack by remember(pinForCurrentTrack) { mutableStateOf(pinForCurrentTrack) }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = SurfaceOverlay.copy(alpha = 0.96f),
@@ -1052,6 +1058,58 @@ fun EqualizerBottomSheet(
                 )
             }
 
+            if (hasCurrentTrack) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable {
+                            val next = !pinForTrack
+                            pinForTrack = next
+                            onPinForCurrentTrackChange(next)
+                            if (next) {
+                                onPresetSelectedForTrack?.invoke(preset) ?: onPresetSelected(preset)
+                            }
+                        }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = pinForTrack,
+                        onCheckedChange = { checked ->
+                            pinForTrack = checked
+                            onPinForCurrentTrackChange(checked)
+                            if (checked) {
+                                onPresetSelectedForTrack?.invoke(preset) ?: onPresetSelected(preset)
+                            }
+                        },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = accentColor,
+                            uncheckedColor = TextSecondary,
+                            checkmarkColor = Color.White
+                        )
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Pour ce morceau",
+                            color = TextPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            if (pinForTrack) {
+                                "Preset mémorisé pour la piste en cours"
+                            } else {
+                                "Appliquer uniquement à la piste en cours"
+                            },
+                            color = TextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(14.dp))
             Text("Presets", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(8.dp))
@@ -1073,7 +1131,13 @@ fun EqualizerBottomSheet(
                                 if (selected) accentColor.copy(alpha = 0.5f) else GlassBorder.copy(alpha = 0.3f),
                                 RoundedCornerShape(20.dp)
                             )
-                            .clickable { onPresetSelected(option) }
+                            .clickable {
+                                if (pinForTrack && onPresetSelectedForTrack != null) {
+                                    onPresetSelectedForTrack(option)
+                                } else {
+                                    onPresetSelected(option)
+                                }
+                            }
                             .padding(horizontal = 14.dp, vertical = 8.dp)
                     ) {
                         Text(
@@ -1330,6 +1394,8 @@ fun PlayerOptionsBottomSheet(
     equalizerEnabled: Boolean,
     equalizerPresetLabel: String,
     vinylModeEnabled: Boolean,
+    lyricsSyncOffsetMs: Long,
+    onLyricsSyncOffsetChange: (Long) -> Unit,
     onOpenCrossfade: () -> Unit,
     onOpenSleepTimer: () -> Unit,
     onOpenPlaybackSpeed: () -> Unit,
@@ -1467,6 +1533,65 @@ fun PlayerOptionsBottomSheet(
                         uncheckedTrackColor = GlassSurface
                     )
                 )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            val syncOffsetActive = lyricsSyncOffsetMs != com.credo.soundgroove.lyrics.LyricsViewModel.DEFAULT_SYNC_OFFSET_MS
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (syncOffsetActive) accentColor.copy(alpha = 0.1f) else GlassSurface.copy(alpha = 0.45f))
+                    .border(
+                        1.dp,
+                        if (syncOffsetActive) accentColor.copy(alpha = 0.35f) else GlassBorder.copy(alpha = 0.35f),
+                        RoundedCornerShape(12.dp)
+                    )
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Lyrics, null, tint = if (syncOffsetActive) accentColor else TextSecondary, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text("Décalage paroles", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            LyricsPreferences.formatSyncOffsetLabel(lyricsSyncOffsetMs),
+                            color = if (syncOffsetActive) accentColor else TextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(
+                        onClick = {
+                            onLyricsSyncOffsetChange(lyricsSyncOffsetMs - LyricsPreferences.OFFSET_STEP_MS)
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Filled.Remove, contentDescription = "Paroles plus tôt", tint = TextPrimary)
+                    }
+                    IconButton(
+                        onClick = {
+                            onLyricsSyncOffsetChange(com.credo.soundgroove.lyrics.LyricsViewModel.DEFAULT_SYNC_OFFSET_MS)
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Filled.RestartAlt, contentDescription = "Réinitialiser le décalage", tint = TextSecondary)
+                    }
+                    IconButton(
+                        onClick = {
+                            onLyricsSyncOffsetChange(lyricsSyncOffsetMs + LyricsPreferences.OFFSET_STEP_MS)
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = "Paroles plus tard", tint = TextPrimary)
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

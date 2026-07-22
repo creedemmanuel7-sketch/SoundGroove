@@ -60,6 +60,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-extractor:1.3.1")
     implementation("androidx.media3:media3-ui:1.3.1")
+    implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("androidx.compose.material:material-icons-extended:1.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
@@ -71,4 +72,5 @@ dependencies {
     implementation("androidx.media3:media3-session:1.3.1")
     implementation("com.google.guava:guava:32.1.2-android")
     implementation("androidx.palette:palette-ktx:1.0.0")
+    implementation("org.java-websocket:Java-WebSocket:1.5.7")
 }

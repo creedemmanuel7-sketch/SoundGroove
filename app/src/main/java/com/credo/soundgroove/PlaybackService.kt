@@ -3,17 +3,18 @@ package com.credo.soundgroove
 import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.C
-import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.session.DefaultMediaNotificationProvider
+import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
-import androidx.media3.session.SessionResult
+import com.credo.soundgroove.auto.AutoLibraryCatalog
+import com.credo.soundgroove.auto.AutoLibrarySessionCallback
 import com.credo.soundgroove.notifications.NotificationChannels
 import com.credo.soundgroove.ui.theme.AppTheme
 import com.credo.soundgroove.util.CrossfadeController
@@ -23,16 +24,28 @@ import com.credo.soundgroove.widget.MusicAppWidgetProvider
 import com.credo.soundgroove.widget.WidgetPlaybackState
 import com.credo.soundgroove.widget.WidgetSkin
 import com.credo.soundgroove.widget.WidgetState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
-class PlaybackService : MediaSessionService() {
-    private var mediaSession: MediaSession? = null
+class PlaybackService : MediaLibraryService() {
+    private var mediaSession: MediaLibrarySession? = null
     private var playerListener: Player.Listener? = null
     private var crossfadeController: CrossfadeController? = null
+    private val serviceJob = SupervisorJob()
+    private val serviceScope = CoroutineScope(serviceJob + Dispatchers.Main.immediate)
+    private lateinit var libraryCatalog: AutoLibraryCatalog
 
     override fun onCreate() {
         super.onCreate()
         instance = this
         NotificationChannels.ensureAll(this)
+        libraryCatalog = AutoLibraryCatalog(this)
+        serviceScope.launch(Dispatchers.IO) {
+            runCatching { libraryCatalog.refresh() }
+        }
 
         val extractorsFactory = DefaultExtractorsFactory()
         val mediaSourceFactory = DefaultMediaSourceFactory(this, extractorsFactory)
@@ -63,9 +76,12 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        mediaSession = MediaSession.Builder(this, player)
+        mediaSession = MediaLibrarySession.Builder(
+            this,
+            player,
+            AutoLibrarySessionCallback(player, libraryCatalog, serviceScope),
+        )
             .setSessionActivity(sessionActivity)
-            .setCallback(PlaybackSessionCallback(player))
             .build()
 
         setMediaNotificationProvider(
@@ -130,7 +146,7 @@ class PlaybackService : MediaSessionService() {
         player.playbackParameters = PlaybackParameters(speed, pitch)
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
         return mediaSession
     }
 
@@ -143,6 +159,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         instance = null
+        serviceJob.cancel()
         crossfadeController?.detach()
         crossfadeController = null
         EqualizerManager.release()
@@ -184,39 +201,8 @@ class PlaybackService : MediaSessionService() {
         MusicAppWidgetProvider.updateAllWidgets(this)
     }
 
-    private class PlaybackSessionCallback(
-        private val player: Player
-    ) : MediaSession.Callback {
-
-        override fun onPlayerCommandRequest(
-            session: MediaSession,
-            controller: MediaSession.ControllerInfo,
-            playerCommand: Int
-        ): Int {
-            when (playerCommand) {
-                Player.COMMAND_SEEK_TO_PREVIOUS,
-                Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
-                    seekPreviousTrack()
-                    return SessionResult.RESULT_SUCCESS
-                }
-            }
-            return super.onPlayerCommandRequest(session, controller, playerCommand)
-        }
-
-        private fun seekPreviousTrack() {
-            if (player.currentPosition > PREVIOUS_RESTART_THRESHOLD_MS) {
-                player.seekTo(0)
-            } else if (player.hasPreviousMediaItem()) {
-                player.seekToPreviousMediaItem()
-            } else {
-                player.seekTo(0)
-            }
-        }
-    }
-
     companion object {
         const val MEDIA_NOTIFICATION_ID = 1001
-        private const val PREVIOUS_RESTART_THRESHOLD_MS = 3_000L
 
         @Volatile
         var instance: PlaybackService? = null

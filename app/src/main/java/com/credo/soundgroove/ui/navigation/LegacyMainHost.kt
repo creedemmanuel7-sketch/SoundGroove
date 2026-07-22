@@ -1,5 +1,6 @@
 package com.credo.soundgroove.ui.navigation
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -26,7 +27,12 @@ fun LegacyMainHost(
     onNavigateToAlbum: (String) -> Unit,
     onNavigateToArtist: (String) -> Unit,
     onNavigateToPlayer: () -> Unit,
-    onHomeMiniPlayerSuppressedChange: (Boolean) -> Unit = {}
+    onNavigateToCarMode: () -> Unit = {},
+    onHomeMiniPlayerSuppressedChange: (Boolean) -> Unit = {},
+    onOpenSleepTimerSheet: () -> Unit = {},
+    onOpenPlaybackSpeedSheet: () -> Unit = {},
+    onOpenCrossfadeSheet: () -> Unit = {},
+    onOpenEqualizerSheet: () -> Unit = {}
 ) {
     val controller by viewModel.mediaController.collectAsState()
     val currentTheme by viewModel.currentTheme.collectAsState()
@@ -62,6 +68,8 @@ fun LegacyMainHost(
     val remoteClientCount by viewModel.remoteClientCount.collectAsState()
     val remoteHostError by viewModel.remoteHostError.collectAsState()
     val hiddenFolders by viewModel.hiddenFolders.collectAsState()
+    val libraryFolderUris by viewModel.libraryFolderUris.collectAsState()
+    val scrobbleStats by viewModel.scrobbleStats.collectAsState()
     val playbackQueue by viewModel.playbackQueue.collectAsState()
     val backupMessage by viewModel.backupMessage.collectAsState()
     val playlistMessage by viewModel.playlistMessage.collectAsState()
@@ -92,6 +100,12 @@ fun LegacyMainHost(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let { viewModel.importBackup(it) }
+    }
+
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.addLibraryFolder(it) }
     }
 
     val activeController = controller
@@ -137,6 +151,7 @@ fun LegacyMainHost(
             onNavigateToAlbum = onNavigateToAlbum,
             onNavigateToArtist = onNavigateToArtist,
             onNavigateToPlayer = onNavigateToPlayer,
+            onNavigateToCarMode = onNavigateToCarMode,
             onHomeMiniPlayerSuppressedChange = onHomeMiniPlayerSuppressedChange,
             songs = songs,
             sortedSongs = sortedSongs,
@@ -160,6 +175,7 @@ fun LegacyMainHost(
             listeningTimeLabel = viewModel.formatListeningTime(listeningStats.totalSeconds),
             listeningStats = listeningStats,
             formatListeningTime = { viewModel.formatListeningTime(it) },
+            scrobbleStats = scrobbleStats,
             smartNotificationsEnabled = smartNotificationsEnabled,
             onSmartNotificationsChange = { viewModel.setSmartNotificationsEnabled(it) },
             persistentMiniPlayerEnabled = persistentMiniPlayerEnabled,
@@ -182,6 +198,9 @@ fun LegacyMainHost(
             onImportBackup = {
                 importLauncher.launch(arrayOf(BackupManager.BACKUP_MIME, "application/json", "text/json"))
             },
+            libraryFolderCount = libraryFolderUris.size,
+            onAddLibraryFolder = { folderPickerLauncher.launch(null) },
+            scrobbleTotal = scrobbleStats.totalScrobbles,
             hiddenFolders = hiddenFolders,
             onHideFolder = { viewModel.hideFolder(it) },
             onUnhideFolder = { viewModel.unhideFolder(it) },
@@ -202,7 +221,11 @@ fun LegacyMainHost(
             onPlaylistRename = { playlist, newName -> viewModel.renamePlaylist(playlist.id, newName) },
             onRemoveSongFromPlaylist = { playlist, songId ->
                 viewModel.removeSongFromPlaylist(playlist.id, songId)
-            }
+            },
+            onOpenSleepTimerSheet = onOpenSleepTimerSheet,
+            onOpenPlaybackSpeedSheet = onOpenPlaybackSpeedSheet,
+            onOpenCrossfadeSheet = onOpenCrossfadeSheet,
+            onOpenEqualizerSheet = onOpenEqualizerSheet
             )
             SnackbarHost(
                 hostState = snackbarHostState,

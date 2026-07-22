@@ -8,31 +8,31 @@
 
     <!-- Outer groove ring (open on the right = G) -->
     <path
-        android:fillColor="#FF7C3AED"
+        android:fillColor="@color/brand_purple"
         android:fillType="evenOdd"
         android:pathData="M54,22c-17.67,0 -32,14.33 -32,32s14.33,32 32,32c8.32,0 15.9,-3.18 21.6,-8.4l-5.1,-5.1C66.5,76.3 60.55,79 54,79c-13.81,0 -25,-11.19 -25,-25s11.19,-25 25,-25c6.55,0 12.5,2.7 16.7,7l5.1,-5.1C69.9,25.18 62.32,22 54,22z" />
 
     <!-- Mid groove ring -->
     <path
-        android:fillColor="#FF7C3AED"
+        android:fillColor="@color/brand_purple"
         android:fillType="evenOdd"
         android:pathData="M54,31c-12.7,0 -23,10.3 -23,23s10.3,23 23,23c5.98,0 11.42,-2.29 15.5,-6.02l-4.95,-4.95C61.55,68.8 57.95,70 54,70c-8.84,0 -16,-7.16 -16,-16s7.16,-16 16,-16c3.95,0 7.55,1.2 10.55,3.47l4.95,-4.95C65.42,33.29 59.98,31 54,31z" />
 
     <!-- Inner groove ring -->
     <path
-        android:fillColor="#FF7C3AED"
+        android:fillColor="@color/brand_purple"
         android:fillType="evenOdd"
         android:pathData="M54,40c-7.73,0 -14,6.27 -14,14s6.27,14 14,14c3.64,0 6.95,-1.4 9.45,-3.68l-4.6,-4.6C57.35,61.05 55.75,61.5 54,61.5c-4.14,0 -7.5,-3.36 -7.5,-7.5s3.36,-7.5 7.5,-7.5c1.75,0 3.35,0.45 4.85,1.28l4.6,-4.6C60.95,41.4 57.64,40 54,40z" />
 
     <!-- Hub -->
     <path
-        android:fillColor="#FF7C3AED"
+        android:fillColor="@color/brand_purple"
         android:pathData="M54,50m-4.2,0a4.2,4.2 0,1 1,8.4 0a4.2,4.2 0,1 1,-8.4 0" />
 
     <!-- Waveform bars in the G opening -->
-    <path android:fillColor="#FF7C3AED" android:pathData="M67,51h2.8v6h-2.8z" />
-    <path android:fillColor="#FF7C3AED" android:pathData="M71.2,47h2.8v14h-2.8z" />
-    <path android:fillColor="#FF7C3AED" android:pathData="M75.4,43h2.8v22h-2.8z" />
-    <path android:fillColor="#FF7C3AED" android:pathData="M79.6,47h2.8v14h-2.8z" />
-    <path android:fillColor="#FF7C3AED" android:pathData="M83.8,51h2.8v6h-2.8z" />
+    <path android:fillColor="@color/brand_purple" android:pathData="M67,51h2.8v6h-2.8z" />
+    <path android:fillColor="@color/brand_purple" android:pathData="M71.2,47h2.8v14h-2.8z" />
+    <path android:fillColor="@color/brand_purple" android:pathData="M75.4,43h2.8v22h-2.8z" />
+    <path android:fillColor="@color/brand_purple" android:pathData="M79.6,47h2.8v14h-2.8z" />
+    <path android:fillColor="@color/brand_purple" android:pathData="M83.8,51h2.8v6h-2.8z" />
 </vector>

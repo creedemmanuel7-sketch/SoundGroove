@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.util.LyricsPreferences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,7 +45,9 @@ class LyricsViewModel(application: Application) : AndroidViewModel(application) 
      * paroles "en retard" (latence d'affichage + décalage de perception). Volontairement
      * gardé configurable ici plutôt qu'en dur, sans dépendre du fichier LRC source.
      */
-    private val _syncOffsetMs = MutableStateFlow(DEFAULT_SYNC_OFFSET_MS)
+    private val _syncOffsetMs = MutableStateFlow(
+        LyricsPreferences.syncOffsetMs(application)
+    )
     val syncOffsetMs: StateFlow<Long> = _syncOffsetMs.asStateFlow()
 
     private var loadedSongId: Long? = null
@@ -165,9 +168,11 @@ class LyricsViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** Ajuste le décalage de synchronisation à la volée (ex. depuis un futur réglage utilisateur). */
+    /** Ajuste le décalage de synchronisation à la volée (Options ou réglages paroles). */
     fun setSyncOffsetMs(offsetMs: Long) {
-        _syncOffsetMs.value = offsetMs
+        val clamped = offsetMs.coerceIn(LyricsPreferences.MIN_OFFSET_MS, LyricsPreferences.MAX_OFFSET_MS)
+        _syncOffsetMs.value = clamped
+        LyricsPreferences.setSyncOffsetMs(getApplication(), clamped)
     }
 
     /** À appeler régulièrement avec la position de lecture courante (ms). */

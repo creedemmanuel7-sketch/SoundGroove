@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splash système : noir absolu + marque violette centrée (pas de blanc). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/brand_black" />
+    <item
+        android:width="112dp"
+        android:height="112dp"
+        android:drawable="@drawable/ic_brand_waveform"
+        android:gravity="center" />
+</layer-list>

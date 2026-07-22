@@ -45,6 +45,20 @@ object EqualizerManager {
         controller?.setBandLevel(bandIndex, levelMillibels)
     }
 
+    fun applyForTrack(context: Context, songId: Long) {
+        val preset = PlaybackPreferences.getTrackEqualizerPreset(context, songId)
+            ?: PlaybackPreferences.equalizerPreset(context)
+        if (preset == EqualizerPreset.CUSTOM) {
+            controller?.applyFromPreferences()
+        } else {
+            applyPreset(context, preset)
+        }
+    }
+
+    fun effectivePresetForTrack(context: Context, songId: Long): EqualizerPreset =
+        PlaybackPreferences.getTrackEqualizerPreset(context, songId)
+            ?: PlaybackPreferences.equalizerPreset(context)
+
     fun getBandInfos(): List<EqualizerBandInfo> = controller?.getBandInfos().orEmpty()
 
     fun readCurrentLevels(): ShortArray = controller?.readCurrentLevels() ?: ShortArray(0)

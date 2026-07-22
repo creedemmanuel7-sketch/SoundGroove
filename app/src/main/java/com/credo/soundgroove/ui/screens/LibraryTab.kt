@@ -155,12 +155,18 @@ fun LibraryTab(
 
             Text(
                 text = "Ma Musique",
-                style = MaterialTheme.typography.displaySmall,
+                style = MaterialTheme.typography.headlineLarge,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
             )
+            Text(
+                text = tracksCountLabel(songs.size),
+                style = MaterialTheme.typography.bodySmall,
+                color = TextTertiary,
+                modifier = Modifier.padding(top = 4.dp)
+            )
 
-            Spacer(modifier = Modifier.height(SgSpacing.sectionGap))
+            Spacer(modifier = Modifier.height(SgSpacing.md))
 
             val tabIcons = listOf(
                 R.drawable.ic_songs,
@@ -221,13 +227,16 @@ fun LibraryTab(
                         animationSpec = chipSpec,
                         label = "libChipBorder"
                     )
-                    val chipContent = if (selected) accentColor else TextSecondary
+                    val chipContent = if (selected) accentColor else TextTertiary
                     Row(
                         modifier = Modifier
                             .heightIn(min = SgSpacing.chipHeight)
                             .clip(RoundedCornerShape(SgRadius.pill))
                             .background(chipBg)
-                            .border(1.dp, chipBorder, RoundedCornerShape(SgRadius.pill))
+                            .then(
+                                if (selected) Modifier.border(1.dp, chipBorder, RoundedCornerShape(SgRadius.pill))
+                                else Modifier
+                            )
                             .clickable {
                                 onSelectedTabChange(index)
                                 scope.launch {
@@ -240,22 +249,27 @@ fun LibraryTab(
                                     }
                                 }
                             }
-                            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm),
+                            .padding(
+                                horizontal = if (selected) SgSpacing.md else SgSpacing.sm + 2.dp,
+                                vertical = SgSpacing.sm
+                            ),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(SgSpacing.sm)
                     ) {
                         Icon(
                             painter = androidx.compose.ui.res.painterResource(iconRes),
-                            contentDescription = null,
+                            contentDescription = tabs[index],
                             tint = chipContent,
                             modifier = Modifier.size(16.dp)
                         )
-                        Text(
-                            text = tabs[index],
-                            color = chipContent,
-                            fontSize = 12.sp,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
-                        )
+                        if (selected) {
+                            Text(
+                                text = tabs[index],
+                                color = chipContent,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }

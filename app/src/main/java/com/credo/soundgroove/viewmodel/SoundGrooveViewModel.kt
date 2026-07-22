@@ -12,21 +12,33 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.credo.soundgroove.PlaybackService
 import com.credo.soundgroove.SoundGrooveDatabase
+import com.credo.soundgroove.auto.AutoMediaIds
 import com.credo.soundgroove.data.SmartPlaylistBuilder
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.SmartPlaylistIds
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.data.repository.DatabaseRepository
+import com.credo.soundgroove.data.repository.CombinedMusicRepository
 import com.credo.soundgroove.data.repository.ListeningStats
 import com.credo.soundgroove.data.repository.ListeningStatsRepository
-import com.credo.soundgroove.data.repository.MusicRepository
+import com.credo.soundgroove.data.repository.LocalScrobbleStats
+import com.credo.soundgroove.data.repository.ScrobbleRepository
 import com.credo.soundgroove.data.repository.SearchHistoryRepository
 import com.credo.soundgroove.data.backup.BackupManager
 import com.credo.soundgroove.data.backup.BackupSnapshot
+import com.credo.soundgroove.data.backup.PlaybackSettingsBackup
 import com.credo.soundgroove.lyrics.LyricsAvailability
 import com.credo.soundgroove.lyrics.LyricsRepository
+import com.credo.soundgroove.remote.RemoteCommandAction
+import com.credo.soundgroove.remote.RemoteHostServer
+import com.credo.soundgroove.remote.RemoteLanAddresses
+import com.credo.soundgroove.remote.RemotePlaybackState
+import com.credo.soundgroove.remote.RemoteProtocol
+import com.credo.soundgroove.remote.RemoteSongState
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,6 +50,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.credo.soundgroove.MetadataOverrideEntity
 import com.credo.soundgroove.notifications.SmartNotificationManager
 import com.credo.soundgroove.ui.theme.AppAccent
@@ -47,10 +60,9 @@ import com.credo.soundgroove.util.EqualizerBandInfo
 import com.credo.soundgroove.util.EqualizerManager
 import com.credo.soundgroove.util.EqualizerPreset
 import com.credo.soundgroove.util.MetadataEditor
+import com.credo.soundgroove.util.LyricsPreferences
 import com.credo.soundgroove.util.PlaybackPreferences
 import com.credo.soundgroove.util.PlayerGuards
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import androidx.room.withTransaction
 
 class SoundGrooveViewModel(application: Application) : AndroidViewModel(application) {
@@ -98,8 +110,9 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     )
     private val searchHistoryRepository = SearchHistoryRepository(application)
     private val listeningStatsRepository = ListeningStatsRepository(application)
+    private val scrobbleRepository = ScrobbleRepository(application)
     private val backupManager = BackupManager(application)
-    private val musicRepository = MusicRepository(application)
+    private val combinedMusicRepository = CombinedMusicRepository(application)
 
     private val _recentSearches = MutableStateFlow(searchHistoryRepository.getRecentSearches())
     val recentSearches: StateFlow<List<String>> = _recentSearches.asStateFlow()
@@ -109,6 +122,12 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _backupMessage = MutableStateFlow<String?>(null)
     val backupMessage: StateFlow<String?> = _backupMessage.asStateFlow()
+
+    private val _libraryFolderUris = MutableStateFlow(combinedMusicRepository.getFolderUris())
+    val libraryFolderUris: StateFlow<Set<Uri>> = _libraryFolderUris.asStateFlow()
+
+    private val _scrobbleStats = MutableStateFlow(scrobbleRepository.getStats())
+    val scrobbleStats: StateFlow<LocalScrobbleStats> = _scrobbleStats.asStateFlow()
 
     // --- MediaController ---
     private var controllerFuture: ListenableFuture<MediaController>? = null
@@ -134,6 +153,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
 
     private val _songsWithLyrics = MutableStateFlow<List<Song>>(emptyList())
+    val songsWithLyrics: StateFlow<List<Song>> = _songsWithLyrics.asStateFlow()
 
     // Player State
     private val _currentSong = MutableStateFlow<Song?>(null)
@@ -175,6 +195,9 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     private val _vinylModeEnabled = MutableStateFlow(prefs.getBoolean(PlaybackPreferences.KEY_VINYL_MODE_ENABLED, false))
     val vinylModeEnabled: StateFlow<Boolean> = _vinylModeEnabled.asStateFlow()
 
+    private val _lyricsSyncOffsetMs = MutableStateFlow(LyricsPreferences.syncOffsetMs(getApplication()))
+    val lyricsSyncOffsetMs: StateFlow<Long> = _lyricsSyncOffsetMs.asStateFlow()
+
     private val _equalizerEnabled = MutableStateFlow(PlaybackPreferences.isEqualizerEnabled(getApplication()))
     val equalizerEnabled: StateFlow<Boolean> = _equalizerEnabled.asStateFlow()
 
@@ -201,6 +224,27 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _albumCoverAccentEnabled = MutableStateFlow(prefs.getBoolean("album_cover_accent_enabled", false))
     val albumCoverAccentEnabled: StateFlow<Boolean> = _albumCoverAccentEnabled.asStateFlow()
+
+    // --- Remote PC (host WebSocket LAN) — off par défaut, ne démarre que si activé ---
+    private var remoteHost: RemoteHostServer? = null
+    private var remotePushJob: Job? = null
+
+    private val _remoteHostEnabled = MutableStateFlow(false)
+    val remoteHostEnabled: StateFlow<Boolean> = _remoteHostEnabled.asStateFlow()
+
+    private val _remotePin = MutableStateFlow<String?>(null)
+    val remotePin: StateFlow<String?> = _remotePin.asStateFlow()
+
+    private val _remoteLanIp = MutableStateFlow<String?>(null)
+    val remoteLanIp: StateFlow<String?> = _remoteLanIp.asStateFlow()
+
+    private val _remoteClientCount = MutableStateFlow(0)
+    val remoteClientCount: StateFlow<Int> = _remoteClientCount.asStateFlow()
+
+    private val _remoteHostError = MutableStateFlow<String?>(null)
+    val remoteHostError: StateFlow<String?> = _remoteHostError.asStateFlow()
+
+    val remotePort: Int get() = RemoteProtocol.DEFAULT_PORT
     
     private val _sortMode = MutableStateFlow(0)
     val sortMode: StateFlow<Int> = _sortMode.asStateFlow()
@@ -224,26 +268,35 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     // Source de vérité UI : toujours dérivée de ListeningStatsRepository
     // (semaine/mois calendaires + total lifetime). Ne pas recalculer ailleurs.
-    private val _listeningStats = MutableStateFlow(
-        listeningStatsRepository.getStats(_totalListeningSeconds.value)
-    )
+    private val _listeningStats = MutableStateFlow(ListeningStats(0, 0, 0, 0))
     val listeningStats: StateFlow<ListeningStats> = _listeningStats.asStateFlow()
 
     init {
+        publishListeningStats(listeningStatsRepository.getStats(_totalListeningSeconds.value))
         initMediaController()
         loadMusic()
         observeDatabase()
     }
 
-    fun formatListeningTime(seconds: Long = _totalListeningSeconds.value): String {
+    /** Affiche des durées d'écoute en secondes → libellé compact (ex. `4h54`, `24h30`, `12 min`). */
+    fun formatListeningTime(seconds: Long = _listeningStats.value.totalSeconds): String {
         val safeSeconds = seconds.coerceAtLeast(0L)
         val hours = safeSeconds / 3600
         val minutes = (safeSeconds % 3600) / 60
         return when {
-            hours > 0 -> "${hours} h ${minutes.toString().padStart(2, '0')} min"
+            hours > 0 -> "${hours}h${minutes.toString().padStart(2, '0')}"
             minutes > 0 -> "$minutes min"
             safeSeconds > 0 -> "< 1 min"
             else -> "0 min"
+        }
+    }
+
+    /** Aligne prefs lifetime sur le total résolu (corrige compteur gonflé vs journalier). */
+    private fun publishListeningStats(stats: ListeningStats) {
+        _listeningStats.value = stats
+        if (stats.totalSeconds != _totalListeningSeconds.value) {
+            _totalListeningSeconds.value = stats.totalSeconds
+            prefs.edit().putLong("total_listening_seconds", stats.totalSeconds).apply()
         }
     }
 
@@ -303,9 +356,16 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                 _playbackPosition.value = controller?.currentPosition ?: 0L
                 if (controller?.isPlaying == true) {
                     val updated = _totalListeningSeconds.value + 1
-                    _totalListeningSeconds.value = updated
-                    prefs.edit().putLong("total_listening_seconds", updated).apply()
-                    _listeningStats.value = listeningStatsRepository.recordSecond(updated)
+                    publishListeningStats(listeningStatsRepository.recordSecond(updated))
+                    _currentSong.value?.let { song ->
+                        val duration = song.duration.takeIf { it > 0L }
+                            ?: controller?.duration?.coerceAtLeast(0L)
+                            ?: 0L
+                        val position = controller?.currentPosition ?: 0L
+                        if (scrobbleRepository.trackProgress(song, position, duration)) {
+                            _scrobbleStats.value = scrobbleRepository.getStats()
+                        }
+                    }
                     continuousPlaySeconds++
                     if (_smartNotificationsEnabled.value &&
                         !sessionSummaryShown &&
@@ -388,6 +448,23 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         _backupMessage.value = null
     }
 
+    fun addLibraryFolder(treeUri: Uri) {
+        combinedMusicRepository.addFolderUri(treeUri)
+        _libraryFolderUris.value = combinedMusicRepository.getFolderUris()
+        reloadMusic()
+    }
+
+    fun removeLibraryFolder(treeUri: Uri) {
+        combinedMusicRepository.removeFolderUri(treeUri)
+        _libraryFolderUris.value = combinedMusicRepository.getFolderUris()
+        reloadMusic()
+    }
+
+    fun clearScrobbleHistory() {
+        scrobbleRepository.clearAll()
+        _scrobbleStats.value = scrobbleRepository.getStats()
+    }
+
     fun exportBackup(uri: Uri) {
         viewModelScope.launch {
             runCatching {
@@ -395,7 +472,8 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                     theme = _currentTheme.value,
                     accent = _currentAccent.value,
                     favorites = dbRepository.getFavoritesSnapshot(),
-                    playlists = dbRepository.getPlaylistsSnapshot()
+                    playlists = dbRepository.getPlaylistsSnapshot(),
+                    playbackSettings = buildPlaybackSettingsBackup(),
                 )
                 val json = backupManager.serialize(snapshot)
                 backupManager.writeToUri(uri, json)
@@ -418,6 +496,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                 }
                 snapshot.theme?.let { setTheme(it) }
                 snapshot.accent?.let { setAccent(it) }
+                snapshot.playbackSettings?.let { restorePlaybackSettingsBackup(it) }
                 "Restauration terminée : ${snapshot.favorites.size} favori(s), ${snapshot.playlists.size} playlist(s)."
             }.onSuccess { message ->
                 _backupMessage.value = message
@@ -438,10 +517,57 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun loadMusic() {
         viewModelScope.launch {
-            val loadedSongs = musicRepository.getSongs().map { applyMetadataOverride(it) }
+            val loadedSongs = combinedMusicRepository.getAllSongs().map { applyMetadataOverride(it) }
             _allSongs.value = loadedSongs
             updateCurrentSongFromMediaItem(_mediaController.value?.currentMediaItem)
         }
+    }
+
+    private fun buildPlaybackSettingsBackup(): PlaybackSettingsBackup {
+        val app = getApplication<Application>()
+        return PlaybackSettingsBackup(
+            gaplessEnabled = _gaplessEnabled.value,
+            crossfadeMs = _crossfadeDurationMs.value,
+            playbackSpeed = _playbackSpeed.value,
+            playbackPitch = _playbackPitch.value,
+            equalizerEnabled = _equalizerEnabled.value,
+            equalizerPreset = _equalizerPreset.value.name,
+            equalizerBandLevels = PlaybackPreferences.equalizerBandLevels(app),
+            hiddenFolders = _hiddenFolders.value,
+            libraryFolderUris = _libraryFolderUris.value.map { it.toString() }.toSet(),
+            trackEqPresets = PlaybackPreferences.getAllTrackEqualizerPresets(app)
+                .mapValues { it.value.name },
+            performanceModeEnabled = _performanceModeEnabled.value,
+            smartNotificationsEnabled = _smartNotificationsEnabled.value,
+            vinylModeEnabled = _vinylModeEnabled.value,
+        )
+    }
+
+    private fun restorePlaybackSettingsBackup(settings: PlaybackSettingsBackup) {
+        val app = getApplication<Application>()
+        setGaplessEnabled(settings.gaplessEnabled)
+        setCrossfadeDurationMs(settings.crossfadeMs)
+        setPlaybackSpeed(settings.playbackSpeed)
+        setPlaybackPitch(settings.playbackPitch)
+        setEqualizerEnabled(settings.equalizerEnabled)
+        PlaybackPreferences.setEqualizerPreset(app, EqualizerPreset.fromStored(settings.equalizerPreset))
+        PlaybackPreferences.setEqualizerBandLevels(app, settings.equalizerBandLevels)
+        PlaybackPreferences.replaceTrackEqualizerPresets(
+            app,
+            settings.trackEqPresets.mapValues { EqualizerPreset.fromStored(it.value) }
+        )
+        _equalizerPreset.value = EqualizerPreset.fromStored(settings.equalizerPreset)
+        _hiddenFolders.value = settings.hiddenFolders
+        saveHiddenFolders(settings.hiddenFolders)
+        settings.libraryFolderUris.forEach { uriStr ->
+            runCatching { Uri.parse(uriStr) }.getOrNull()?.let { combinedMusicRepository.addFolderUri(it) }
+        }
+        _libraryFolderUris.value = combinedMusicRepository.getFolderUris()
+        setPerformanceModeEnabled(settings.performanceModeEnabled)
+        setSmartNotificationsEnabled(settings.smartNotificationsEnabled)
+        setVinylModeEnabled(settings.vinylModeEnabled)
+        EqualizerManager.applyForTrack(app, _currentSong.value?.id ?: 0L)
+        reloadMusic()
     }
 
     private fun applyMetadataOverride(song: Song): Song {
@@ -480,13 +606,19 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun updateCurrentSongFromMediaItem(mediaItem: MediaItem?) {
         val item = mediaItem ?: return
-        val uriStr = item.mediaId
+        val mediaId = item.mediaId
+        val uriFromAuto = AutoMediaIds.parseSongUri(mediaId)
+        val uriStr = uriFromAuto ?: mediaId
         val resolved = _allSongs.value.find { it.uri.toString() == uriStr }
             ?: item.localConfiguration?.uri?.let { uri -> _allSongs.value.find { it.uri == uri } }
 
         resolved?.let { song ->
             if (_currentSong.value?.id != song.id) {
+                scrobbleRepository.onTrackChanged()
                 _currentSong.value = song
+                EqualizerManager.applyForTrack(getApplication(), song.id)
+                _equalizerPreset.value = EqualizerManager.effectivePresetForTrack(getApplication(), song.id)
+                refreshEqualizerBands()
                 viewModelScope.launch {
                     dbRepository.addRecentlyPlayed(song)
                 }
@@ -703,6 +835,12 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     fun toggleVinylMode() = setVinylModeEnabled(!_vinylModeEnabled.value)
 
+    fun setLyricsSyncOffsetMs(offsetMs: Long) {
+        val clamped = offsetMs.coerceIn(LyricsPreferences.MIN_OFFSET_MS, LyricsPreferences.MAX_OFFSET_MS)
+        _lyricsSyncOffsetMs.value = clamped
+        LyricsPreferences.setSyncOffsetMs(getApplication(), clamped)
+    }
+
     fun refreshEqualizerBands() {
         _equalizerBands.value = EqualizerManager.getBandInfos()
     }
@@ -712,10 +850,30 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         EqualizerManager.setEnabled(getApplication(), enabled)
     }
 
-    fun setEqualizerPreset(preset: EqualizerPreset) {
-        _equalizerPreset.value = preset
+    fun setEqualizerPreset(preset: EqualizerPreset, forCurrentTrack: Boolean = false) {
+        if (forCurrentTrack) {
+            _currentSong.value?.let { song ->
+                PlaybackPreferences.setTrackEqualizerPreset(getApplication(), song.id, preset)
+            }
+        } else {
+            _equalizerPreset.value = preset
+            PlaybackPreferences.setEqualizerPreset(getApplication(), preset)
+        }
         EqualizerManager.applyPreset(getApplication(), preset)
+        _equalizerPreset.value = EqualizerManager.effectivePresetForTrack(
+            getApplication(),
+            _currentSong.value?.id ?: 0L
+        )
         refreshEqualizerBands()
+    }
+
+    fun clearTrackEqualizerPreset(songId: Long) {
+        PlaybackPreferences.clearTrackEqualizerPreset(getApplication(), songId)
+        if (_currentSong.value?.id == songId) {
+            EqualizerManager.applyForTrack(getApplication(), songId)
+            _equalizerPreset.value = EqualizerManager.effectivePresetForTrack(getApplication(), songId)
+            refreshEqualizerBands()
+        }
     }
 
     fun setEqualizerBandLevel(bandIndex: Int, levelMillibels: Short) {
@@ -836,6 +994,113 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     fun setAlbumCoverAccentEnabled(enabled: Boolean) {
         _albumCoverAccentEnabled.value = enabled
         prefs.edit().putBoolean("album_cover_accent_enabled", enabled).apply()
+    }
+
+    fun setRemoteHostEnabled(enabled: Boolean) {
+        if (enabled) startRemoteHost() else stopRemoteHost()
+    }
+
+    fun regenerateRemotePin() {
+        val host = remoteHost ?: return
+        _remotePin.value = host.rotatePin()
+        _remoteLanIp.value = RemoteLanAddresses.primaryIpv4()
+        _remoteClientCount.value = 0
+    }
+
+    private fun startRemoteHost() {
+        stopRemoteHost()
+        _remoteHostError.value = null
+        val server = RemoteHostServer(
+            port = RemoteProtocol.DEFAULT_PORT,
+            onCommand = { action, positionMs, volume ->
+                viewModelScope.launch(Dispatchers.Main.immediate) {
+                    handleRemoteCommand(action, positionMs, volume)
+                }
+            },
+            getState = { buildRemotePlaybackState() },
+            onClientCountChanged = { count ->
+                _remoteClientCount.value = count
+            },
+        )
+        try {
+            server.start()
+            remoteHost = server
+            _remotePin.value = server.rotatePin()
+            _remoteLanIp.value = RemoteLanAddresses.primaryIpv4()
+            _remoteHostEnabled.value = true
+            remotePushJob = viewModelScope.launch {
+                while (_remoteHostEnabled.value) {
+                    remoteHost?.pushState()
+                    delay(1_000L)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG_REMOTE, "Impossible de démarrer le host remote", e)
+            remoteHost = null
+            _remoteHostEnabled.value = false
+            _remotePin.value = null
+            _remoteHostError.value = e.message ?: "Port ${RemoteProtocol.DEFAULT_PORT} indisponible"
+        }
+    }
+
+    private fun stopRemoteHost() {
+        remotePushJob?.cancel()
+        remotePushJob = null
+        val host = remoteHost
+        remoteHost = null
+        _remoteHostEnabled.value = false
+        _remotePin.value = null
+        _remoteClientCount.value = 0
+        if (host != null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    host.stop()
+                } catch (e: Exception) {
+                    Log.w(TAG_REMOTE, "Arrêt host remote", e)
+                }
+            }
+        }
+    }
+
+    private fun handleRemoteCommand(
+        action: RemoteCommandAction,
+        positionMs: Long?,
+        volume: Float?,
+    ) {
+        val controller = _mediaController.value
+        when (action) {
+            RemoteCommandAction.PLAY -> controller?.play()
+            RemoteCommandAction.PAUSE -> controller?.pause()
+            RemoteCommandAction.NEXT -> skipNext()
+            RemoteCommandAction.PREVIOUS -> skipPrevious()
+            RemoteCommandAction.SEEK -> {
+                if (positionMs != null) seekTo(positionMs.coerceAtLeast(0L))
+            }
+            RemoteCommandAction.SET_VOLUME -> {
+                if (volume != null) controller?.volume = volume.coerceIn(0f, 1f)
+            }
+        }
+    }
+
+    private fun buildRemotePlaybackState(): RemotePlaybackState {
+        val song = _currentSong.value
+        val controller = _mediaController.value
+        return RemotePlaybackState(
+            song = song?.let {
+                RemoteSongState(
+                    id = it.id.toString(),
+                    title = it.title,
+                    artist = it.artist,
+                    album = it.albumName,
+                    durationMs = it.duration,
+                    artUrl = it.albumArtUri?.toString(),
+                )
+            },
+            isPlaying = _isPlaying.value,
+            positionMs = _playbackPosition.value,
+            volume = controller?.volume ?: 1f,
+            queueSize = _playbackQueue.value.size,
+        )
     }
 
     fun playNext(song: Song) {
@@ -1000,10 +1265,12 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     override fun onCleared() {
         super.onCleared()
         resumeReminderJob?.cancel()
+        stopRemoteHost()
         controllerFuture?.let { MediaController.releaseFuture(it) }
     }
 
     companion object {
+        private const val TAG_REMOTE = "RemoteHost"
         private const val RESUME_REMINDER_DELAY_MS = 15 * 60 * 1000L
         private const val SESSION_SUMMARY_THRESHOLD_SECONDS = 20 * 60
         private const val PREVIOUS_RESTART_THRESHOLD_MS = 3_000L

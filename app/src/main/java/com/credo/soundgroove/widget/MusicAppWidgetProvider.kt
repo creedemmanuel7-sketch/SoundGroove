@@ -42,6 +42,7 @@ class MusicAppWidgetProvider : AppWidgetProvider() {
     companion object {
         private const val LARGE_MIN_WIDTH_DP = 280
         private const val LARGE_MIN_HEIGHT_DP = 110
+        private const val COMPACT_MAX_HEIGHT_DP = 84
 
         fun updateAllWidgets(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
@@ -61,11 +62,12 @@ class MusicAppWidgetProvider : AppWidgetProvider() {
             val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, LARGE_MIN_WIDTH_DP)
             val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, LARGE_MIN_HEIGHT_DP)
             val isLarge = minWidth >= LARGE_MIN_WIDTH_DP && minHeight >= LARGE_MIN_HEIGHT_DP
+            val isCompact = minHeight <= COMPACT_MAX_HEIGHT_DP
 
-            val layoutRes = if (isLarge) {
-                R.layout.widget_music_player_large
-            } else {
-                R.layout.widget_music_player
+            val layoutRes = when {
+                isLarge -> R.layout.widget_music_player_large
+                isCompact -> R.layout.widget_music_player
+                else -> R.layout.widget_music_player
             }
             val backgroundRes = when (state.skin) {
                 WidgetSkin.CYAN -> R.drawable.widget_background_cyan
@@ -105,6 +107,14 @@ class MusicAppWidgetProvider : AppWidgetProvider() {
                 R.id.widget_next,
                 actionPendingIntent(context, WidgetActionReceiver.ACTION_NEXT, 2)
             )
+
+            if (isLarge) {
+                views.setViewVisibility(R.id.widget_shuffle, android.view.View.VISIBLE)
+                views.setOnClickPendingIntent(
+                    R.id.widget_shuffle,
+                    actionPendingIntent(context, WidgetActionReceiver.ACTION_SHUFFLE, 4)
+                )
+            }
 
             views.setOnClickPendingIntent(
                 R.id.widget_root,

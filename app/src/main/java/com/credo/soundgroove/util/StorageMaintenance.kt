@@ -37,19 +37,32 @@ object StorageMaintenance {
         val webViewCacheBytes: Long,
         val coverOverridesBytes: Long,
         val coverOverridesFiles: Int,
+        val databaseBytes: Long = 0L,
+        val prefsBytes: Long = 0L,
+        val coilCacheBytes: Long = 0L,
     ) {
         /** Somme de ce qu'un "Vider le cache" effacerait réellement. */
         val clearableBytes: Long get() = lyricsCacheBytes + shareCacheBytes + webViewCacheBytes
+
+        /** Données app (cache vidables + Room + prefs + pochettes + Coil). */
+        val totalAppDataBytes: Long get() =
+            clearableBytes + coverOverridesBytes + databaseBytes + prefsBytes + coilCacheBytes
     }
 
-    fun computeBreakdown(context: Context): CacheBreakdown = CacheBreakdown(
-        lyricsCacheBytes = LyricsCacheStore.sizeBytes(context),
-        lyricsCacheFiles = LyricsCacheStore.fileCount(context),
-        shareCacheBytes = ShareCardGenerator.shareCacheSizeBytes(context),
-        webViewCacheBytes = estimateWebViewCacheSizeBytes(context),
-        coverOverridesBytes = CoverArtStorage.sizeBytes(context),
-        coverOverridesFiles = CoverArtStorage.fileCount(context),
-    )
+    fun computeBreakdown(context: Context): CacheBreakdown {
+        val appRoot = context.filesDir.parentFile
+        return CacheBreakdown(
+            lyricsCacheBytes = LyricsCacheStore.sizeBytes(context),
+            lyricsCacheFiles = LyricsCacheStore.fileCount(context),
+            shareCacheBytes = ShareCardGenerator.shareCacheSizeBytes(context),
+            webViewCacheBytes = estimateWebViewCacheSizeBytes(context),
+            coverOverridesBytes = CoverArtStorage.sizeBytes(context),
+            coverOverridesFiles = CoverArtStorage.fileCount(context),
+            databaseBytes = estimateDatabaseBytes(context),
+            prefsBytes = estimateSharedPrefsBytes(appRoot),
+            coilCacheBytes = dirSizeBytes(context.cacheDir.resolve("coil_album_art")),
+        )
+    }
 
     /**
      * Vide tout le stockage "cache" (paroles + partage + WebView).
@@ -100,8 +113,22 @@ object StorageMaintenance {
     }
 
     private fun dirSizeBytes(dir: File): Long = runCatching {
+        if (!dir.exists()) return 0L
         dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
     }.getOrDefault(0L)
+
+    private fun estimateDatabaseBytes(context: Context): Long {
+        val dbFile = context.getDatabasePath("soundgroove.db")
+        val base = dbFile.absolutePath
+        return dbFile.length().coerceAtLeast(0L) +
+            File("$base-shm").length().coerceAtLeast(0L) +
+            File("$base-wal").length().coerceAtLeast(0L)
+    }
+
+    private fun estimateSharedPrefsBytes(appRoot: File?): Long {
+        val prefsDir = appRoot?.resolve("shared_prefs") ?: return 0L
+        return dirSizeBytes(prefsDir)
+    }
 
     /** Formatte un nombre d'octets en libellé lisible ("1,2 Mo", "340 Ko"). */
     fun formatBytes(bytes: Long): String {

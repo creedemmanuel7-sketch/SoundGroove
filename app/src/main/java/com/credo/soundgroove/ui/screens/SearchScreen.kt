@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
@@ -50,6 +51,7 @@ import com.credo.soundgroove.ui.util.tracksCountLabel
 import com.credo.soundgroove.util.MediaPermissions
 import com.credo.soundgroove.util.SongDisplay
 import com.credo.soundgroove.viewmodel.SearchFilter
+import com.credo.soundgroove.viewmodel.SearchSuggestion
 import com.credo.soundgroove.viewmodel.SearchViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,6 +60,7 @@ fun SearchScreen(
     allSongs: List<Song>,
     playlists: List<Playlist>,
     favoriteSongs: List<Song>,
+    songsWithLyrics: List<Song> = emptyList(),
     currentSong: Song?,
     accentColor: Color,
     recentSearches: List<String> = emptyList(),
@@ -96,9 +99,23 @@ fun SearchScreen(
 
     fun folderLabel(folderPath: String): String = searchViewModel.folderLabel(folderPath)
 
-    val searchResults = remember(searchQuery, allSongs, playlists, selectedFilter) {
-        val raw = searchViewModel.buildResults(searchQuery.trim(), allSongs, playlists)
+    val searchResults = remember(searchQuery, allSongs, playlists, songsWithLyrics, selectedFilter) {
+        val raw = searchViewModel.buildResults(
+            searchQuery.trim(),
+            allSongs,
+            playlists,
+            songsWithLyrics
+        )
         searchViewModel.filterResults(raw, selectedFilter)
+    }
+
+    val suggestions = remember(searchQuery, allSongs, playlists, recentSearches) {
+        searchViewModel.buildSuggestions(
+            searchQuery.trim(),
+            allSongs,
+            playlists,
+            recentSearches
+        )
     }
 
     val filteredSongs = searchResults.songs
@@ -106,18 +123,21 @@ fun SearchScreen(
     val filteredArtists = searchResults.artists
     val filteredPlaylists = searchResults.playlists
     val filteredFolders = searchResults.folders
+    val filteredLyricsMatches = searchResults.lyricsMatches
 
     val showSongs = selectedFilter == null || selectedFilter == SearchFilter.Songs
     val showAlbums = selectedFilter == null || selectedFilter == SearchFilter.Albums
     val showArtists = selectedFilter == null || selectedFilter == SearchFilter.Artists
     val showPlaylists = selectedFilter == null || selectedFilter == SearchFilter.Playlists
     val showFolders = selectedFilter == null || selectedFilter == SearchFilter.Folders
+    val showLyrics = selectedFilter == null || selectedFilter == SearchFilter.Lyrics
 
     val hasResults = (showSongs && filteredSongs.isNotEmpty()) ||
         (showAlbums && filteredAlbums.isNotEmpty()) ||
         (showArtists && filteredArtists.isNotEmpty()) ||
         (showPlaylists && filteredPlaylists.isNotEmpty()) ||
-        (showFolders && filteredFolders.isNotEmpty())
+        (showFolders && filteredFolders.isNotEmpty()) ||
+        (showLyrics && filteredLyricsMatches.isNotEmpty())
 
     LaunchedEffect(Unit) {
         if (hasPermission) {
@@ -163,7 +183,7 @@ fun SearchScreen(
                         .focusRequester(focusRequester),
                     placeholder = {
                         Text(
-                            "Titres, albums, artistes, playlists, dossiers…",
+                            "Titres, albums, artistes, playlists, dossiers, paroles…",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextTertiary
                         )
@@ -207,15 +227,14 @@ fun SearchScreen(
                     accentColor = accentColor,
                     onAction = { permissionLauncher.launch(audioPermission) }
                 )
-            } else {
+            } else if (searchQuery.isBlank()) {
                 SearchFilterRow(
                     selectedFilter = selectedFilter,
                     accentColor = accentColor,
                     onFilterSelected = { selectedFilter = it }
                 )
 
-                if (searchQuery.isBlank()) {
-                    LazyColumn(
+                LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(horizontal = SgSpacing.lg, vertical = SgSpacing.md)
                     ) {
@@ -226,7 +245,7 @@ fun SearchScreen(
                                 subtitle = if (selectedFilter != null) {
                                     "Filtre « ${selectedFilter!!.label} » actif — saisissez un mot-clé."
                                 } else {
-                                    "Saisissez un titre, un album, un artiste, une playlist ou un dossier."
+                                    "Saisissez un titre, un album, un artiste, une playlist, un dossier ou des paroles en cache."
                                 },
                                 compact = true,
                                 accentColor = accentColor
@@ -238,7 +257,7 @@ fun SearchScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "RECHERCHES RÉCENTES",
+                                    text = "Recherches récentes",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = TextTertiary,
                                     modifier = Modifier.padding(horizontal = SgSpacing.sm)
@@ -278,10 +297,30 @@ fun SearchScreen(
                         }
                     }
                 } else {
+                    SearchFilterRow(
+                        selectedFilter = selectedFilter,
+                        accentColor = accentColor,
+                        onFilterSelected = { selectedFilter = it }
+                    )
+
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(horizontal = SgSpacing.sm, vertical = SgSpacing.xs)
                     ) {
+                    if (suggestions.isNotEmpty()) {
+                        item { SectionTitle("Suggestions") }
+                        items(suggestions, key = { "${it.kind}:${it.label}" }) { suggestion ->
+                            SearchSuggestionRow(
+                                suggestion = suggestion,
+                                accentColor = accentColor,
+                                onClick = {
+                                    searchQuery = suggestion.label
+                                    submitSearch()
+                                }
+                            )
+                        }
+                    }
+
                     if (!hasResults) {
                         item {
                             SgEmptyState(
@@ -293,6 +332,7 @@ fun SearchScreen(
                                     SearchFilter.Artists -> "Aucun artiste ne correspond à cette recherche."
                                     SearchFilter.Playlists -> "Aucune playlist ne correspond à cette recherche."
                                     SearchFilter.Folders -> "Aucun dossier ne correspond à cette recherche."
+                                    SearchFilter.Lyrics -> "Aucun morceau avec paroles en cache ne correspond. Ouvrez le lecteur pour importer des paroles."
                                     null -> "Essayez un autre mot-clé ou changez de filtre."
                                 },
                                 compact = true
@@ -404,10 +444,68 @@ fun SearchScreen(
                         }
                     }
 
+                    if (showLyrics && filteredLyricsMatches.isNotEmpty()) {
+                        item { SectionTitle("Paroles en cache") }
+                        items(filteredLyricsMatches, key = { "lyrics-${it.id}" }) { song ->
+                            SearchEntityRow(
+                                title = song.title,
+                                subtitle = "${SongDisplay.artist(song.artist)} · paroles disponibles",
+                                icon = Icons.Default.Lyrics,
+                                accentColor = accentColor,
+                                onClick = { onPlaySong(song, filteredLyricsMatches) }
+                            )
+                        }
+                    }
+
                     item { Spacer(modifier = Modifier.height(96.dp)) }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SearchSuggestionRow(
+    suggestion: SearchSuggestion,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = SgSpacing.sm, vertical = SgSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = when (suggestion.kind) {
+                "history" -> Icons.Default.History
+                "folder" -> Icons.Default.Folder
+                "lyrics" -> Icons.Default.Lyrics
+                else -> Icons.Default.Search
+            },
+            contentDescription = null,
+            tint = TextTertiary,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(SgSpacing.md))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = suggestion.label,
+                color = TextPrimary,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            suggestion.subtitle?.let { subtitle ->
+                Text(
+                    text = subtitle,
+                    color = TextTertiary,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -453,8 +551,8 @@ private fun SearchFilterRow(
 @Composable
 private fun SectionTitle(text: String) {
     Text(
-        text = text.uppercase(),
-        style = MaterialTheme.typography.labelSmall,
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
         color = TextTertiary,
         modifier = Modifier.padding(horizontal = SgSpacing.sm, vertical = SgSpacing.md)
     )

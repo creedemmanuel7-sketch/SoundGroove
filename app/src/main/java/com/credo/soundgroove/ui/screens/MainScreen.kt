@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -59,10 +60,11 @@ import androidx.media3.session.MediaController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.R
-import com.credo.soundgroove.ui.components.SgLoadingState
+import com.credo.soundgroove.ui.components.LibraryScanLoading
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.data.repository.ListeningStats
+import com.credo.soundgroove.data.repository.LocalScrobbleStats
 import com.credo.soundgroove.ui.components.BottomNavBar
 import com.credo.soundgroove.ui.components.InfoRow
 import com.credo.soundgroove.ui.components.formatDuration
@@ -75,6 +77,8 @@ import com.credo.soundgroove.util.displayArtist
 import com.credo.soundgroove.util.displayTitle
 import com.credo.soundgroove.util.rememberAlbumArtAccentColor
 import kotlinx.coroutines.launch
+
+private enum class MainBootstrapPhase { Permission, Scanning, Ready }
 
 @Composable
 fun MainScreen(
@@ -95,6 +99,7 @@ fun MainScreen(
     onNavigateToAlbum: (String) -> Unit = {},
     onNavigateToArtist: (String) -> Unit = {},
     onNavigateToPlayer: () -> Unit = {},
+    onNavigateToCarMode: () -> Unit = {},
     onHomeMiniPlayerSuppressedChange: (Boolean) -> Unit = {},
     playbackSpeed: Float = 1f,
     playbackPitch: Float = 1f,
@@ -138,6 +143,7 @@ fun MainScreen(
     listeningTimeLabel: String = "0 min",
     listeningStats: ListeningStats = ListeningStats(0, 0, 0, 0),
     formatListeningTime: (Long) -> String = { listeningTimeLabel },
+    scrobbleStats: LocalScrobbleStats = LocalScrobbleStats(0, 0, emptyList(), emptyList()),
     smartNotificationsEnabled: Boolean = true,
     onSmartNotificationsChange: (Boolean) -> Unit = {},
     persistentMiniPlayerEnabled: Boolean = true,
@@ -159,13 +165,20 @@ fun MainScreen(
     hiddenFolders: Set<String> = emptySet(),
     onHideFolder: (String) -> Unit = {},
     onUnhideFolder: (String) -> Unit = {},
+    libraryFolderCount: Int = 0,
+    onAddLibraryFolder: () -> Unit = {},
+    scrobbleTotal: Int = 0,
     onToggleFavorite: (Song) -> Unit = {},
     onCreatePlaylist: (name: String, onCreated: (Long) -> Unit) -> Unit = { _, _ -> },
     onPlaylistAddSong: (Playlist, Song) -> Unit = { _, _ -> },
     onAddSongsToPlaylist: (playlistId: Long, songs: List<Song>) -> Unit = { _, _ -> },
     onPlaylistDelete: (Playlist) -> Unit = {},
     onPlaylistRename: (Playlist, String) -> Unit = { _, _ -> },
-    onRemoveSongFromPlaylist: (Playlist, Long) -> Unit = { _, _ -> }
+    onRemoveSongFromPlaylist: (Playlist, Long) -> Unit = { _, _ -> },
+    onOpenSleepTimerSheet: () -> Unit = {},
+    onOpenPlaybackSpeedSheet: () -> Unit = {},
+    onOpenCrossfadeSheet: () -> Unit = {},
+    onOpenEqualizerSheet: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -290,10 +303,6 @@ fun MainScreen(
     }
     var showSettings by remember { mutableStateOf(false) }
     BackHandler(enabled = showSettings) { showSettings = false }
-    var showSleepTimerSheet by remember { mutableStateOf(false) }
-    var showPlaybackSpeedSheet by remember { mutableStateOf(false) }
-    var showCrossfadeSheet by remember { mutableStateOf(false) }
-    var showEqualizerSheet by remember { mutableStateOf(false) }
     var showEditMetadata by remember { mutableStateOf(false) }
     val activeSong = localCurrentSong ?: currentSong
     val activeIsPlaying = localIsPlaying
@@ -306,12 +315,37 @@ fun MainScreen(
         }
     }
 
+    val bootstrapPhase = when {
+        !hasPermission -> MainBootstrapPhase.Permission
+        libraryScanPending && songs.isEmpty() -> MainBootstrapPhase.Scanning
+        else -> MainBootstrapPhase.Ready
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(themeBackgroundBrush(currentTheme))
     ) {
-        if (!hasPermission) {
+        AnimatedContent(
+            targetState = bootstrapPhase,
+            transitionSpec = {
+                if (reducedMotion) {
+                    fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+                } else {
+                    (
+                        fadeIn(SgMotion.tweenMediumOf()) +
+                            scaleIn(
+                                initialScale = 0.985f,
+                                animationSpec = SgMotion.tweenMediumOf()
+                            )
+                        ) togetherWith fadeOut(SgMotion.tweenFastAccelOf())
+                }
+            },
+            label = "mainBootstrap",
+            modifier = Modifier.fillMaxSize()
+        ) { phase ->
+        when (phase) {
+        MainBootstrapPhase.Permission -> {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -346,13 +380,14 @@ fun MainScreen(
                     }
                 }
             }
-        } else if (libraryScanPending && songs.isEmpty()) {
-            SgLoadingState(
-                message = "Analyse de votre bibliothèque musicale…",
+        }
+        MainBootstrapPhase.Scanning -> {
+            LibraryScanLoading(
                 accentColor = accentColor,
                 modifier = Modifier.fillMaxSize()
             )
-        } else {
+        }
+        MainBootstrapPhase.Ready -> {
             Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f)) {
                 AnimatedContent(
@@ -489,6 +524,7 @@ fun MainScreen(
                         playlists = playlists,
                         listeningStats = listeningStats,
                         formatListeningTime = formatListeningTime,
+                        scrobbleStats = scrobbleStats,
                         currentTheme = currentTheme,
                         accentColor = accentColor,
                         smartNotificationsEnabled = smartNotificationsEnabled,
@@ -497,6 +533,7 @@ fun MainScreen(
                         onPerformanceModeChange = onPerformanceModeChange,
                         onThemeSelected = onThemeSelected,
                         onOpenSettings = { showSettings = true },
+                        onOpenCarMode = onNavigateToCarMode,
                         onOpenFavorites = {
                             onSelectedTabChange(1)
                             onLibrarySelectedTabChange(5)
@@ -531,6 +568,8 @@ fun MainScreen(
                     }
                 )
             }
+        }
+        }
         }
     }
 
@@ -573,27 +612,31 @@ fun MainScreen(
             onAccentSelected = onAccentSelected,
             albumCoverAccentEnabled = albumCoverAccentEnabled,
             onAlbumCoverAccentChange = onAlbumCoverAccentChange,
-            onOpenSleepTimer = { showSleepTimerSheet = true },
+            onOpenSleepTimer = onOpenSleepTimerSheet,
             onCancelSleepTimer = onCancelSleepTimer,
             playbackSpeed = playbackSpeed,
             playbackPitch = playbackPitch,
             gaplessEnabled = gaplessEnabled,
             onGaplessChange = onGaplessChange,
             crossfadeDurationMs = crossfadeDurationMs,
-            onOpenCrossfade = { showCrossfadeSheet = true },
+            onOpenCrossfade = onOpenCrossfadeSheet,
             equalizerEnabled = equalizerEnabled,
             equalizerPresetLabel = equalizerPresetLabel,
             onOpenEqualizer = {
                 onRefreshEqualizerBands()
-                showEqualizerSheet = true
+                onOpenEqualizerSheet()
             },
-            onOpenPlaybackSpeed = { showPlaybackSpeedSheet = true },
+            onOpenPlaybackSpeed = onOpenPlaybackSpeedSheet,
             smartNotificationsEnabled = smartNotificationsEnabled,
             onSmartNotificationsChange = onSmartNotificationsChange,
             persistentMiniPlayerEnabled = persistentMiniPlayerEnabled,
             onPersistentMiniPlayerChange = onPersistentMiniPlayerChange,
             performanceModeEnabled = performanceModeEnabled,
             onPerformanceModeChange = onPerformanceModeChange,
+            onOpenCarMode = {
+                showSettings = false
+                onNavigateToCarMode()
+            },
             remoteHostEnabled = remoteHostEnabled,
             remotePin = remotePin,
             remoteLanIp = remoteLanIp,
@@ -606,51 +649,10 @@ fun MainScreen(
             onClearRecentlyPlayed = onClearRecentlyPlayed,
             onClearSearchHistory = onClearSearchHistory,
             onExportBackup = onExportBackup,
-            onImportBackup = onImportBackup
-        )
-    }
-
-    if (showSleepTimerSheet) {
-        com.credo.soundgroove.ui.components.SleepTimerBottomSheet(
-            accentColor = accentColor,
-            onDismiss = { showSleepTimerSheet = false },
-            onSelectMinutes = onSetSleepTimer,
-            onSelectEndOfTrack = onSetSleepTimerEndOfTrack,
-            onCancel = onCancelSleepTimer
-        )
-    }
-
-    if (showPlaybackSpeedSheet) {
-        com.credo.soundgroove.ui.components.PlaybackSpeedBottomSheet(
-            currentSpeed = playbackSpeed,
-            currentPitch = playbackPitch,
-            accentColor = accentColor,
-            onSpeedSelected = onPlaybackSpeedChange,
-            onPitchSelected = onPlaybackPitchChange,
-            onDismiss = { showPlaybackSpeedSheet = false }
-        )
-    }
-
-    if (showCrossfadeSheet) {
-        com.credo.soundgroove.ui.components.CrossfadeBottomSheet(
-            currentMs = crossfadeDurationMs,
-            gaplessEnabled = gaplessEnabled,
-            accentColor = accentColor,
-            onDurationSelected = onCrossfadeDurationChange,
-            onDismiss = { showCrossfadeSheet = false }
-        )
-    }
-
-    if (showEqualizerSheet) {
-        com.credo.soundgroove.ui.components.EqualizerBottomSheet(
-            enabled = equalizerEnabled,
-            preset = equalizerPreset,
-            bands = equalizerBands,
-            accentColor = accentColor,
-            onEnabledChange = onEqualizerEnabledChange,
-            onPresetSelected = onEqualizerPresetChange,
-            onBandLevelChange = onEqualizerBandLevelChange,
-            onDismiss = { showEqualizerSheet = false }
+            onImportBackup = onImportBackup,
+            libraryFolderCount = libraryFolderCount,
+            onAddLibraryFolder = onAddLibraryFolder,
+            scrobbleTotal = scrobbleTotal,
         )
     }
 

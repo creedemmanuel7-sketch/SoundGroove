@@ -26,6 +26,7 @@ class WidgetActionReceiver : BroadcastReceiver() {
                     ACTION_PLAY_PAUSE -> if (controller.isPlaying) controller.pause() else controller.play()
                     ACTION_PREVIOUS -> seekPrevious(controller)
                     ACTION_NEXT -> if (controller.hasNextMediaItem()) controller.seekToNextMediaItem()
+                    ACTION_SHUFFLE -> controller.shuffleModeEnabled = !controller.shuffleModeEnabled
                 }
             } catch (_: Exception) {
                 context.startActivity(
@@ -54,13 +55,15 @@ class WidgetActionReceiver : BroadcastReceiver() {
         const val ACTION_PLAY_PAUSE = "com.credo.soundgroove.widget.PLAY_PAUSE"
         const val ACTION_PREVIOUS = "com.credo.soundgroove.widget.PREVIOUS"
         const val ACTION_NEXT = "com.credo.soundgroove.widget.NEXT"
+        const val ACTION_SHUFFLE = "com.credo.soundgroove.widget.SHUFFLE"
 
         private const val PREVIOUS_RESTART_THRESHOLD_MS = 3_000L
 
         private val SUPPORTED_ACTIONS = setOf(
             ACTION_PLAY_PAUSE,
             ACTION_PREVIOUS,
-            ACTION_NEXT
+            ACTION_NEXT,
+            ACTION_SHUFFLE,
         )
     }
 }

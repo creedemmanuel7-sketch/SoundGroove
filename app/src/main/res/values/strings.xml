@@ -15,6 +15,7 @@
     <string name="widget_play_pause">Lecture / Pause</string>
     <string name="widget_previous">Piste précédente</string>
     <string name="widget_next">Piste suivante</string>
+    <string name="widget_shuffle">Lecture aléatoire</string>
 
     <string name="artist_unknown">Artiste inconnu</string>
     <string name="title_unknown">Titre inconnu</string>

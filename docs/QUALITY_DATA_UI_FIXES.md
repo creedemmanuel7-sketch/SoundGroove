@@ -11,9 +11,12 @@ Or une **semaine calendaire** n’est pas un sous-ensemble du **mois calendaire*
 ### Correctif
 - Semaine = du premier jour de semaine locale → aujourd’hui.
 - Mois = du 1er du mois → aujourd’hui.
-- Total = compteur lifetime prefs (`total_listening_seconds`), floor sur la somme journalière retenue.
+- **Total (« Depuis le début »)** :
+  - si l’historique `daily_listening_json` est complet (&lt; 90 j, rien de pruné) → somme journalière = vérité (corrige un prefs lifetime gonflé, ex. total 24h vs mois 4h) ;
+  - sinon prefs `total_listening_seconds`, floor sur la somme journalière retenue.
+- ViewModel resynchronise `total_listening_seconds` sur le total résolu.
 - **Plus de coerce** qui aligne mois sur semaine.
-- UI : Profil + Paramètres (STATISTIQUES) + label Accueil/Settings total passent tous par `listeningStats` / `formatListeningTime(listeningStats.*Seconds)` — une seule source de vérité (`ListeningStatsRepository` via `SoundGrooveViewModel.listeningStats`).
+- UI : Profil + Paramètres — labels « Ce mois » / « Depuis le début », format compact `4h54` ; source unique `listeningStats`.
 
 ### Note produit
 Si l’utilisateur n’a écouté que depuis peu (&lt; une semaine calendaire), semaine ≈ mois ≈ total reste **attendu**. Les pastilles divergent dès qu’il y a de l’historique hors de la fenêtre courante.

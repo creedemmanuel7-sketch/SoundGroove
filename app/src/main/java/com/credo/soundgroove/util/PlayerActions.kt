@@ -7,10 +7,12 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.credo.soundgroove.data.model.Song
 
+import com.credo.soundgroove.util.AppLinks
+
 object PlayerActions {
 
     fun shareSong(context: Context, song: Song) {
-        val text = "${song.title} — ${song.artist}"
+        val text = AppLinks.shareText(song.title, song.artist)
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "audio/*"
             putExtra(Intent.EXTRA_STREAM, song.uri)

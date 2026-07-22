@@ -15,17 +15,18 @@ data class ListeningStats(
 )
 
 /**
- * Source de vérité unique des stats d'écoute.
+ * Source de vérité unique des stats d'écoute (unités : **secondes** partout).
  *
  * - **Semaine / mois** : fenêtres **calendaires** (début de semaine locale → aujourd'hui,
  *   1er du mois → aujourd'hui), sommées depuis `daily_listening_json`.
- * - **Total** : compteur lifetime `total_listening_seconds` (prefs), borné au moins
- *   à la somme journalière retenue (migration / écarts).
+ * - **Total (depuis le début)** :
+ *   - si l'historique journalier est **complet** (rien de pruné, &lt; [RETENTION_DAYS] j),
+ *     la somme `daily` fait foi — évite un compteur prefs lifetime gonflé
+ *     (ex. total 24 h vs mois 4 h alors que toute l'écoute est encore dans la carte) ;
+ *   - sinon prefs `total_listening_seconds`, floor = somme journalière retenue.
  *
  * Important : une semaine calendaire n'est **pas** un sous-ensemble du mois calendaire
- * (ex. début juillet qui inclut fin juin). On ne force donc plus mois ≥ semaine —
- * l'ancien `coerceAtLeast(week)` collapsait mois (= semaine) puis souvent total
- * quand l'historique récent dominait, d'où trois pastilles identiques.
+ * (ex. début juillet qui inclut fin juin). On ne force donc plus mois ≥ semaine.
  */
 class ListeningStatsRepository(context: Context) {
 
@@ -72,9 +73,16 @@ class ListeningStatsRepository(context: Context) {
         val weekSeconds = sumCalendarWeek(today, daily)
         val monthSeconds = sumCalendarMonth(today, daily)
         val dailySum = daily.values.sum()
-        // Lifetime : prefs ; floor sur la carte journalière si elle est en avance
-        // (pas de plafond sur semaine/mois — fenêtres indépendantes).
-        val resolvedTotal = maxOf(totalSeconds.coerceAtLeast(0L), dailySum)
+        val prefsTotal = totalSeconds.coerceAtLeast(0L)
+        val windowFloor = maxOf(dailySum, monthSeconds, weekSeconds)
+        // Historique journalier complet + substance → daily fait foi si prefs est gonflé
+        // (ex. total 24h vs mois 4h alors que toute l'écoute est encore dans la carte).
+        // Ne pas soigner si la carte vient d'être recréée (1 entrée / &lt; 1 h) : garder prefs.
+        val resolvedTotal = when {
+            daily.isEmpty() -> prefsTotal
+            shouldHealInflatedLifetime(prefsTotal, dailySum, daily, today) -> windowFloor
+            else -> maxOf(prefsTotal, windowFloor)
+        }
         return ListeningStats(
             weekSeconds = weekSeconds,
             monthSeconds = monthSeconds,
@@ -82,6 +90,26 @@ class ListeningStatsRepository(context: Context) {
             totalSeconds = resolvedTotal,
             todaySeconds = daily[dateKey(today)] ?: 0L
         )
+    }
+
+    /** True si aucune entrée n'a pu être prunée — la carte couvre tout l'historique connu. */
+    private fun isCompleteDailyHistory(daily: Map<String, Long>, today: Calendar): Boolean {
+        val oldest = daily.keys.minOrNull() ?: return false
+        val cutoff = today.clone() as Calendar
+        cutoff.add(Calendar.DAY_OF_YEAR, -(RETENTION_DAYS - 1))
+        return oldest >= dateKey(cutoff)
+    }
+
+    private fun shouldHealInflatedLifetime(
+        prefsTotal: Long,
+        dailySum: Long,
+        daily: Map<String, Long>,
+        today: Calendar
+    ): Boolean {
+        if (!isCompleteDailyHistory(daily, today)) return false
+        val substantialDaily = daily.size >= 2 || dailySum >= MIN_TRUSTED_DAILY_SUM
+        if (!substantialDaily) return false
+        return prefsTotal > dailySum + LIFETIME_SLACK_SECONDS
     }
 
     /** Du premier jour de la semaine locale jusqu'à aujourd'hui inclus. */
@@ -146,5 +174,9 @@ class ListeningStatsRepository(context: Context) {
         private const val KEY_DAILY_LISTENING = "daily_listening_json"
         private const val MIN_DAY_SECONDS = 60L
         private const val RETENTION_DAYS = 90
+        /** Seuil pour faire confiance à la carte journalière (évite wipe après reset). */
+        private const val MIN_TRUSTED_DAILY_SUM = 3600L
+        /** Marge prefs vs daily avant de considérer le lifetime comme gonflé. */
+        private const val LIFETIME_SLACK_SECONDS = 120L
     }
 }

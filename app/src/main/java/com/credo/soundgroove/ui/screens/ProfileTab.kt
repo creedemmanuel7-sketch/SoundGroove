@@ -34,6 +34,10 @@ import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.data.repository.ListeningStats
+import com.credo.soundgroove.data.repository.LocalScrobbleStats
+import com.credo.soundgroove.data.repository.TopArtistStat
+import com.credo.soundgroove.data.repository.TopTrackStat
+import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.components.SgSwitch
 import com.credo.soundgroove.ui.components.SongItem
 import com.credo.soundgroove.ui.components.ThemePicker
@@ -50,6 +54,7 @@ fun ProfileTab(
     playlists: List<Playlist>,
     listeningStats: ListeningStats,
     formatListeningTime: (Long) -> String,
+    scrobbleStats: LocalScrobbleStats = LocalScrobbleStats(0, 0, emptyList(), emptyList()),
     currentTheme: AppTheme,
     accentColor: Color = MaterialTheme.colorScheme.primary,
     smartNotificationsEnabled: Boolean = true,
@@ -58,6 +63,7 @@ fun ProfileTab(
     onPerformanceModeChange: (Boolean) -> Unit = {},
     onThemeSelected: (AppTheme) -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onOpenCarMode: () -> Unit = {},
     onOpenFavorites: () -> Unit = {},
     onOpenPlaylists: () -> Unit = {},
     onExportBackup: () -> Unit = {},
@@ -129,6 +135,18 @@ fun ProfileTab(
             )
         }
 
+        if (scrobbleStats.topTracks.isNotEmpty() || scrobbleStats.topArtists.isNotEmpty()) {
+            item {
+                ProfileTopThisMonthSection(
+                    topTracks = scrobbleStats.topTracks,
+                    topArtists = scrobbleStats.topArtists,
+                    songs = songs,
+                    accentColor = accentColor,
+                    onSongClick = onSongClick
+                )
+            }
+        }
+
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -153,11 +171,9 @@ fun ProfileTab(
 
         item {
             Text(
-                text = "RACCOURCIS",
-                color = TextSecondary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp
+                text = "Raccourcis",
+                style = MaterialTheme.typography.labelMedium,
+                color = TextTertiary
             )
             Spacer(modifier = Modifier.height(10.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -203,6 +219,10 @@ fun ProfileTab(
                         onClick = { showBackupDialog = true }
                     )
                 }
+                ProfileCarModeEntry(
+                    accentColor = accentColor,
+                    onClick = onOpenCarMode,
+                )
             }
         }
 
@@ -218,6 +238,18 @@ fun ProfileTab(
             )
         }
 
+        if (recentlyPlayed.isEmpty()) {
+            item {
+                SgEmptyState(
+                    icon = Icons.Filled.History,
+                    title = "Pas encore d'historique",
+                    subtitle = "Vos morceaux récents et statistiques apparaîtront ici après quelques écoutes.",
+                    compact = true,
+                    accentColor = accentColor
+                )
+            }
+        }
+
         if (topArtists.isNotEmpty()) {
             item {
                 ProfileTopArtistsSection(topArtists = topArtists, recentlyPlayed = recentlyPlayed)
@@ -227,11 +259,9 @@ fun ProfileTab(
         if (mostPlayedRecentSongs.isNotEmpty()) {
             item {
                 Text(
-                    text = "MORCEAUX À RETROUVER",
-                    color = TextSecondary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp
+                    text = "Morceaux à retrouver",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextTertiary
                 )
                 Spacer(modifier = Modifier.height(12.dp))
             }
@@ -477,7 +507,7 @@ private fun ProfileStatsSection(
                     modifier = Modifier.weight(1f)
                 )
                 ProfileMetric(
-                    label = "Total",
+                    label = "Depuis le début",
                     value = formatListeningTime(listeningStats.totalSeconds),
                     modifier = Modifier.weight(1f)
                 )
@@ -729,6 +759,124 @@ private fun ProfileToggleRow(
 }
 
 @Composable
+private fun ProfileTopThisMonthSection(
+    topTracks: List<TopTrackStat>,
+    topArtists: List<TopArtistStat>,
+    songs: List<Song>,
+    accentColor: Color,
+    onSongClick: (Song) -> Unit
+) {
+    val songsById = remember(songs) { songs.associateBy { it.id } }
+    GlassCard(modifier = Modifier.fillMaxWidth(), cornerRadius = SgRadius.lg, accentColor = accentColor) {
+        Column(modifier = Modifier.padding(SgSpacing.lg)) {
+            Text(
+                text = "TOP CE MOIS",
+                color = TextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
+            )
+            if (topTracks.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Titres",
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                topTracks.take(5).forEachIndexed { index, track ->
+                    val song = songsById[track.songId]
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .then(
+                                if (song != null) Modifier.clickable { onSongClick(song) }
+                                else Modifier
+                            )
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${index + 1}",
+                            color = accentColor,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.width(22.dp)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = track.title.ifBlank { "Titre inconnu" },
+                                color = TextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = track.artist.ifBlank { "Artiste inconnu" },
+                                color = TextSecondary,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Text(
+                            text = "×${track.playCount}",
+                            color = accentColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+            if (topArtists.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    text = "Artistes",
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                topArtists.take(5).forEachIndexed { index, artist ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${index + 1}",
+                            color = accentColor,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.width(22.dp)
+                        )
+                        Text(
+                            text = artist.artist,
+                            color = TextPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "×${artist.playCount}",
+                            color = accentColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ProfileTopArtistsSection(
     topArtists: List<String>,
     recentlyPlayed: List<Song>
@@ -899,6 +1047,50 @@ private fun ProfileMetric(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+@Composable
+private fun ProfileCarModeEntry(
+    accentColor: Color,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(accentColor.copy(alpha = 0.12f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .background(accentColor.copy(alpha = 0.18f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.DirectionsCar,
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Mode voiture",
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "Plein écran, gros contrôles",
+                color = TextSecondary,
+                fontSize = 11.sp,
+            )
+        }
     }
 }
 

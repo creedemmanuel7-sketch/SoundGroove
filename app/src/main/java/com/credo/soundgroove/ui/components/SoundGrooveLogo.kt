@@ -17,6 +17,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.credo.soundgroove.R
 import com.credo.soundgroove.ui.theme.BrandBlack
@@ -25,17 +26,21 @@ import com.credo.soundgroove.ui.theme.SgRadius
 import com.credo.soundgroove.ui.theme.SoundGrooveTheme
 
 /**
- * Logo in-app — même symbole waveform ring que l'icône launcher.
+ * Logo in-app — waveform ring, **violet sur noir** (choix premium AMOLED).
+ *
+ * Variantes évaluées : violet/noir, noir/violet, émeraude/noir.
+ * Retenue : violet signature sur plaque noire — cohérent launcher + site, sans blanc.
  */
 @Composable
 fun SoundGrooveLogo(
     modifier: Modifier = Modifier,
-    accentColor: Color = BrandPurple,
+    size: Dp = 120.dp,
+    markColor: Color = BrandPurple,
 ) {
     val description = stringResource(id = R.string.soundgroove_logo_description)
 
     Box(
-        modifier = modifier.size(120.dp),
+        modifier = modifier.size(size),
         contentAlignment = Alignment.Center
     ) {
         Box(
@@ -43,28 +48,36 @@ fun SoundGrooveLogo(
                 .fillMaxSize()
                 .background(
                     Brush.radialGradient(
-                        listOf(accentColor.copy(alpha = 0.22f), Color.Transparent)
+                        listOf(markColor.copy(alpha = 0.28f), Color.Transparent)
                     )
                 )
         )
-        Icon(
-            painter = painterResource(id = R.drawable.ic_brand_waveform),
-            contentDescription = description,
-            tint = Color.Unspecified,
+        Box(
             modifier = Modifier
-                .fillMaxSize(0.86f)
+                .fillMaxSize(0.88f)
                 .clip(RoundedCornerShape(SgRadius.xl))
+                .background(BrandBlack)
                 .semantics { contentDescription = description },
-        )
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_brand_waveform),
+                contentDescription = null,
+                tint = markColor,
+                modifier = Modifier.fillMaxSize(0.86f),
+            )
+        }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 fun SoundGrooveLogoPreview() {
     SoundGrooveTheme {
         Box(
-            modifier = Modifier.fillMaxSize().background(BrandBlack),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(BrandBlack),
             contentAlignment = Alignment.Center
         ) {
             SoundGrooveLogo()

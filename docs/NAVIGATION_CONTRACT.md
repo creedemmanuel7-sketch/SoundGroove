@@ -42,7 +42,7 @@ Gérés dans `AppNavigationContent`, **au-dessus** du `NavHost`, dans le même `
 - **Propriétaire** : `AppNavigation` (`lyricsPeekProgress`, `lyricsMounted`).
 - Pas une route NavHost : overlay plein écran pair du Player.
 - `0` = Player visible ; `1` = Paroles plein écran ; drag intermédiaire = peek annulable.
-- Montage paresseux au premier tap « Paroles » ou premier drag.
+- Montage paresseux au premier tap sur l'aperçu paroles (ou action a11y) / premier drag.
 - Reset automatique quand `currentRoute != PLAYER`.
 - **S1 (paroles)** : contrôles limités à **play/pause** sur `LyricsScreen` et `LyricsWebSearchScreen` — pas de prev/next (réservés Player + mini-player).
 
@@ -93,21 +93,34 @@ Ordre typique (du plus spécifique au plus général) :
 
 Sur Player : si paroles en peek, le `BackHandler` Paroles intercepte avant celui du Player.
 
-### 4.1 Predictive back (POC S3 — route `PLAYER`)
+### 4.1 Predictive back (S3 Player + routes secondaires)
 
 - **Manifest** : `android:enableOnBackInvokedCallback="true"` sur `MainActivity`.
-- **Compose** : `PredictiveBackHandler` dans `PlayerScreen` — branche le geste back système (Android 13+, bord gauche) sur le **même morph interactif** que le swipe bas (`applyDismissDrag` / `cancelDismissDrag`).
-- **Commit** : à la fin du geste, `BackHandler` appelle `dismissPlayer(fromInteractiveDrag = …)` puis `popBackStack()` via `onClose`.
-- **Annulation** : `CancellationException` → `cancelDismissDrag()` (spring-back identique au swipe bas).
+- **Compose — utilitaire** : `SgPredictiveBackHandler` + `SgPredictivePopHost` dans `ui/navigation/SgPredictiveBack.kt` — branche le geste back système (Android 13+, bord gauche) sur un **progrès interactif 0→1** (même contrat que le swipe bas Player).
+- **Player (`Routes.PLAYER`)** : `PredictiveBackHandler` dans `PlayerScreen` — morph dismiss via `applyDismissDrag` / `cancelDismissDrag`.
+- **Paroles (overlay)** : `SgPredictiveBackHandler` dans `LyricsScreen` — décroît `lyricsPeekProgress` (retour Player), callbacks fournis par `AppNavigation`.
+- **Queue (overlay)** : `SgPredictiveBackHandler` dans `AppNavigation` — décroît `queueBannerProgress` (fermeture split bandeau).
+- **Routes NavHost secondaires** : `SgPredictivePopHost` enveloppe Recherche, détail playlist/dossier/album/artiste — slide + fade synchronisés au back prédictif (miroir `navPopExit`).
+- **Commit** : à la fin du geste, `BackHandler` / `onBack` → `popBackStack()` ou fermeture overlay ; **annulation** : `CancellationException` → spring-back.
 - **Désactivé si** :
   - `rememberSgReducedMotion()` → back instantané (pas de suivi progressif) ;
-  - peek paroles actif (`lyricsPeekProgress > 0`) — le back reste géré par `LyricsScreen` ;
-  - file d'attente ouverte (`queueOpen`) — pas de conflit avec le split bandeau/Queue ;
-  - Player en cours de sortie (`isExiting`).
+  - Player : peek paroles actif, file ouverte, ou sortie en cours ;
+  - Paroles : `peekProgress <= 0` (back reste au Player).
 - **Limites** :
   - API 33+ (OnBackInvokedCallback) pour le back prédictif natif ; API 24–32 : `BackHandler` classique sans animation système ;
-  - le morph pendant le back prédictif repasse en mode manuel (`dismissMorphProgress > 0`) même avec shared element — même stratégie que le swipe bas interactif ;
-  - pas de predictive back sur Paroles/Queue (hors périmètre POC).
+  - le morph Player pendant le back prédictif repasse en mode manuel (`dismissMorphProgress > 0`) même avec shared element ;
+  - peek/dismiss/mini unifié inchangé — les handlers overlay interceptent le back avant le Player quand Paroles/Queue actifs.
+
+### 4.2 Découverte des gestes (hints une fois)
+
+- **Persistance** : DataStore `gesture_hints_seen` (`GestureHintsStore`, clés dans `GestureHintIds`).
+- **UI** : `GestureHintBanner` — overlay discret bas d'écran, dismissible (tap bannière ou icône), sans emoji.
+- **Reduced motion** : apparition/disparition sans animation (`EnterTransition.None`).
+- **Hints** :
+  - Player : dismiss bas, swipe haut file, swipe horizontal paroles (un à la fois, ordre fixe) ;
+  - Paroles : retour bas/droite ;
+  - Queue : fermeture bas ;
+  - Détail NavHost : back bord gauche (via `SgPredictivePopHost`).
 
 ---
 
@@ -117,7 +130,7 @@ Labels **sémantiques uniquement** (aucun texte visuel ajouté) :
 
 | Zone | Fichier | Sémantique |
 |------|---------|------------|
-| Player plein écran | `PlayerScreen` | `contentDescription` : « Glisser vers le bas pour réduire… » + actions custom : Réduire, File, Paroles |
+| Player plein écran | `PlayerScreen` | `contentDescription` : « Glisser vers le bas pour réduire… » + actions custom : Réduire, File, Paroles (aperçu / swipe) |
 | Bouton réduire (header) | `PlayerScreen` | « Réduire au mini-player » |
 | Paroles plein / peek | `LyricsScreen` | « Glisser vers le bas ou la droite… » + action « Revenir au lecteur » |
 | Bouton retour paroles | `LyricsScreen` | « Revenir au lecteur » (déjà présent S1) |
@@ -145,13 +158,16 @@ Références : `docs/UX_MOTION_GUIDELINES.md`, `docs/FEATURES_C_SHARED_ELEMENT.m
 | `MiniPlayerVisibility.kt` | Règle unique visibilité + padding bas HOME |
 | `LegacyMainHost.kt` | Pont ViewModel → `MainScreen` |
 | `MainScreen.kt` | Tabs, bottom nav, overlays locaux (settings, récemment joué) |
-| `PlayerScreen.kt` | Player UI, gestes dismiss/queue/peek paroles, predictive back POC |
-| `LyricsScreen.kt` | Paroles + peek + BackHandler S1 + sémantique gestes |
+| `PlayerScreen.kt` | Player UI, gestes dismiss/queue/peek paroles, predictive back |
+| `SgPredictiveBack.kt` | Handler réutilisable + `SgPredictivePopHost` routes secondaires |
+| `GestureHintOverlay.kt` | Bannières hint gestes (une fois, DataStore) |
+| `GestureHintsStore.kt` | Persistance `gesture_hints_seen` |
+| `LyricsScreen.kt` | Paroles + peek + predictive back + hint retour |
 | `Motion.kt` | Durées, shared element, géométrie mini-player |
 
 ---
 
-## 8. Non couvert (post-S3)
+## 8. Non couvert (post-S4)
 
-- Predictive back sur Paroles, Queue, routes NavHost secondaires.
+- Predictive back sur `LyricsWebSearchScreen` et overlays sheets Player (options, EQ, etc.).
 - Player interne legacy dans d’autres écrans : voir audit composants pour routes secondaires.

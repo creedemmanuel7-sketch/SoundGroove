@@ -73,7 +73,9 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.GestureHintBanner
 import com.credo.soundgroove.ui.components.SgEmptyState
+import com.credo.soundgroove.ui.components.rememberGestureHintState
 import com.credo.soundgroove.ui.theme.CardSurface
 import com.credo.soundgroove.ui.theme.ErrorRed
 import com.credo.soundgroove.ui.theme.GlassBorder
@@ -89,6 +91,7 @@ import com.credo.soundgroove.ui.theme.sgPressScale
 import com.credo.soundgroove.ui.theme.sgCoilCrossfadeMs
 import com.credo.soundgroove.ui.theme.rememberSgReducedMotion
 import com.credo.soundgroove.ui.theme.sgSheetGradientBrush
+import com.credo.soundgroove.util.GestureHintIds
 import com.credo.soundgroove.util.displayArtist
 import com.credo.soundgroove.util.displayTitle
 import kotlinx.coroutines.launch
@@ -111,6 +114,7 @@ fun QueueScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val reducedMotion = rememberSgReducedMotion()
+    val queueCloseHint = rememberGestureHintState(GestureHintIds.QUEUE_CLOSE)
     val safeCurrentIndex = currentIndex.coerceIn(0, (playlist.size - 1).coerceAtLeast(0))
     val currentSong = playlist.getOrNull(safeCurrentIndex)
 
@@ -316,6 +320,15 @@ fun QueueScreen(
                 )
             }
         }
+
+        GestureHintBanner(
+            text = "Glisser vers le bas pour fermer la file",
+            visible = queueCloseHint.visible,
+            onDismiss = queueCloseHint.dismiss,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 12.dp)
+        )
     }
 }
 

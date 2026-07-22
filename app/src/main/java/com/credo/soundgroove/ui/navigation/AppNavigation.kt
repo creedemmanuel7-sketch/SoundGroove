@@ -22,6 +22,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.credo.soundgroove.ui.screens.CarModeScreen
 import com.credo.soundgroove.ui.screens.LyricsScreen
 import com.credo.soundgroove.ui.screens.LyricsWebSearchScreen
 import com.credo.soundgroove.ui.screens.PlayerScreen
@@ -46,12 +47,14 @@ import com.credo.soundgroove.ui.theme.LocalSgPerformanceMode
 import com.credo.soundgroove.ui.theme.LocalSharedTransitionScope
 import com.credo.soundgroove.ui.theme.SgMotion
 import com.credo.soundgroove.ui.theme.rememberSgReducedMotion
+import com.credo.soundgroove.util.PlaybackPreferences
 import com.credo.soundgroove.viewmodel.SoundGrooveViewModel
 
 object Routes {
     const val HOME = "home"
     const val SEARCH = "search"
     const val PLAYER = "player"
+    const val CAR_MODE = "car_mode"
     const val PLAYLIST_DETAIL = "playlist/{playlistId}"
     const val FOLDER_DETAIL = "folder/{folderPath}"
     const val ALBUM_DETAIL = "album/{albumName}"
@@ -77,7 +80,9 @@ fun AppNavigation(
     val isPlaying by viewModel.isPlaying.collectAsState()
     val playbackPosition by viewModel.playbackPosition.collectAsState()
     val favoriteSongs by viewModel.favoriteSongs.collectAsState()
+    val recentlyPlayed by viewModel.recentlyPlayed.collectAsState()
     val recentSearches by viewModel.recentSearches.collectAsState()
+    val songsWithLyrics by viewModel.songsWithLyrics.collectAsState()
     val controller by viewModel.mediaController.collectAsState()
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
     val playbackPitch by viewModel.playbackPitch.collectAsState()
@@ -85,6 +90,7 @@ fun AppNavigation(
     val crossfadeDurationMs by viewModel.crossfadeDurationMs.collectAsState()
     val sleepTimerRemainingSeconds by viewModel.sleepTimerRemainingSeconds.collectAsState()
     val vinylModeEnabled by viewModel.vinylModeEnabled.collectAsState()
+    val lyricsSyncOffsetMs by viewModel.lyricsSyncOffsetMs.collectAsState()
     val albumCoverAccentEnabled by viewModel.albumCoverAccentEnabled.collectAsState()
     val equalizerEnabled by viewModel.equalizerEnabled.collectAsState()
     val equalizerPreset by viewModel.equalizerPreset.collectAsState()
@@ -110,7 +116,9 @@ fun AppNavigation(
         isPlaying = isPlaying,
         playbackPosition = playbackPosition,
         favoriteSongs = favoriteSongs,
+        recentlyPlayed = recentlyPlayed,
         recentSearches = recentSearches,
+        songsWithLyrics = songsWithLyrics,
         controller = controller,
         playbackSpeed = playbackSpeed,
         playbackPitch = playbackPitch,
@@ -118,6 +126,7 @@ fun AppNavigation(
         crossfadeDurationMs = crossfadeDurationMs,
         sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
         vinylModeEnabled = vinylModeEnabled,
+        lyricsSyncOffsetMs = lyricsSyncOffsetMs,
         albumCoverAccentEnabled = albumCoverAccentEnabled,
         equalizerEnabled = equalizerEnabled,
         equalizerPreset = equalizerPreset,
@@ -145,7 +154,9 @@ private fun AppNavigationContent(
     isPlaying: Boolean,
     playbackPosition: Long,
     favoriteSongs: List<com.credo.soundgroove.data.model.Song>,
+    recentlyPlayed: List<com.credo.soundgroove.data.model.Song>,
     recentSearches: List<String>,
+    songsWithLyrics: List<com.credo.soundgroove.data.model.Song>,
     controller: androidx.media3.session.MediaController?,
     playbackSpeed: Float,
     playbackPitch: Float,
@@ -153,6 +164,7 @@ private fun AppNavigationContent(
     crossfadeDurationMs: Int,
     sleepTimerRemainingSeconds: Int?,
     vinylModeEnabled: Boolean,
+    lyricsSyncOffsetMs: Long,
     albumCoverAccentEnabled: Boolean,
     equalizerEnabled: Boolean,
     equalizerPreset: com.credo.soundgroove.util.EqualizerPreset,
@@ -201,7 +213,7 @@ private fun AppNavigationContent(
     // LyricsScreen) car c'est le seul endroit qui voit les deux écrans à la fois —
     // cf. Motion.kt / PlayerScreen.kt / LyricsScreen.kt pour le détail du contrat.
     val lyricsPeekProgress = remember { Animatable(0f) }
-    // Monté paresseusement (premier tap "Paroles" OU premier pixel de drag), pour ne
+    // Monté paresseusement (premier tap aperçu paroles / a11y OU premier pixel de drag), pour ne
     // jamais précharger/interroger le cache de paroles tant que l'utilisateur n'a
     // montré aucune intention — cf. contrainte "ne casse pas le cache paroles".
     var lyricsMounted by remember { mutableStateOf(false) }
@@ -209,6 +221,7 @@ private fun AppNavigationContent(
     // connaître le point d'arrivée exact même quand `reducedMotion` empêche le
     // rendu intermédiaire (peek visuel désactivé, mais le geste doit rester utilisable).
     var pendingLyricsDragFraction by remember { mutableStateOf(0f) }
+    var lyricsBackAnchor by remember { mutableFloatStateOf(1f) }
     val lyricsPeekCommitFraction = 0.38f
     var showLyricsWebSearch by remember { mutableStateOf(false) }
     var lyricsWebSearchDraft by remember { mutableStateOf<String?>(null) }
@@ -220,7 +233,7 @@ private fun AppNavigationContent(
     var showSleepTimerSheet by remember { mutableStateOf(false) }
     var showPlayerOptionsSheet by remember { mutableStateOf(false) }
 
-    // Ouverture "discrète" (tap sur le bouton Paroles, pas un drag) : anime jusqu'au
+    // Ouverture "discrète" (tap aperçu paroles / a11y, pas un drag) : anime jusqu'au
     // bout avec la même courbe que l'ancien SgMotion.lyricsEnter (conservé pour
     // compat), mais via le progrès partagé plutôt qu'un AnimatedVisibility séparé —
     // pas de différence perceptible, mais réutilise le même mécanisme que le drag.
@@ -272,6 +285,38 @@ private fun AppNavigationContent(
                 )
             }
             if (lyricsPeekProgress.value <= 0.001f) lyricsMounted = false
+        }
+    }
+
+    suspend fun applyLyricsPredictiveBack(rawProgress: Float) {
+        val p = rawProgress.coerceIn(0f, 1f)
+        if (p <= 0.01f) lyricsBackAnchor = lyricsPeekProgress.value.coerceAtLeast(0.001f)
+        lyricsPeekProgress.snapTo((lyricsBackAnchor * (1f - p)).coerceIn(0f, 1f))
+    }
+
+    suspend fun cancelLyricsPredictiveBack() {
+        if (reducedMotion) {
+            lyricsPeekProgress.snapTo(lyricsBackAnchor)
+        } else {
+            lyricsPeekProgress.animateTo(lyricsBackAnchor, animationSpec = SgMotion.SpringSnappy)
+        }
+    }
+
+    fun lyricsPredictiveBackProgress(): Float {
+        val anchor = lyricsBackAnchor.coerceAtLeast(0.001f)
+        return (1f - lyricsPeekProgress.value / anchor).coerceIn(0f, 1f)
+    }
+
+    suspend fun applyQueuePredictiveBack(rawProgress: Float) {
+        val p = rawProgress.coerceIn(0f, 1f)
+        queueBannerProgress.snapTo((1f - p).coerceIn(0f, 1f))
+    }
+
+    suspend fun cancelQueuePredictiveBack() {
+        if (reducedMotion) {
+            queueBannerProgress.snapTo(1f)
+        } else {
+            queueBannerProgress.animateTo(1f, animationSpec = SgMotion.SpringSnappy)
         }
     }
 
@@ -363,7 +408,17 @@ private fun AppNavigationContent(
                     onNavigateToPlayer = {
                         navController.navigate(Routes.PLAYER)
                     },
-                    onHomeMiniPlayerSuppressedChange = { homeMiniPlayerSuppressed = it }
+                    onNavigateToCarMode = {
+                        navController.navigate(Routes.CAR_MODE)
+                    },
+                    onHomeMiniPlayerSuppressedChange = { homeMiniPlayerSuppressed = it },
+                    onOpenSleepTimerSheet = { showSleepTimerSheet = true },
+                    onOpenPlaybackSpeedSheet = { showPlaybackSpeedSheet = true },
+                    onOpenCrossfadeSheet = { showCrossfadeSheet = true },
+                    onOpenEqualizerSheet = {
+                        viewModel.refreshEqualizerBands()
+                        showEqualizerSheet = true
+                    }
                 )
                 }
             }
@@ -398,10 +453,12 @@ private fun AppNavigationContent(
                 }
             ) {
                 CompositionLocalProvider(LocalSgAnimatedVisibilityScope provides this@composable) {
+                SgPredictivePopHost(onBack = { navController.popBackStack() }) {
                 com.credo.soundgroove.ui.screens.SearchScreen(
                     allSongs = songs,
                     playlists = playlists,
                     favoriteSongs = favoriteSongs,
+                    songsWithLyrics = songsWithLyrics,
                     currentSong = currentSong,
                     accentColor = accentColor,
                     recentSearches = recentSearches,
@@ -419,6 +476,35 @@ private fun AppNavigationContent(
                     onClearSearchHistory = { viewModel.clearSearchHistory() }
                 )
                 }
+                }
+            }
+
+            composable(
+                route = Routes.CAR_MODE,
+                enterTransition = {
+                    if (reducedMotion) SgMotion.navSnapEnter() else SgMotion.fadeEnter()
+                },
+                exitTransition = {
+                    if (reducedMotion) SgMotion.navSnapExit() else SgMotion.fadeExit()
+                },
+                popEnterTransition = {
+                    if (reducedMotion) SgMotion.navSnapEnter() else SgMotion.fadeEnter()
+                },
+                popExitTransition = {
+                    if (reducedMotion) SgMotion.navSnapExit() else SgMotion.fadeExit()
+                },
+            ) {
+                CarModeScreen(
+                    currentSong = currentSong,
+                    isPlaying = isPlaying,
+                    favoriteSongs = favoriteSongs,
+                    recentlyPlayed = recentlyPlayed,
+                    onPlayPause = { viewModel.togglePlayPause() },
+                    onSkipPrevious = { viewModel.skipPrevious() },
+                    onSkipNext = { viewModel.skipNext() },
+                    onPlaySong = { song, queue -> viewModel.playSongs(queue, song) },
+                    onExit = { navController.popBackStack() },
+                )
             }
 
             composable(
@@ -492,6 +578,7 @@ private fun AppNavigationContent(
                             playbackPitch = playbackPitch,
                             sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
                             vinylModeEnabled = vinylModeEnabled,
+                            lyricsSyncOffsetMs = lyricsSyncOffsetMs,
                             albumCoverAccentEnabled = albumCoverAccentEnabled,
                             queueOpen = showQueue || queueBannerProgress.value > 0.001f,
                         )
@@ -518,6 +605,7 @@ private fun AppNavigationContent(
                         navController.popBackStack()
                     }
                 } else {
+                    SgPredictivePopHost(onBack = { navController.popBackStack() }) {
                     PlaylistDetailScreen(
                         playlist = playlist,
                         librarySongs = songs,
@@ -557,6 +645,7 @@ private fun AppNavigationContent(
                         },
                         onSetCoverArt = { song, uri -> viewModel.saveSongCoverArt(song, uri) }
                     )
+                    }
                 }
             }
 
@@ -567,7 +656,8 @@ private fun AppNavigationContent(
                     (song.folderPath.takeIf { it.isNotBlank() } ?: "Dossier inconnu") == folderPath
                 }
 
-                Box(
+                SgPredictivePopHost(
+                    onBack = { navController.popBackStack() },
                     modifier = Modifier
                         .fillMaxSize()
                         .background(com.credo.soundgroove.ui.theme.GraphiteAbyss)
@@ -619,6 +709,7 @@ private fun AppNavigationContent(
                 val albumSongs = songs.filter { it.albumName == albumName }
 
                 CompositionLocalProvider(LocalSgAnimatedVisibilityScope provides this@composable) {
+                SgPredictivePopHost(onBack = { navController.popBackStack() }) {
                 AlbumDetailScreen(
                     albumName = albumName,
                     songs = albumSongs,
@@ -643,6 +734,7 @@ private fun AppNavigationContent(
                     onSetCoverArt = { song, uri -> viewModel.saveSongCoverArt(song, uri) }
                 )
                 }
+                }
             }
 
             composable(
@@ -665,6 +757,7 @@ private fun AppNavigationContent(
                 val artistSongs = songs.filter { it.artist == artistName }
 
                 CompositionLocalProvider(LocalSgAnimatedVisibilityScope provides this@composable) {
+                SgPredictivePopHost(onBack = { navController.popBackStack() }) {
                 ArtistDetailScreen(
                     artistName = artistName,
                     songs = artistSongs,
@@ -688,6 +781,7 @@ private fun AppNavigationContent(
                     },
                     onSetCoverArt = { song, uri -> viewModel.saveSongCoverArt(song, uri) }
                 )
+                }
                 }
             }
         }
@@ -734,6 +828,23 @@ private fun AppNavigationContent(
         // disparaîtraient net à la fermeture au lieu de suivre `queueBannerProgress`
         // jusqu'à 0 (cf. "ré-expanse avec animation légère").
         if ((showQueue || queueBannerProgress.value > 0.001f) && currentRoute == Routes.PLAYER) {
+            SgPredictiveBackHandler(
+                enabled = true,
+                reducedMotion = reducedMotion,
+                currentProgress = { (1f - queueBannerProgress.value).coerceIn(0f, 1f) },
+                onApplyProgress = { applyQueuePredictiveBack(it) },
+                onCancelProgress = { cancelQueuePredictiveBack() },
+                onBackCommitted = {
+                    if (it && queueBannerProgress.value <= (1f - lyricsPeekCommitFraction)) {
+                        scope.launch {
+                            queueBannerProgress.snapTo(0f)
+                            showQueue = false
+                        }
+                    } else {
+                        closeQueue()
+                    }
+                },
+            )
             val song = currentSong
             Box(modifier = Modifier.fillMaxSize()) {
                 // Bandeau Player réduit (~1/4 écran, cf. correction utilisateur) — remplace
@@ -794,10 +905,14 @@ private fun AppNavigationContent(
                     onPendingPasteConsumed = { lyricsWebSearchDraft = null },
                     isPlaying = isPlaying,
                     onPlayPause = { viewModel.togglePlayPause() },
+                    lyricsSyncOffsetMs = lyricsSyncOffsetMs,
                     peekProgress = lyricsPeekProgress.value,
                     onPeekDragStart = { onLyricsPeekDragStart() },
                     onPeekDrag = { delta -> onLyricsPeekDrag(delta) },
-                    onPeekDragEnd = { onLyricsPeekDragEnd() }
+                    onPeekDragEnd = { onLyricsPeekDragEnd() },
+                    onPredictiveBackApply = { applyLyricsPredictiveBack(it) },
+                    onPredictiveBackCancel = { cancelLyricsPredictiveBack() },
+                    predictiveBackProgress = { lyricsPredictiveBackProgress() },
                 )
             }
         }
@@ -855,7 +970,7 @@ private fun AppNavigationContent(
             }
         }
 
-        if (showPlaybackSpeedSheet && currentRoute == Routes.PLAYER) {
+        if (showPlaybackSpeedSheet) {
             PlaybackSpeedBottomSheet(
                 currentSpeed = playbackSpeed,
                 currentPitch = playbackPitch,
@@ -866,22 +981,35 @@ private fun AppNavigationContent(
             )
         }
 
-        if (showEqualizerSheet && currentRoute == Routes.PLAYER) {
+        if (showEqualizerSheet) {
+            val trackId = currentSong?.id ?: 0L
+            val trackPinned = trackId != 0L &&
+                PlaybackPreferences.getTrackEqualizerPreset(context, trackId) != null
             EqualizerBottomSheet(
                 enabled = equalizerEnabled,
                 preset = equalizerPreset,
                 bands = equalizerBands,
                 accentColor = accentColor,
                 onEnabledChange = { viewModel.setEqualizerEnabled(it) },
-                onPresetSelected = { viewModel.setEqualizerPreset(it) },
+                onPresetSelected = { viewModel.setEqualizerPreset(it, forCurrentTrack = false) },
                 onBandLevelChange = { band, level -> viewModel.setEqualizerBandLevel(band, level) },
-                onDismiss = { showEqualizerSheet = false }
+                onDismiss = { showEqualizerSheet = false },
+                hasCurrentTrack = trackId != 0L,
+                pinForCurrentTrack = trackPinned,
+                onPinForCurrentTrackChange = { pinned ->
+                    if (!pinned && trackId != 0L) {
+                        viewModel.clearTrackEqualizerPreset(trackId)
+                    }
+                },
+                onPresetSelectedForTrack = { preset ->
+                    viewModel.setEqualizerPreset(preset, forCurrentTrack = true)
+                }
             )
         }
 
         // Crossfade + minuterie de sommeil exposés directement depuis le Player
         // (req. 3) — jusqu'ici accessibles uniquement via Paramètres.
-        if (showCrossfadeSheet && currentRoute == Routes.PLAYER) {
+        if (showCrossfadeSheet) {
             CrossfadeBottomSheet(
                 currentMs = crossfadeDurationMs,
                 gaplessEnabled = gaplessEnabled,
@@ -891,7 +1019,7 @@ private fun AppNavigationContent(
             )
         }
 
-        if (showSleepTimerSheet && currentRoute == Routes.PLAYER) {
+        if (showSleepTimerSheet) {
             SleepTimerBottomSheet(
                 accentColor = accentColor,
                 onDismiss = { showSleepTimerSheet = false },
@@ -913,6 +1041,8 @@ private fun AppNavigationContent(
                     equalizerEnabled = equalizerEnabled,
                     equalizerPresetLabel = equalizerPreset.label,
                     vinylModeEnabled = vinylModeEnabled,
+                    lyricsSyncOffsetMs = lyricsSyncOffsetMs,
+                    onLyricsSyncOffsetChange = { viewModel.setLyricsSyncOffsetMs(it) },
                     onOpenCrossfade = { showCrossfadeSheet = true },
                     onOpenSleepTimer = { showSleepTimerSheet = true },
                     onOpenPlaybackSpeed = { showPlaybackSpeedSheet = true },

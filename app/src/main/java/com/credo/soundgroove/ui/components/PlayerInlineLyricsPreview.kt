@@ -7,27 +7,29 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -35,15 +37,14 @@ import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.lyrics.LyricsContent
 import com.credo.soundgroove.lyrics.LyricsViewModel
 import com.credo.soundgroove.ui.theme.SgMotion
-import com.credo.soundgroove.ui.theme.SgRadius
 import com.credo.soundgroove.ui.theme.SgSpacing
 import com.credo.soundgroove.ui.theme.TextSecondary
 import com.credo.soundgroove.ui.theme.rememberSgReducedMotion
 
 /**
  * Aperçu paroles style Spotify sur le lecteur : 2–3 lignes sync (précédente /
- * active / suivante). Tap → écran Paroles plein. Sans LRC sync : CTA discret
- * ou rien (pas de gros vide).
+ * active / suivante), texte léger sans carte. Tap → écran Paroles plein.
+ * Sans LRC sync : rien (swipe horizontal ou action d'accessibilité).
  */
 @Composable
 fun PlayerInlineLyricsPreview(
@@ -52,6 +53,7 @@ fun PlayerInlineLyricsPreview(
     accentColor: Color,
     onOpenLyrics: () -> Unit,
     modifier: Modifier = Modifier,
+    lyricsSyncOffsetMs: Long = LyricsViewModel.DEFAULT_SYNC_OFFSET_MS,
     lyricsViewModel: LyricsViewModel = viewModel()
 ) {
     val reducedMotion = rememberSgReducedMotion()
@@ -60,6 +62,9 @@ fun PlayerInlineLyricsPreview(
 
     LaunchedEffect(song.id) {
         lyricsViewModel.loadLyricsForSong(song)
+    }
+    LaunchedEffect(lyricsSyncOffsetMs) {
+        lyricsViewModel.setSyncOffsetMs(lyricsSyncOffsetMs)
     }
     LaunchedEffect(playbackPositionMs, content) {
         lyricsViewModel.updatePlaybackPosition(playbackPositionMs)
@@ -81,13 +86,18 @@ fun PlayerInlineLyricsPreview(
 
             Box(
                 modifier = modifier
-                    .padding(bottom = 12.dp)
                     .fillMaxWidth(0.92f)
-                    .clip(RoundedCornerShape(SgRadius.lg))
-                    .background(accentColor.copy(alpha = 0.12f))
-                    .border(1.dp, accentColor.copy(alpha = 0.28f), RoundedCornerShape(SgRadius.lg))
-                    .clickable(onClick = onOpenLyrics)
-                    .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm + 2.dp)
+                    .heightIn(max = 76.dp)
+                    .semantics {
+                        contentDescription =
+                            "Aperçu des paroles. Appuyer pour ouvrir l'écran Paroles."
+                    }
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onOpenLyrics
+                    )
+                    .padding(horizontal = SgSpacing.sm, vertical = SgSpacing.xs)
             ) {
                 AnimatedContent(
                     targetState = Triple(prev, active, next),
@@ -104,7 +114,7 @@ fun PlayerInlineLyricsPreview(
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         InlineLyricLine(
                             text = p.orEmpty(),
@@ -148,22 +158,24 @@ private fun InlineLyricLine(
         targetValue = when {
             placeholder -> Color.Transparent
             active -> accentColor
-            else -> TextSecondary.copy(alpha = 0.55f)
+            else -> TextSecondary.copy(alpha = 0.5f)
         },
         animationSpec = if (reducedMotion) snap() else SgMotion.tweenMediumOf(),
         label = "inlineLyricColor"
     )
     val scale by animateFloatAsState(
-        targetValue = if (active && !reducedMotion && !placeholder) 1.04f else 1f,
+        targetValue = if (active && !reducedMotion && !placeholder) 1.03f else 1f,
         animationSpec = if (reducedMotion) snap() else SgMotion.SpringSoft,
         label = "inlineLyricScale"
     )
     Text(
         text = if (placeholder) " " else text,
         color = color,
-        fontSize = if (active) 15.sp else 13.sp,
+        fontSize = if (active) 15.sp else 12.sp,
         fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
         textAlign = TextAlign.Center,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer {

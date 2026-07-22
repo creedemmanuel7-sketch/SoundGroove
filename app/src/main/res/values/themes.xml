@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <style name="Theme.SoundGroove" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Fond sombre dès le cold start — évite le flash blanc Material.Light. -->
+    <style name="Theme.SoundGroove" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+        <item name="android:statusBarColor">@color/brand_black</item>
+        <item name="android:navigationBarColor">@color/brand_black</item>
+        <item name="android:colorPrimary">@color/brand_purple</item>
+        <item name="android:colorPrimaryDark">@color/brand_black</item>
+        <item name="android:colorAccent">@color/brand_purple</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
 </resources>

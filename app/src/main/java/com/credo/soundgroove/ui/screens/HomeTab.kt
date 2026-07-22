@@ -102,15 +102,6 @@ fun HomeTab(
     secondaryAccent: Color = themeSecondaryAccent(accentColor),
     homeViewModel: HomeViewModel = viewModel()
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    val filteredSongs = remember(searchQuery, songs) {
-        if (searchQuery.isEmpty()) songs
-        else songs.filter { song ->
-            song.title.contains(searchQuery, ignoreCase = true) ||
-                song.artist.contains(searchQuery, ignoreCase = true)
-        }
-    }
-
     val foldersCount = remember(songs) {
         songs
             .map { song -> song.folderPath.takeIf { it.isNotBlank() } ?: "Dossier inconnu" }
@@ -162,14 +153,14 @@ fun HomeTab(
                 Column {
                     Text(
                         text = greeting,
-                        style = MaterialTheme.typography.displaySmall,
+                        style = MaterialTheme.typography.headlineLarge,
                         color = TextPrimary,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = "Prêt à écouter ?",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiary
                     )
                 }
                 SgIconButton(onClick = onOpenSettings) {
@@ -199,53 +190,35 @@ fun HomeTab(
 
         item {
             GlassCard(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onNavigateToSearch),
                 cornerRadius = SgRadius.md,
                 accentColor = accentColor
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = SgSpacing.md, vertical = 2.dp),
+                        .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm + 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_search),
                         contentDescription = null,
-                        tint = TextSecondary,
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clickable { onNavigateToSearch() }
+                        tint = TextTertiary,
+                        modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(SgSpacing.sm + 2.dp))
-                    TextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = {
-                            Text(
-                                text = "Rechercher une chanson...",
-                                color = TextSecondary,
-                                fontSize = 14.sp
-                            )
-                        },
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            cursorColor = accentColor
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                    Text(
+                        text = "Rechercher titres, albums, dossiers…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextTertiary
                     )
                 }
             }
         }
 
-        if (searchQuery.isEmpty()) {
-            homeState.continueListening?.let { session ->
+        homeState.continueListening?.let { session ->
                 item {
                     ContinueListeningSection(
                         session = session,
@@ -292,7 +265,7 @@ fun HomeTab(
             if (homeState.similarSongs.isNotEmpty()) {
                 item {
                     DiscoverySectionHeader(
-                        title = "SIMILAIRES",
+                        title = "Similaires",
                         subtitle = "Même artiste ou album",
                         actionLabel = "Tout lire",
                         accentColor = accentColor,
@@ -315,7 +288,7 @@ fun HomeTab(
             if (homeState.localRadio.isNotEmpty()) {
                 item {
                     DiscoverySectionHeader(
-                        title = "RADIO LOCALE",
+                        title = "Radio locale",
                         subtitle = "File aléatoire · ${tracksCountLabel(homeState.localRadio.size)}",
                         actionLabel = "Lancer",
                         accentColor = accentColor,
@@ -337,7 +310,7 @@ fun HomeTab(
 
             if (homeState.newAdditions.isNotEmpty()) {
                 item {
-                    SectionHeader(title = "NOUVEAUX AJOUTS")
+                    SectionHeader(title = "Nouveaux ajouts")
                 }
                 items(homeState.newAdditions, key = { "new-${it.id}" }) { song ->
                     SongItem(
@@ -364,10 +337,10 @@ fun HomeTab(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        SectionHeader(title = "RÉCEMMENT ÉCOUTÉS", modifier = Modifier.weight(1f))
+                        SectionHeader(title = "Récemment écoutés", modifier = Modifier.weight(1f))
                         Text(
                             text = "Voir tout",
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.labelMedium,
                             color = accentColor,
                             modifier = Modifier.clickable { onSeeAllRecent() }
                         )
@@ -395,27 +368,6 @@ fun HomeTab(
                     }
                 }
             }
-        } else {
-            item {
-                SectionHeader(title = "${filteredSongs.size} RÉSULTAT(S)")
-            }
-            items(filteredSongs, key = { it.id }) { song ->
-                SongItem(
-                    song = song,
-                    isPlaying = currentSong?.id == song.id && isPlaying,
-                    onClick = { onPlaySong(song, filteredSongs) },
-                    showMenu = true,
-                    isFavorite = favoriteSongs.any { it.id == song.id },
-                    accentColor = accentColor,
-                    onToggleFavorite = { onToggleFavorite(song) },
-                    onShowInfo = { onShowSongInfo(song) },
-                    onShowPlaylistPicker = { onShowPlaylistPicker(song) },
-                    onPlayNow = { onPlaySong(song, filteredSongs) },
-                    onPlayNext = { onPlayNext(song) },
-                    onAddToQueue = { onAddToQueue(song) }
-                )
-            }
-        }
 
         item { Spacer(modifier = Modifier.height(SgSpacing.lg)) }
     }
@@ -425,11 +377,9 @@ fun HomeTab(
 private fun SectionHeader(title: String, modifier: Modifier = Modifier) {
     Text(
         text = title,
-        color = TextSecondary,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 2.sp,
-        modifier = modifier
+        style = MaterialTheme.typography.labelMedium,
+        color = TextTertiary,
+        modifier = modifier.padding(bottom = 2.dp)
     )
 }
 
@@ -442,7 +392,7 @@ private fun ContinueListeningSection(
     onResumeListening: () -> Unit
 ) {
     Column {
-        SectionHeader(title = "CONTINUER L'ÉCOUTE")
+        SectionHeader(title = "Continuer l'écoute")
         Spacer(modifier = Modifier.height(SgSpacing.sm))
         GlassCard(
             modifier = Modifier.fillMaxWidth(),
@@ -586,7 +536,7 @@ private fun QuickAccessSection(
     onNavigateToLibrarySection: (Int) -> Unit
 ) {
     Column {
-        SectionHeader(title = "ACCÈS RAPIDE")
+        SectionHeader(title = "Accès rapide")
         Spacer(modifier = Modifier.height(SgSpacing.sm))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -690,7 +640,7 @@ private fun DiscoverySectionHeader(
         }
         Text(
             text = actionLabel,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelMedium,
             color = accentColor,
             modifier = Modifier.clickable(onClick = onAction)
         )
@@ -707,7 +657,7 @@ private fun DailyMixHero(
     val featured = songs.first()
     val preview = songs.take(3)
     Column {
-        SectionHeader(title = "MIX DU JOUR")
+        SectionHeader(title = "Mix du jour")
         Spacer(modifier = Modifier.height(SgSpacing.sm))
         GlassCard(
             modifier = Modifier

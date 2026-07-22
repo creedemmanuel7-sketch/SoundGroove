@@ -81,6 +81,18 @@
                 android:padding="8dp"
                 android:src="@drawable/ic_next"
                 android:tint="#FFFFFF" />
+
+            <ImageView
+                android:id="@+id/widget_shuffle"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/widget_shuffle"
+                android:padding="6dp"
+                android:src="@drawable/ic_shuffle"
+                android:tint="#B3FFFFFF"
+                android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

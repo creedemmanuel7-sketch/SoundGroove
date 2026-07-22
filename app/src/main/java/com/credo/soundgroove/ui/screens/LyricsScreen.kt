@@ -1,7 +1,10 @@
 package com.credo.soundgroove.ui.screens
 
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
+import com.credo.soundgroove.ui.components.GestureHintBanner
+import com.credo.soundgroove.ui.components.rememberGestureHintState
+import com.credo.soundgroove.ui.navigation.SgPredictiveBackHandler
+import com.credo.soundgroove.util.GestureHintIds
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
@@ -137,6 +140,11 @@ fun LyricsScreen(
     onPeekDragStart: () -> Unit = {},
     onPeekDrag: (Float) -> Unit = {},
     onPeekDragEnd: () -> Unit = {},
+    onPredictiveBackApply: suspend (Float) -> Unit = {},
+    onPredictiveBackCancel: suspend () -> Unit = {},
+    predictiveBackProgress: () -> Float = { 0f },
+    /** Décalage sync LRC global (ms), synchronisé depuis Options ou Paramètres. */
+    lyricsSyncOffsetMs: Long = LyricsViewModel.DEFAULT_SYNC_OFFSET_MS,
     viewModel: LyricsViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -150,7 +158,22 @@ fun LyricsScreen(
     // progrès de peek : désactivé quand l'écran n'est pas au premier plan (progrès à
     // 0, potentiellement encore monté juste après un dismiss) pour ne pas voler le
     // back destiné au Player en dessous.
-    BackHandler(enabled = peekProgress > 0.001f, onBack = onClose)
+    val lyricsBackHint = rememberGestureHintState(GestureHintIds.LYRICS_BACK)
+    val reducedMotion = rememberSgReducedMotion()
+    val lyricsPredictiveEnabled = peekProgress > 0.001f
+
+    SgPredictiveBackHandler(
+        enabled = lyricsPredictiveEnabled,
+        reducedMotion = reducedMotion,
+        currentProgress = predictiveBackProgress,
+        onApplyProgress = onPredictiveBackApply,
+        onCancelProgress = onPredictiveBackCancel,
+        onBackCommitted = { fromDrag ->
+            if (!fromDrag || predictiveBackProgress() >= 0.38f) {
+                onClose()
+            }
+        },
+    )
 
     LaunchedEffect(pendingPasteText) {
         pendingPasteText?.let { text ->
@@ -161,6 +184,10 @@ fun LyricsScreen(
 
     LaunchedEffect(song.id) {
         viewModel.loadLyricsForSong(song)
+    }
+
+    LaunchedEffect(lyricsSyncOffsetMs) {
+        viewModel.setSyncOffsetMs(lyricsSyncOffsetMs)
     }
 
     LaunchedEffect(playbackPosition) {
@@ -228,7 +255,6 @@ fun LyricsScreen(
             }
     ) {
         // Fond immersif : pochette floutée + gradient. Mode perf : Palette plate, blur=0.
-        val reducedMotion = rememberSgReducedMotion()
         val coilCrossfadeMs = sgCoilCrossfadeMs(SgMotion.FastMs)
         if (!reducedMotion && song.albumArtUri != null) {
             AsyncImage(
@@ -385,7 +411,6 @@ fun LyricsScreen(
             // Barre compacte façon Spotify : pochette discrète + play/pause central,
             // sans prev/next (réservés au Player et au mini-player).
             LyricsPlaybackBar(
-                song = song,
                 isPlaying = isPlaying,
                 progress = (playbackPosition.toFloat() / (song.duration.takeIf { it > 0L } ?: 1L).toFloat())
                     .coerceIn(0f, 1f),
@@ -394,8 +419,20 @@ fun LyricsScreen(
                 onPlayPause = onPlayPause,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .height(56.dp)
                     .navigationBarsPadding()
-                    .padding(bottom = 8.dp)
+                    .padding(bottom = 4.dp)
+            )
+        }
+
+        if (peekProgress > 0.5f) {
+            GestureHintBanner(
+                text = "Glisser vers le bas ou la droite pour revenir au lecteur",
+                visible = lyricsBackHint.visible,
+                onDismiss = lyricsBackHint.dismiss,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 72.dp)
             )
         }
     }
@@ -491,13 +528,12 @@ private fun LyricsManageActions(
 }
 
 /**
- * Barre compacte de lecture en bas de l'écran Paroles (style Spotify) —
- * pochette discrète, play/pause central, fine barre de progression en tête.
- * Prev/next restent sur [PlayerScreen] et le mini-player.
+ * Barre ultra-minimale en bas de l'écran Paroles (style Spotify) —
+ * progress 1dp en tête + play/pause flottant centré. Prev/next restent sur
+ * [PlayerScreen] et le mini-player.
  */
 @Composable
 private fun LyricsPlaybackBar(
-    song: Song,
     isPlaying: Boolean,
     progress: Float,
     palette: LyricsPalette,
@@ -510,74 +546,42 @@ private fun LyricsPlaybackBar(
         animationSpec = SgMotion.tweenProgress(),
         label = "lyricsBarProgress"
     )
-    val coilCrossfadeMs = sgCoilCrossfadeMs(SgMotion.FastMs)
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(SgRadius.xl))
-            .background(palette.glassSurface)
-            .border(1.dp, palette.glassBorder, RoundedCornerShape(SgRadius.xl))
-    ) {
-        Column {
+    val progressFraction = animatedProgress.coerceIn(0f, 1f)
+    Box(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(palette.glassBorder.copy(alpha = 0.35f))
+        ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(animatedProgress.coerceIn(0.02f, 1f))
-                    .height(2.dp)
-                    .background(
-                        Brush.horizontalGradient(listOf(accentColor, accentColor.copy(alpha = 0.4f))),
-                        RoundedCornerShape(topStart = SgRadius.xl, topEnd = SgRadius.xl)
-                    )
+                    .fillMaxWidth(progressFraction.coerceAtLeast(0.005f))
+                    .fillMaxSize()
+                    .background(accentColor.copy(alpha = 0.92f))
             )
-            Row(
+        }
+        SgTapTarget(
+            onClick = onPlayPause,
+            minSize = 48.dp,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(top = 10.dp)
+        ) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(accentColor),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(SgRadius.sm))
-                        .background(palette.surfaceElevated.copy(alpha = 0.65f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (song.albumArtUri != null) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(song.albumArtUri)
-                                .crossfade(coilCrossfadeMs)
-                                .build(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_songs),
-                            contentDescription = null,
-                            tint = palette.secondaryText,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                SgTapTarget(onClick = onPlayPause, minSize = 44.dp) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(accentColor),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
-                            contentDescription = if (isPlaying) "Pause" else "Lecture",
-                            tint = Color.Black,
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                Spacer(modifier = Modifier.width(32.dp))
+                Icon(
+                    painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
+                    contentDescription = if (isPlaying) "Pause" else "Lecture",
+                    tint = Color.Black,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }

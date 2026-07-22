@@ -11,11 +11,28 @@ import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
+data class PlaybackSettingsBackup(
+    val gaplessEnabled: Boolean = true,
+    val crossfadeMs: Int = 0,
+    val playbackSpeed: Float = 1f,
+    val playbackPitch: Float = 1f,
+    val equalizerEnabled: Boolean = true,
+    val equalizerPreset: String = "NORMAL",
+    val equalizerBandLevels: List<Short> = emptyList(),
+    val hiddenFolders: Set<String> = emptySet(),
+    val libraryFolderUris: Set<String> = emptySet(),
+    val trackEqPresets: Map<Long, String> = emptyMap(),
+    val performanceModeEnabled: Boolean = false,
+    val smartNotificationsEnabled: Boolean = true,
+    val vinylModeEnabled: Boolean = false,
+)
+
 data class BackupSnapshot(
     val theme: AppTheme?,
     val accent: AppAccent? = null,
     val favorites: List<Song>,
-    val playlists: List<Playlist>
+    val playlists: List<Playlist>,
+    val playbackSettings: PlaybackSettingsBackup? = null,
 )
 
 class BackupManager(private val context: Context) {
@@ -48,6 +65,10 @@ class BackupManager(private val context: Context) {
             playlistsArray.put(playlistObj)
         }
         root.put("playlists", playlistsArray)
+
+        snapshot.playbackSettings?.let { settings ->
+            root.put("settings", playbackSettingsToJson(settings))
+        }
 
         return root.toString(2)
     }
@@ -105,7 +126,15 @@ class BackupManager(private val context: Context) {
             }
         } ?: emptyList()
 
-        return BackupSnapshot(theme = theme, accent = accent, favorites = favorites, playlists = playlists)
+        val playbackSettings = root.optJSONObject("settings")?.let { parsePlaybackSettings(it) }
+
+        return BackupSnapshot(
+            theme = theme,
+            accent = accent,
+            favorites = favorites,
+            playlists = playlists,
+            playbackSettings = playbackSettings,
+        )
     }
 
     fun writeToUri(uri: Uri, content: String) {
@@ -131,6 +160,63 @@ class BackupManager(private val context: Context) {
             }
             return builder.toString()
         } ?: throw IllegalStateException("Impossible de lire le fichier de sauvegarde.")
+    }
+
+    private fun playbackSettingsToJson(settings: PlaybackSettingsBackup): JSONObject {
+        val obj = JSONObject()
+        obj.put("gaplessEnabled", settings.gaplessEnabled)
+        obj.put("crossfadeMs", settings.crossfadeMs)
+        obj.put("playbackSpeed", settings.playbackSpeed.toDouble())
+        obj.put("playbackPitch", settings.playbackPitch.toDouble())
+        obj.put("equalizerEnabled", settings.equalizerEnabled)
+        obj.put("equalizerPreset", settings.equalizerPreset)
+        obj.put("equalizerBandLevels", settings.equalizerBandLevels.joinToString(","))
+        obj.put("hiddenFolders", JSONArray(settings.hiddenFolders.toList()))
+        obj.put("libraryFolderUris", JSONArray(settings.libraryFolderUris.toList()))
+        val trackEq = JSONObject()
+        settings.trackEqPresets.forEach { (id, preset) -> trackEq.put(id.toString(), preset) }
+        obj.put("trackEqPresets", trackEq)
+        obj.put("performanceModeEnabled", settings.performanceModeEnabled)
+        obj.put("smartNotificationsEnabled", settings.smartNotificationsEnabled)
+        obj.put("vinylModeEnabled", settings.vinylModeEnabled)
+        return obj
+    }
+
+    private fun parsePlaybackSettings(obj: JSONObject): PlaybackSettingsBackup {
+        val hidden = mutableSetOf<String>()
+        obj.optJSONArray("hiddenFolders")?.let { arr ->
+            for (i in 0 until arr.length()) hidden.add(arr.optString(i, ""))
+        }
+        val folders = mutableSetOf<String>()
+        obj.optJSONArray("libraryFolderUris")?.let { arr ->
+            for (i in 0 until arr.length()) folders.add(arr.optString(i, ""))
+        }
+        val trackEq = mutableMapOf<Long, String>()
+        obj.optJSONObject("trackEqPresets")?.let { map ->
+            map.keys().forEach { key ->
+                key.toLongOrNull()?.let { id ->
+                    trackEq[id] = map.optString(key, "")
+                }
+            }
+        }
+        val bandLevels = obj.optString("equalizerBandLevels", "")
+            .split(",")
+            .mapNotNull { it.trim().toShortOrNull() }
+        return PlaybackSettingsBackup(
+            gaplessEnabled = obj.optBoolean("gaplessEnabled", true),
+            crossfadeMs = obj.optInt("crossfadeMs", 0),
+            playbackSpeed = obj.optDouble("playbackSpeed", 1.0).toFloat(),
+            playbackPitch = obj.optDouble("playbackPitch", 1.0).toFloat(),
+            equalizerEnabled = obj.optBoolean("equalizerEnabled", true),
+            equalizerPreset = obj.optString("equalizerPreset", "NORMAL"),
+            equalizerBandLevels = bandLevels,
+            hiddenFolders = hidden.filter { it.isNotBlank() }.toSet(),
+            libraryFolderUris = folders.filter { it.isNotBlank() }.toSet(),
+            trackEqPresets = trackEq,
+            performanceModeEnabled = obj.optBoolean("performanceModeEnabled", false),
+            smartNotificationsEnabled = obj.optBoolean("smartNotificationsEnabled", true),
+            vinylModeEnabled = obj.optBoolean("vinylModeEnabled", false),
+        )
     }
 
     private fun songToJson(song: Song): JSONObject {
@@ -177,7 +263,7 @@ class BackupManager(private val context: Context) {
     }
 
     companion object {
-        const val BACKUP_VERSION = 1
+        const val BACKUP_VERSION = 2
         const val BACKUP_MIME = "application/json"
         const val BACKUP_FILENAME = "soundgroove_backup.json"
 

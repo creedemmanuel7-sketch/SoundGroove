@@ -25,13 +25,16 @@ object MiniPlayerVisibility {
     ): Boolean {
         if (!persistentEnabled || !hasCurrentSong) return false
         if (currentRoute == Routes.PLAYER) return false
+        if (currentRoute == Routes.CAR_MODE) return false
         if (currentRoute == Routes.HOME && homeSuppressed) return false
         return true
     }
 
     /** Décalage bas pour aligner le mini au-dessus du bottom nav sur [Routes.HOME]. */
     fun bottomPadding(currentRoute: String?): Dp = when (currentRoute) {
-        Routes.HOME -> SgSpacing.navHeight + SgSpacing.xs * 2
+        Routes.HOME -> SgSpacing.navHeight + SgSpacing.sm
+        Routes.SEARCH -> 12.dp
+        Routes.CAR_MODE -> 0.dp
         else -> 8.dp
     }
 }

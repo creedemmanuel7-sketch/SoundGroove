@@ -79,11 +79,23 @@ fun SettingsScreen(
     onPersistentMiniPlayerChange: (Boolean) -> Unit = {},
     performanceModeEnabled: Boolean = false,
     onPerformanceModeChange: (Boolean) -> Unit = {},
+    onOpenCarMode: () -> Unit = {},
+    remoteHostEnabled: Boolean = false,
+    remotePin: String? = null,
+    remoteLanIp: String? = null,
+    remotePort: Int = 3847,
+    remoteClientCount: Int = 0,
+    remoteHostError: String? = null,
+    onRemoteHostChange: (Boolean) -> Unit = {},
+    onRegenerateRemotePin: () -> Unit = {},
     onReloadMusic: () -> Unit = {},
     onClearRecentlyPlayed: () -> Unit = {},
     onExportBackup: () -> Unit = {},
     onImportBackup: () -> Unit = {},
-    onClearSearchHistory: () -> Unit = {}
+    onClearSearchHistory: () -> Unit = {},
+    libraryFolderCount: Int = 0,
+    onAddLibraryFolder: () -> Unit = {},
+    scrobbleTotal: Int = 0,
 ) {
     val revealState = rememberSgThemeRevealState()
     val scope = rememberCoroutineScope()
@@ -93,11 +105,14 @@ fun SettingsScreen(
     var showImportConfirm by remember { mutableStateOf(false) }
     var showClearCacheConfirm by remember { mutableStateOf(false) }
     var cacheSizeLabel by remember { mutableStateOf<String?>(null) }
+    var appDataSizeLabel by remember { mutableStateOf<String?>(null) }
 
     suspend fun refreshCacheSize() {
-        cacheSizeLabel = withContext(Dispatchers.IO) {
-            StorageMaintenance.formatBytes(StorageMaintenance.computeBreakdown(context).clearableBytes)
+        val breakdown = withContext(Dispatchers.IO) {
+            StorageMaintenance.computeBreakdown(context)
         }
+        cacheSizeLabel = StorageMaintenance.formatBytes(breakdown.clearableBytes)
+        appDataSizeLabel = StorageMaintenance.formatBytes(breakdown.totalAppDataBytes)
     }
 
     LaunchedEffect(Unit) { refreshCacheSize() }
@@ -395,6 +410,42 @@ fun SettingsScreen(
                     accentColor = accentColor,
                     onCheckedChange = onPerformanceModeChange
                 )
+                Spacer(modifier = Modifier.height(12.dp))
+                SettingsVectorActionRow(
+                    icon = Icons.Filled.DirectionsCar,
+                    title = "Mode voiture",
+                    description = "Plein écran, gros boutons, listes courtes, sombre forcé",
+                    accentColor = accentColor,
+                    onClick = onOpenCarMode
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                SettingsToggleRow(
+                    icon = Icons.Filled.Computer,
+                    title = "Remote PC",
+                    description = "Exposer le lecteur sur le LAN (WebSocket port $remotePort)",
+                    checked = remoteHostEnabled,
+                    accentColor = accentColor,
+                    onCheckedChange = onRemoteHostChange
+                )
+                if (remoteHostEnabled) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    RemoteHostInfoCard(
+                        pin = remotePin,
+                        lanIp = remoteLanIp,
+                        port = remotePort,
+                        clientCount = remoteClientCount,
+                        error = remoteHostError,
+                        accentColor = accentColor,
+                        onRegeneratePin = onRegenerateRemotePin,
+                    )
+                } else if (remoteHostError != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = remoteHostError,
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -420,6 +471,18 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             SettingsSection(title = "Bibliothèque") {
+                SettingsActionRow(
+                    iconRes = R.drawable.ic_folder,
+                    title = "Ajouter un dossier",
+                    description = if (libraryFolderCount > 0) {
+                        "$libraryFolderCount dossier(s) SAF en plus du MediaStore"
+                    } else {
+                        "Inclure un dossier via l'accès aux fichiers"
+                    },
+                    accentColor = accentColor,
+                    onClick = onAddLibraryFolder
+                )
+                Spacer(modifier = Modifier.height(12.dp))
                 SettingsActionRow(
                     iconRes = R.drawable.ic_songs,
                     title = "Rescanner la bibliothèque",
@@ -463,6 +526,15 @@ fun SettingsScreen(
                     fontSize = 11.sp,
                     lineHeight = 15.sp
                 )
+                appDataSizeLabel?.let { totalLabel ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Données app (cache + base + réglages) · $totalLabel",
+                        color = TextTertiary,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -482,7 +554,11 @@ fun SettingsScreen(
                     StatRowIcon(R.drawable.ic_play, "Ce mois", monthLabel)
                     Spacer(modifier = Modifier.height(10.dp))
                 }
-                StatRowIcon(R.drawable.ic_play, "Total d'écoute", listeningTimeLabel)
+                StatRowIcon(R.drawable.ic_play, "Depuis le début", listeningTimeLabel)
+                if (scrobbleTotal > 0) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    StatRowIcon(R.drawable.ic_repeat, "Scrobbles locaux", "$scrobbleTotal")
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -652,6 +728,53 @@ fun SettingsScreen(
 }
 
 @Composable
+private fun RemoteHostInfoCard(
+    pin: String?,
+    lanIp: String?,
+    port: Int,
+    clientCount: Int,
+    error: String?,
+    accentColor: Color,
+    onRegeneratePin: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(SurfaceElevated)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "PIN · ${pin ?: "······"}",
+            color = TextPrimary,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = "IP · ${lanIp ?: "non détectée"}  ·  port $port",
+            color = TextSecondary,
+            fontSize = 13.sp,
+        )
+        Text(
+            text = if (clientCount > 0) "PC connecté ($clientCount)" else "En attente du PC…",
+            color = if (clientCount > 0) accentColor else TextSecondary,
+            fontSize = 12.sp,
+        )
+        if (error != null) {
+            Text(text = error, color = TextSecondary, fontSize = 12.sp)
+        }
+        Text(
+            text = "Nouveau PIN",
+            color = accentColor,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.clickable { onRegeneratePin() },
+        )
+    }
+}
+
+@Composable
 private fun SettingsSection(
     title: String,
     content: @Composable ColumnScope.() -> Unit
@@ -760,6 +883,49 @@ private fun SettingsToggleRow(
             checked = checked,
             onCheckedChange = onCheckedChange,
             accentColor = accentColor
+        )
+    }
+}
+
+@Composable
+private fun SettingsVectorActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    description: String,
+    @Suppress("UNUSED_PARAMETER") accentColor: Color,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onClick() }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(SurfaceElevated, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = TextSecondary,
+                modifier = Modifier.size(SgSpacing.iconSize),
+            )
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(description, color = TextSecondary, fontSize = 12.sp)
+        }
+        Icon(
+            imageVector = Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = TextSecondary,
+            modifier = Modifier.size(20.dp),
         )
     }
 }
