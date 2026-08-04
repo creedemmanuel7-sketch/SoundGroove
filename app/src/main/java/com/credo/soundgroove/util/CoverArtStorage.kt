@@ -38,21 +38,26 @@ object CoverArtStorage {
     private fun coverFile(context: Context, songId: Long): File =
         File(File(context.filesDir, COVER_DIR), "$songId.jpg")
 
-    suspend fun saveFromUri(context: Context, songId: Long, sourceUri: Uri): Uri =
+    /**
+     * @return URI locale de la pochette, ou `null` si l'image est illisible
+     * (ne lance plus d'exception fatale — évite un crash process).
+     */
+    suspend fun saveFromUri(context: Context, songId: Long, sourceUri: Uri): Uri? =
         withContext(Dispatchers.IO) {
-            val dir = File(context.filesDir, COVER_DIR).apply { mkdirs() }
-            val dest = File(dir, "$songId.jpg")
+            runCatching {
+                val dir = File(context.filesDir, COVER_DIR).apply { mkdirs() }
+                val dest = File(dir, "$songId.jpg")
 
-            val bitmap = decodeDownscaled(context, sourceUri)
-                ?: error("Impossible de lire l'image sélectionnée")
-            try {
-                FileOutputStream(dest).use { output ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, output)
+                val bitmap = decodeDownscaled(context, sourceUri) ?: return@runCatching null
+                try {
+                    FileOutputStream(dest).use { output ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, output)
+                    }
+                } finally {
+                    bitmap.recycle()
                 }
-            } finally {
-                bitmap.recycle()
-            }
-            Uri.fromFile(dest)
+                Uri.fromFile(dest)
+            }.getOrNull()
         }
 
     /** Décode l'image en la sous-échantillonnant directement pour éviter tout pic mémoire. */

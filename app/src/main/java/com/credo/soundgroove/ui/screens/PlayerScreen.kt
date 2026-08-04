@@ -39,6 +39,8 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -1116,6 +1118,31 @@ fun PlayerScreen(
         }
 
         if (idleChromeHidden.value > 0.01f) {
+            // Bouton explicite pour réafficher le chrome (demande utilisateur).
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 8.dp)
+                    .graphicsLayer { alpha = idleChromeHidden.value.coerceIn(0f, 1f) }
+            ) {
+                SgTapTarget(onClick = { bumpIdleTimer() }, minSize = 48.dp) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(GlassSurface.copy(alpha = 0.55f), CircleShape)
+                            .border(1.dp, GlassBorder.copy(alpha = 0.4f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowUp,
+                            contentDescription = "Afficher les contrôles",
+                            tint = TextPrimary.copy(alpha = 0.9f),
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                }
+            }
             PlayerImmersiveMiniControls(
                 progress = if (isSeeking) seekPosition else progress.coerceIn(0f, 1f),
                 isPlaying = isPlaying,
@@ -1137,6 +1164,7 @@ fun PlayerScreen(
                     isSeeking = false
                     bumpIdleTimer()
                 },
+                onShowChrome = { bumpIdleTimer() },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
@@ -1172,6 +1200,7 @@ private fun PlayerImmersiveMiniControls(
     onPlayPause: () -> Unit,
     onSeek: (Float) -> Unit,
     onSeekFinished: () -> Unit,
+    onShowChrome: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val animatedProgress by animateFloatAsState(
@@ -1183,10 +1212,24 @@ private fun PlayerImmersiveMiniControls(
         modifier = modifier
             .graphicsLayer { alpha = visibility.coerceIn(0f, 1f) }
             .semantics {
-                contentDescription = "Contrôles de lecture. Appuyer ailleurs pour afficher tous les contrôles."
+                contentDescription =
+                    "Contrôles de lecture. Utiliser le bouton en haut pour afficher tous les contrôles."
             },
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        TextButton(
+            onClick = onShowChrome,
+            colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowUp,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Contrôles", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        }
+        Spacer(modifier = Modifier.height(4.dp))
         SgTapTarget(onClick = onPlayPause, minSize = 52.dp) {
             Box(
                 modifier = Modifier

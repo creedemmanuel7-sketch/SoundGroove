@@ -1406,6 +1406,7 @@ fun PlayerOptionsBottomSheet(
     onShareCard: () -> Unit,
     onEditMetadata: () -> Unit,
     onSetRingtone: () -> Unit,
+    onOpenLyrics: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val reducedMotion = rememberSgReducedMotion()
@@ -1598,6 +1599,7 @@ fun PlayerOptionsBottomSheet(
             Text("Actions", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(8.dp))
             val actionRows = listOf(
+                Triple(Icons.Filled.Lyrics, "Paroles", onOpenLyrics),
                 Triple(Icons.Filled.Share, "Partager", onShare),
                 Triple(Icons.Filled.Image, "Partager la carte", onShareCard),
                 Triple(Icons.Filled.Info, "Informations", onShowInfo),

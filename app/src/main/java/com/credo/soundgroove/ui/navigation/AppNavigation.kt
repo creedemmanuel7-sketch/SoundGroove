@@ -1062,6 +1062,7 @@ private fun AppNavigationContent(
                     },
                     onEditMetadata = { showEditMetadata = true },
                     onSetRingtone = { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, song) },
+                    onOpenLyrics = { openLyricsDiscrete() },
                     onDismiss = { showPlayerOptionsSheet = false }
                 )
             }

@@ -62,6 +62,7 @@ import com.credo.soundgroove.util.EqualizerPreset
 import com.credo.soundgroove.util.MetadataEditor
 import com.credo.soundgroove.util.LyricsPreferences
 import com.credo.soundgroove.util.PlaybackPreferences
+import com.credo.soundgroove.util.PlaybackSessionStore
 import com.credo.soundgroove.util.PlayerGuards
 import androidx.room.withTransaction
 
@@ -246,7 +247,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     val remotePort: Int get() = RemoteProtocol.DEFAULT_PORT
     
-    private val _sortMode = MutableStateFlow(0)
+    private val _sortMode = MutableStateFlow(prefs.getInt(KEY_LIBRARY_SORT_MODE, 0).coerceIn(0, 3))
     val sortMode: StateFlow<Int> = _sortMode.asStateFlow()
 
     val sortedSongs: StateFlow<List<Song>> = combine(songs, _sortMode) { visibleSongs, mode ->
@@ -256,11 +257,13 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     private var resumeReminderJob: Job? = null
     private var continuousPlaySeconds = 0
     private var sessionSummaryShown = false
+    private var sessionRestoreAttempted = false
+    private var lastSessionPersistAtMs = 0L
 
-    private val _mainSelectedTab = MutableStateFlow(0)
+    private val _mainSelectedTab = MutableStateFlow(prefs.getInt(KEY_MAIN_SELECTED_TAB, 0).coerceIn(0, 3))
     val mainSelectedTab: StateFlow<Int> = _mainSelectedTab.asStateFlow()
 
-    private val _librarySelectedTab = MutableStateFlow(0)
+    private val _librarySelectedTab = MutableStateFlow(prefs.getInt(KEY_LIBRARY_SELECTED_TAB, 0).coerceAtLeast(0))
     val librarySelectedTab: StateFlow<Int> = _librarySelectedTab.asStateFlow()
 
     private val _totalListeningSeconds = MutableStateFlow(prefs.getLong("total_listening_seconds", 0L))
@@ -323,6 +326,11 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                 _playbackPitch.value
             )
             controller?.addListener(object : Player.Listener {
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    updateCurrentSongFromMediaItem(mediaItem)
+                    controller?.let { syncPlaybackQueueIndex(it.currentMediaItemIndex) }
+                    persistPlaybackSession()
+                }
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     _isPlaying.value = isPlaying
                     if (isPlaying) {
@@ -330,13 +338,10 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                         continuousPlaySeconds = 0
                         sessionSummaryShown = false
                     } else {
+                        persistPlaybackSession()
                         maybeShowSessionSummaryIfEnabled()
                         scheduleResumeReminderIfEnabled()
                     }
-                }
-                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                    updateCurrentSongFromMediaItem(mediaItem)
-                    controller?.let { syncPlaybackQueueIndex(it.currentMediaItemIndex) }
                 }
             })
             updateCurrentSongFromMediaItem(controller?.currentMediaItem)
@@ -345,6 +350,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                 syncPlaybackQueueIndex(player.currentMediaItemIndex)
                 maybeRestorePlaybackQueueFromPlayer(player)
             }
+            tryRestorePlaybackSession()
             startProgressUpdate()
         }, MoreExecutors.directExecutor())
     }
@@ -365,6 +371,11 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
                         if (scrobbleRepository.trackProgress(song, position, duration)) {
                             _scrobbleStats.value = scrobbleRepository.getStats()
                         }
+                    }
+                    val now = System.currentTimeMillis()
+                    if (now - lastSessionPersistAtMs >= SESSION_PERSIST_INTERVAL_MS) {
+                        lastSessionPersistAtMs = now
+                        persistPlaybackSession()
                     }
                     continuousPlaySeconds++
                     if (_smartNotificationsEnabled.value &&
@@ -520,6 +531,84 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
             val loadedSongs = combinedMusicRepository.getAllSongs().map { applyMetadataOverride(it) }
             _allSongs.value = loadedSongs
             updateCurrentSongFromMediaItem(_mediaController.value?.currentMediaItem)
+            tryRestorePlaybackSession()
+        }
+    }
+
+    /** Sauvegarde la piste / file / position pour le prochain cold start. */
+    private fun persistPlaybackSession() {
+        val song = _currentSong.value ?: return
+        val queueIds = _playbackQueue.value.map { it.id }.ifEmpty { listOf(song.id) }
+        val position = _mediaController.value?.currentPosition ?: _playbackPosition.value
+        PlaybackSessionStore.save(
+            context = getApplication(),
+            songId = song.id,
+            positionMs = position,
+            queueIds = queueIds,
+        )
+    }
+
+    /**
+     * Restaure la dernière session si le player est vide (app tuée / process mort).
+     * Ne relance pas la lecture automatiquement — le mini-player apparaît pour reprendre.
+     */
+    private fun tryRestorePlaybackSession() {
+        if (sessionRestoreAttempted) return
+        val controller = _mediaController.value ?: return
+        if (_allSongs.value.isEmpty()) return
+
+        // Service encore vivant avec une file Media3 : synchroniser seulement l'UI.
+        if (controller.mediaItemCount > 0) {
+            sessionRestoreAttempted = true
+            updateCurrentSongFromMediaItem(controller.currentMediaItem)
+            maybeRestorePlaybackQueueFromPlayer(controller)
+            _isPlaying.value = controller.isPlaying
+            _playbackPosition.value = controller.currentPosition.coerceAtLeast(0L)
+            return
+        }
+        if (_currentSong.value != null) {
+            sessionRestoreAttempted = true
+            return
+        }
+
+        val snapshot = PlaybackSessionStore.read(getApplication())
+        if (snapshot == null) {
+            sessionRestoreAttempted = true
+            return
+        }
+
+        val all = _allSongs.value
+        val queue = snapshot.queueIds.mapNotNull { id -> all.find { it.id == id } }
+        val song = all.find { it.id == snapshot.songId } ?: queue.firstOrNull()
+        if (song == null) {
+            PlaybackSessionStore.clear(getApplication())
+            sessionRestoreAttempted = true
+            return
+        }
+
+        val safeQueue = queue.ifEmpty { listOf(song) }
+        val index = safeQueue.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+        val position = snapshot.positionMs.coerceAtLeast(0L)
+        sessionRestoreAttempted = true
+
+        runCatching {
+            setPlaybackContext(safeQueue, index)
+            controller.setMediaItems(
+                safeQueue.map { songToMediaItem(it) },
+                index,
+                position,
+            )
+            controller.prepare()
+            controller.pause()
+            _currentSong.value = safeQueue[index]
+            _playbackPosition.value = position
+            _isPlaying.value = false
+            EqualizerManager.applyForTrack(getApplication(), safeQueue[index].id)
+            _equalizerPreset.value =
+                EqualizerManager.effectivePresetForTrack(getApplication(), safeQueue[index].id)
+            refreshEqualizerBands()
+        }.onFailure {
+            PlaybackSessionStore.clear(getApplication())
         }
     }
 
@@ -723,6 +812,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
             controller.play()
             _currentSong.value = startSong
             _isPlaying.value = true
+            persistPlaybackSession()
         }
     }
     
@@ -742,6 +832,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         controller.play()
         playlist.songs.getOrNull(index)?.let { _currentSong.value = it }
         _isPlaying.value = true
+        persistPlaybackSession()
     }
 
     fun seekToQueueIndex(index: Int) {
@@ -891,81 +982,110 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
 
     fun saveSongMetadata(song: Song, title: String, artist: String, album: String) {
         viewModelScope.launch {
-            dbRepository.saveMetadataOverride(song.id, title, artist, album)
-            val result = MetadataEditor.tryWriteToMediaStore(
-                getApplication(),
-                song,
-                title.trim(),
-                artist.trim(),
-                album.trim()
-            )
-            _metadataEditMessage.value = result.message
-            _allSongs.value = _allSongs.value.map { s ->
-                if (s.id == song.id) {
-                    applyMetadataOverride(
-                        s.copy(title = title.trim(), artist = artist.trim(), albumName = album.trim())
-                    )
-                } else s
-            }
-            _currentSong.value?.takeIf { it.id == song.id }?.let { current ->
-                _currentSong.value = applyMetadataOverride(
-                    current.copy(title = title.trim(), artist = artist.trim(), albumName = album.trim())
+            runCatching {
+                dbRepository.saveMetadataOverride(song.id, title, artist, album)
+                val result = MetadataEditor.tryWriteToMediaStore(
+                    getApplication(),
+                    song,
+                    title.trim(),
+                    artist.trim(),
+                    album.trim()
                 )
-            }
-            _playbackQueue.value = _playbackQueue.value.map { s ->
-                if (s.id == song.id) {
-                    applyMetadataOverride(
-                        s.copy(title = title.trim(), artist = artist.trim(), albumName = album.trim())
-                    )
-                } else s
-            }
-            val controller = _mediaController.value
-            if (controller != null && _currentSong.value?.id == song.id) {
-                val index = controller.currentMediaItemIndex
-                val items = (0 until controller.mediaItemCount).mapNotNull { controller.getMediaItemAt(it) }
-                if (index in items.indices) {
-                    val updated = songToMediaItem(
-                        song.copy(title = title.trim(), artist = artist.trim(), albumName = album.trim())
-                    )
-                    controller.replaceMediaItem(index, updated)
+                _metadataEditMessage.value = result.message
+                val trimmedTitle = title.trim()
+                val trimmedArtist = artist.trim()
+                val trimmedAlbum = album.trim()
+                _allSongs.value = _allSongs.value.map { s ->
+                    if (s.id == song.id) {
+                        applyMetadataOverride(
+                            s.copy(title = trimmedTitle, artist = trimmedArtist, albumName = trimmedAlbum)
+                        )
+                    } else s
                 }
+                _currentSong.value?.takeIf { it.id == song.id }?.let { current ->
+                    _currentSong.value = applyMetadataOverride(
+                        current.copy(title = trimmedTitle, artist = trimmedArtist, albumName = trimmedAlbum)
+                    )
+                }
+                _playbackQueue.value = _playbackQueue.value.map { s ->
+                    if (s.id == song.id) {
+                        applyMetadataOverride(
+                            s.copy(title = trimmedTitle, artist = trimmedArtist, albumName = trimmedAlbum)
+                        )
+                    } else s
+                }
+                val controller = _mediaController.value
+                if (controller != null && _currentSong.value?.id == song.id) {
+                    val index = controller.currentMediaItemIndex
+                    if (index in 0 until controller.mediaItemCount) {
+                        runCatching {
+                            controller.replaceMediaItem(
+                                index,
+                                songToMediaItem(
+                                    song.copy(
+                                        title = trimmedTitle,
+                                        artist = trimmedArtist,
+                                        albumName = trimmedAlbum,
+                                    )
+                                )
+                            )
+                        }
+                    }
+                }
+                persistPlaybackSession()
+            }.onFailure {
+                _metadataEditMessage.value =
+                    "Impossible d'enregistrer les métadonnées. Réessaie."
             }
         }
     }
 
     fun saveSongCoverArt(song: Song, sourceUri: Uri) {
         viewModelScope.launch {
-            val savedUri = CoverArtStorage.saveFromUri(getApplication(), song.id, sourceUri)
-            dbRepository.saveCoverArtOverride(song.id, savedUri.toString())
-            val updated = song.copy(albumArtUri = savedUri)
-            _allSongs.value = _allSongs.value.map { s ->
-                if (s.id == song.id) applyMetadataOverride(updated) else s
-            }
-            _currentSong.value?.takeIf { it.id == song.id }?.let { current ->
-                _currentSong.value = applyMetadataOverride(current.copy(albumArtUri = savedUri))
-            }
-            _playbackQueue.value = _playbackQueue.value.map { s ->
-                if (s.id == song.id) applyMetadataOverride(updated) else s
-            }
-            _favoriteSongs.value = _favoriteSongs.value.map { s ->
-                if (s.id == song.id) applyMetadataOverride(updated) else s
-            }
-            _recentlyPlayed.value = _recentlyPlayed.value.map { s ->
-                if (s.id == song.id) applyMetadataOverride(updated) else s
-            }
-            _playlists.value = _playlists.value.map { playlist ->
-                playlist.copy(
-                    songs = playlist.songs.map { s ->
-                        if (s.id == song.id) applyMetadataOverride(updated) else s
-                    }
-                )
-            }
-            val controller = _mediaController.value
-            if (controller != null && _currentSong.value?.id == song.id) {
-                val index = controller.currentMediaItemIndex
-                if (index in 0 until controller.mediaItemCount) {
-                    controller.replaceMediaItem(index, songToMediaItem(updated))
+            runCatching {
+                val savedUri = CoverArtStorage.saveFromUri(getApplication(), song.id, sourceUri)
+                if (savedUri == null) {
+                    _metadataEditMessage.value =
+                        "Impossible de lire cette image. Choisis une autre photo."
+                    return@launch
                 }
+                dbRepository.saveCoverArtOverride(song.id, savedUri.toString())
+                val updated = song.copy(albumArtUri = savedUri)
+                _allSongs.value = _allSongs.value.map { s ->
+                    if (s.id == song.id) applyMetadataOverride(updated) else s
+                }
+                _currentSong.value?.takeIf { it.id == song.id }?.let { current ->
+                    _currentSong.value = applyMetadataOverride(current.copy(albumArtUri = savedUri))
+                }
+                _playbackQueue.value = _playbackQueue.value.map { s ->
+                    if (s.id == song.id) applyMetadataOverride(updated) else s
+                }
+                _favoriteSongs.value = _favoriteSongs.value.map { s ->
+                    if (s.id == song.id) applyMetadataOverride(updated) else s
+                }
+                _recentlyPlayed.value = _recentlyPlayed.value.map { s ->
+                    if (s.id == song.id) applyMetadataOverride(updated) else s
+                }
+                _playlists.value = _playlists.value.map { playlist ->
+                    playlist.copy(
+                        songs = playlist.songs.map { s ->
+                            if (s.id == song.id) applyMetadataOverride(updated) else s
+                        }
+                    )
+                }
+                val controller = _mediaController.value
+                if (controller != null && _currentSong.value?.id == song.id) {
+                    val index = controller.currentMediaItemIndex
+                    if (index in 0 until controller.mediaItemCount) {
+                        runCatching {
+                            controller.replaceMediaItem(index, songToMediaItem(updated))
+                        }
+                    }
+                }
+                _metadataEditMessage.value = "Pochette mise à jour."
+            }.onFailure {
+                _metadataEditMessage.value =
+                    "Impossible d'enregistrer la pochette. Réessaie."
             }
         }
     }
@@ -1205,15 +1325,21 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     }
     
     fun updateSortMode(mode: Int) {
-        _sortMode.value = mode
+        val safe = mode.coerceIn(0, 3)
+        _sortMode.value = safe
+        prefs.edit().putInt(KEY_LIBRARY_SORT_MODE, safe).apply()
     }
 
     fun updateMainSelectedTab(tab: Int) {
-        _mainSelectedTab.value = tab
+        val safe = tab.coerceIn(0, 3)
+        _mainSelectedTab.value = safe
+        prefs.edit().putInt(KEY_MAIN_SELECTED_TAB, safe).apply()
     }
 
     fun updateLibrarySelectedTab(tab: Int) {
-        _librarySelectedTab.value = tab
+        val safe = tab.coerceAtLeast(0)
+        _librarySelectedTab.value = safe
+        prefs.edit().putInt(KEY_LIBRARY_SELECTED_TAB, safe).apply()
     }
 
     // --- Sleep Timer ---
@@ -1263,6 +1389,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     fun cancelSleepTimer() = setSleepTimer(0)
 
     override fun onCleared() {
+        persistPlaybackSession()
         super.onCleared()
         resumeReminderJob?.cancel()
         stopRemoteHost()
@@ -1274,5 +1401,9 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
         private const val RESUME_REMINDER_DELAY_MS = 15 * 60 * 1000L
         private const val SESSION_SUMMARY_THRESHOLD_SECONDS = 20 * 60
         private const val PREVIOUS_RESTART_THRESHOLD_MS = 3_000L
+        private const val SESSION_PERSIST_INTERVAL_MS = 5_000L
+        private const val KEY_LIBRARY_SORT_MODE = "library_sort_mode"
+        private const val KEY_MAIN_SELECTED_TAB = "main_selected_tab"
+        private const val KEY_LIBRARY_SELECTED_TAB = "library_selected_tab"
     }
 }
