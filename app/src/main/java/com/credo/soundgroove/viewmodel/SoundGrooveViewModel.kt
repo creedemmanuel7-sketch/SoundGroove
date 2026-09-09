@@ -322,6 +322,7 @@ class SoundGrooveViewModel(application: Application) : AndroidViewModel(applicat
     fun seekToQueueIndex(index: Int) = playback.seekToQueueIndex(index)
     fun removeFromPlaybackQueue(index: Int) = playback.removeFromPlaybackQueue(index)
     fun moveInPlaybackQueue(from: Int, to: Int) = playback.moveInPlaybackQueue(from, to)
+    fun clearUpcoming() = playback.clearUpcoming()
     fun togglePlayPause() = playback.togglePlayPause()
     fun skipNext() = playback.skipNext()
     fun skipPrevious() = playback.skipPrevious()
