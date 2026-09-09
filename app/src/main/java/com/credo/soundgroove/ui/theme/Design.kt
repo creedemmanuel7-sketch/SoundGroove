@@ -12,9 +12,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -49,11 +52,11 @@ object SgSpacing {
     val xxxl = 32.dp
 
     /** Padding horizontal / gutter standard des écrans principaux. */
-    val screenHorizontal = lg
-    val gutter = lg
+    val screenHorizontal = xl
+    val gutter = xl
 
     /** Marge haute sous la barre de statut (titres d'écran). */
-    val screenTop = xxl
+    val screenTop = xxxl
 
     /** Espacement vertical entre sections de liste. */
     val sectionGap = md
@@ -64,12 +67,6 @@ object SgSpacing {
     /** Padding interne des cartes / rows cliquables. */
     val cardPadding = md
 
-    /**
-     * Inset bas pour listes scrollables : mini-player (~64) + nav (~64) + marges.
-     * Évite que le contenu soit masqué sous le chrome bas.
-     */
-    val contentInsetBottom = 152.dp
-
     val hitTarget = 48.dp
     val iconSize = 24.dp
     val chipHeight = 40.dp
@@ -79,6 +76,30 @@ object SgSpacing {
     val miniPlayerHeight = 64.dp
     val miniPlayerArt = 40.dp
     val navHeight = 64.dp
+
+    /**
+     * Chrome bottom-nav au-dessus des [WindowInsets.navigationBars]
+     * (pill [navHeight] + paddings verticaux [xs]×2).
+     */
+    val shellBottomNavChrome = navHeight + xs * 2
+
+    /**
+     * Inset bas pour listes sous le shell Accueil (mini-player + bottom nav + marges).
+     * Ne inclut **pas** [WindowInsets.navigationBars] : celles-ci sont appliquées
+     * une fois par le shell ([com.credo.soundgroove.ui.components.BottomNavBar] /
+     * overlay mini-player via `navigationBarsPadding()`).
+     */
+    val contentInsetBottom = miniPlayerHeight + shellBottomNavChrome + md
+
+    /**
+     * Dégagement chrome mini-player seul (routes sans bottom nav : Recherche, détails).
+     * À combiner avec [sgNavigationBarsBottom] via [sgOverlayBottomInset].
+     */
+    val contentInsetBottomOverlay = miniPlayerHeight + xxl
+
+    /** FAB au-dessus du mini-player dans le content Box du shell Accueil. */
+    val fabAboveMiniInset = miniPlayerHeight + sm
+
     val seekTrack = 4.dp
     val seekThumb = 16.dp
     /** Zone tactile verticale du seek Player (au-delà du thumb 16). */
@@ -93,6 +114,33 @@ object SgSpacing {
     /** Fade latéral des LazyRow chips (Bibliothèque / Recherche). */
     val chipEdgeFade = 24.dp
 }
+
+/**
+ * Inset bas réel de la barre de navigation système (gestes ≈ mince, 3 boutons ≈ 48dp).
+ * Toujours préférer ceci à un padding fixe.
+ */
+@Composable
+fun sgNavigationBarsBottom(): Dp =
+    WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+/**
+ * Inset bas pour listes / FAB sur écrans edge-to-edge **sans** bottom nav
+ * (Recherche, détails album/artiste/playlist) : chrome mini-player + navigationBars.
+ */
+@Composable
+fun sgOverlayBottomInset(
+    chrome: Dp = SgSpacing.contentInsetBottomOverlay,
+): Dp = chrome + sgNavigationBarsBottom()
+
+/**
+ * Inset bas listes / scroll sous le shell Accueil quand le caller n'est **pas**
+ * déjà au-dessus d'une BottomNavBar qui consomme les navigationBars
+ * (ex. Settings plein écran) : chrome shell + navigationBars.
+ */
+@Composable
+fun sgHomeShellBottomInset(
+    chrome: Dp = SgSpacing.contentInsetBottom,
+): Dp = chrome + sgNavigationBarsBottom()
 
 object SgRadius {
     val sm = 8.dp
@@ -185,9 +233,10 @@ fun SgIconButton(
     accentColor: Color = MaterialTheme.colorScheme.primary,
     content: @Composable BoxScope.() -> Unit
 ) {
+    // Cible tactile ≥ 48dp (Material) ; glyphe reste ~24 via le contenu.
     Box(
         modifier = modifier
-            .size(40.dp)
+            .size(SgSpacing.hitTarget)
             .clip(CircleShape)
             .background(SurfaceElevated)
             .border(1.dp, TextPrimary.copy(alpha = 0.08f), CircleShape)

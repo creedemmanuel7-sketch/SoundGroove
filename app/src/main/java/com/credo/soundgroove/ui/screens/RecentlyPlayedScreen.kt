@@ -40,7 +40,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -58,12 +57,9 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.session.MediaController
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
-import com.credo.soundgroove.ui.components.SongItem
 import com.credo.soundgroove.ui.components.SongItem
 import com.credo.soundgroove.ui.components.formatDuration
 import com.credo.soundgroove.ui.theme.*
@@ -156,15 +152,23 @@ fun RecentlyPlayedScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(songs) { song ->
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = PaddingValues(
+                    bottom = sgNavigationBarsBottom() + SgSpacing.xxl
+                )
+            ) {
+                items(
+                    songs,
+                    key = { it.id },
+                    contentType = { "song_row" }
+                ) { song ->
                     SongItem(
                         song = song,
                         isPlaying = false,
                         onClick = { onSongClick(song) }
                     )
                 }
-                item { Spacer(modifier = Modifier.height(16.dp)) }
             }
         }
     }

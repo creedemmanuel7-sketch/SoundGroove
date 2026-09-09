@@ -65,6 +65,24 @@ Deux fichiers distincts avec le même titre/artiste (covers, remixes, chemins di
 ### Mitigation affichage
 Les compteurs Accueil / Profil / Paramètres utilisent `songs.size` après scan dédupliqué ; rescan Bibliotheque pour appliquer.
 
+## 5. Pochette JPG/PNG rejetée + marges écran (août 2026)
+
+### Cause pochette
+Dans `CoverArtStorage.decodeDownscaled`, le passage `inJustDecodeBounds` utilisait
+`BitmapFactory.decodeStream(...) ?: return null`. Or avec `inJustDecodeBounds = true`,
+`decodeStream` renvoie **toujours** `null` même si les bounds sont OK — donc **toutes**
+les images (JPG/JPEG/PNG inclus) étaient rejetées avec « Impossible de lire cette image ».
+
+### Correctif
+- Ne plus Elvis sur le résultat du passe bounds ; tenter le décodage si les dimensions
+  sont inconnues ; accepter MIME `image/jpeg`, `image/jpg`, `image/png`, `image/webp`
+  (+ `image/*`, `octet-stream`) via ContentResolver / extension.
+- Messages FR plus clairs dans `saveSongCoverArt`.
+
+### Marges
+`SgSpacing.screenHorizontal` / `gutter` : 16 → 20 (`xl`) ; `screenTop` : 24 → 32 (`xxxl`).
+Effet global Accueil / Bibliothèque / Profil / Réglages / etc.
+
 ---
 
-Fichiers clés : `ListeningStatsRepository.kt`, `MusicRepository.kt`, `SongDisplay.kt`, `AlbumArtPalette.kt`, `EffectiveAccent.kt`, écrans Profil / Settings / Library / Player / Lyrics / listes.
+Fichiers clés : `ListeningStatsRepository.kt`, `MusicRepository.kt`, `SongDisplay.kt`, `AlbumArtPalette.kt`, `EffectiveAccent.kt`, `CoverArtStorage.kt`, `Design.kt` (`SgSpacing`), écrans Profil / Settings / Library / Player / Lyrics / listes.

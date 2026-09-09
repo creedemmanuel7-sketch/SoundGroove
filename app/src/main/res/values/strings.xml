@@ -9,13 +9,21 @@
     <string name="smart_notification_resume_body">%1$s — %2$s est en pause</string>
     <string name="smart_notification_summary_title">Belle session d\'écoute</string>
     <string name="smart_notification_summary_body">Vous avez écouté %1$d min sans interruption. Bravo !</string>
-    <string name="widget_description">Contrôles rapides SoundGroove</string>
+    <string name="widget_description">Player SoundGroove — pochette, file et contrôles live</string>
     <string name="widget_no_track">Aucun morceau</string>
     <string name="widget_album_art">Pochette album</string>
     <string name="widget_play_pause">Lecture / Pause</string>
     <string name="widget_previous">Piste précédente</string>
     <string name="widget_next">Piste suivante</string>
     <string name="widget_shuffle">Lecture aléatoire</string>
+    <string name="widget_repeat">Répétition</string>
+    <string name="widget_favorite">Favori</string>
+    <string name="widget_up_next">À suivre</string>
+    <string name="widget_pulse_title">Pulse</string>
+    <string name="widget_pulse_subtitle">Récents</string>
+    <string name="widget_pulse_description">Continuer l’écoute et jaquettes récentes (hors ligne)</string>
+    <string name="widget_pulse_empty">Écoutez des titres pour remplir Pulse</string>
+    <string name="widget_continue_label">Continuer</string>
 
     <string name="artist_unknown">Artiste inconnu</string>
     <string name="title_unknown">Titre inconnu</string>

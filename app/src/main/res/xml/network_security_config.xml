@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Politique réseau défensive SoundGroove (2026).
+  - Cleartext HTTP interdit (HTTPS only pour les clients HttpURLConnection / framework).
+  - Pas de pin de certificats : LRCLIB et les recherches web sont des API publiques
+    non authentifiées ; le pinning casserait à chaque rotation de cert sans gain
+    significatif (pas de tokens / PII en transit vers ces hôtes).
+  - Le host WebSocket LAN (ws://) est un serveur local : NSC s’applique aux
+    connexions sortantes du framework, pas à l’écoute serveur.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <!-- Debug : pas d’override user CA en release ; debug-overrides volontairement absents
+         pour éviter d’assouplir TLS en builds debuggable packagés par erreur. -->
+</network-security-config>

@@ -65,7 +65,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.animation.core.snap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -90,19 +89,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.Player
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.lyrics.LyricLine
 import com.credo.soundgroove.lyrics.LyricsContent
 import com.credo.soundgroove.lyrics.LyricsViewModel
+import com.credo.soundgroove.ui.motion.SgCoverImage
+import com.credo.soundgroove.ui.theme.SgAdaptive
 import com.credo.soundgroove.ui.theme.SgMotion
 import com.credo.soundgroove.ui.theme.SgRadius
 import com.credo.soundgroove.ui.theme.SgSpacing
 import com.credo.soundgroove.ui.theme.SgTapTarget
+import com.credo.soundgroove.ui.theme.rememberSgAllowBlur
 import com.credo.soundgroove.ui.theme.rememberSgReducedMotion
-import com.credo.soundgroove.ui.theme.sgCoilCrossfadeMs
+import com.credo.soundgroove.ui.theme.sgConstrainWidth
+import com.credo.soundgroove.ui.theme.sgScreenHorizontal
+import com.credo.soundgroove.ui.theme.sgSoftBlur
 import com.credo.soundgroove.util.LyricsChromePrimaryText
 import com.credo.soundgroove.util.LyricsPalette
 import com.credo.soundgroove.util.PlayerGuards
@@ -160,6 +162,8 @@ fun LyricsScreen(
     // back destiné au Player en dessous.
     val lyricsBackHint = rememberGestureHintState(GestureHintIds.LYRICS_BACK)
     val reducedMotion = rememberSgReducedMotion()
+    var lyricsScrollBusy by remember { mutableStateOf(false) }
+    val allowBlur = rememberSgAllowBlur(scrollInProgress = lyricsScrollBusy)
     val lyricsPredictiveEnabled = peekProgress > 0.001f
 
     SgPredictiveBackHandler(
@@ -254,20 +258,18 @@ fun LyricsScreen(
                 )
             }
     ) {
-        // Fond immersif : pochette floutée + gradient. Mode perf : Palette plate, blur=0.
-        val coilCrossfadeMs = sgCoilCrossfadeMs(SgMotion.FastMs)
-        if (!reducedMotion && song.albumArtUri != null) {
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(song.albumArtUri)
-                    .size(480, 960)
-                    .crossfade(coilCrossfadeMs)
-                    .build(),
-                contentDescription = null,
+        // Fond immersif : pochette floutée légère + gradient.
+        // Blur off en Mode perf / reduced / pendant fling liste (60 FPS).
+        if (allowBlur && song.albumArtUri != null) {
+            SgCoverImage(
+                albumArtUri = song.albumArtUri,
+                uriCrossfade = true,
+                decodeWidth = 360,
+                decodeHeight = 720,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(46.dp)
+                    .sgSoftBlur(enabled = true, radius = 14.dp)
             )
         }
 
@@ -288,7 +290,8 @@ fun LyricsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp)
+                .sgConstrainWidth(SgAdaptive.PlayerChromeMax)
+                .padding(horizontal = sgScreenHorizontal())
         ) {
             // Même respiration en haut d'écran que PlayerScreen : les deux écrans
             // doivent se sentir comme deux faces d'un même objet, pas deux styles.
@@ -299,8 +302,6 @@ fun LyricsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Sortie secondaire : gestes (swipe bas/droite) et BackHandler = primaires ;
-                // icône discrète mais cible 48dp conservée pour TalkBack / Fitts.
                 SgTapTarget(onClick = onClose) {
                     Icon(
                         painter = painterResource(R.drawable.ic_close_down),
@@ -328,24 +329,39 @@ fun LyricsScreen(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(palette.glassSurface, CircleShape)
-                        .border(1.dp, palette.glassBorder, CircleShape)
-                        .clickable { autoScrollEnabled = !autoScrollEnabled },
-                    contentAlignment = Alignment.Center
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = if (autoScrollEnabled) Icons.Filled.GpsFixed else Icons.Filled.GpsOff,
-                        contentDescription = if (autoScrollEnabled) {
-                            "Désactiver le défilement automatique"
-                        } else {
-                            "Activer le défilement automatique"
-                        },
-                        tint = if (autoScrollEnabled) effectiveAccent else palette.secondaryText,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    if (!isEditing &&
+                        (content is LyricsContent.Synced || content is LyricsContent.PlainText)
+                    ) {
+                        LyricsManageActions(
+                            accentColor = effectiveAccent,
+                            palette = palette,
+                            onEdit = { viewModel.startEditingExisting(song) },
+                            onDelete = { showDeleteConfirm = true }
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(palette.glassSurface, CircleShape)
+                            .border(1.dp, palette.glassBorder, CircleShape)
+                            .clickable { autoScrollEnabled = !autoScrollEnabled },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (autoScrollEnabled) Icons.Filled.GpsFixed else Icons.Filled.GpsOff,
+                            contentDescription = if (autoScrollEnabled) {
+                                "Désactiver le défilement automatique"
+                            } else {
+                                "Activer le défilement automatique"
+                            },
+                            tint = if (autoScrollEnabled) effectiveAccent else palette.secondaryText,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
 
@@ -376,7 +392,8 @@ fun LyricsScreen(
                         accentColor = effectiveAccent,
                         inactiveColor = palette.inactiveText,
                         autoScrollEnabled = autoScrollEnabled,
-                        onLineClick = { timeMs -> PlayerGuards.safeSeekToPosition(player, timeMs) }
+                        onLineClick = { timeMs -> PlayerGuards.safeSeekToPosition(player, timeMs) },
+                        onScrollBusyChange = { lyricsScrollBusy = it },
                     )
                     content is LyricsContent.PlainText -> PlainTextLyrics(
                         text = (content as LyricsContent.PlainText).text,
@@ -394,17 +411,6 @@ fun LyricsScreen(
                 }
             }
 
-            val hasEditableLyrics = !isEditing &&
-                (content is LyricsContent.Synced || content is LyricsContent.PlainText)
-            if (hasEditableLyrics) {
-                Spacer(modifier = Modifier.height(4.dp))
-                LyricsManageActions(
-                    accentColor = effectiveAccent,
-                    palette = palette,
-                    onEdit = { viewModel.startEditingExisting(song) },
-                    onDelete = { showDeleteConfirm = true }
-                )
-            }
 
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -486,43 +492,45 @@ private fun LyricsManageActions(
     accentColor: Color,
     palette: LyricsPalette,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        OutlinedButton(
-            onClick = onEdit,
-            modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(SgRadius.pill),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.primaryText),
-            border = BorderStroke(1.dp, palette.glassBorder)
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(palette.glassSurface)
+                .border(1.dp, palette.glassBorder, CircleShape)
+                .clickable(onClick = onEdit),
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Filled.Edit,
-                contentDescription = null,
+                contentDescription = "Modifier les paroles",
                 tint = accentColor,
                 modifier = Modifier.size(16.dp)
             )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Modifier", fontWeight = FontWeight.SemiBold)
         }
-        OutlinedButton(
-            onClick = onDelete,
-            modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(SgRadius.pill),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF6B6B)),
-            border = BorderStroke(1.dp, Color(0xFFFF6B6B).copy(alpha = 0.45f))
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(palette.glassSurface)
+                .border(1.dp, Color(0xFFFF6B6B).copy(alpha = 0.35f), CircleShape)
+                .clickable(onClick = onDelete),
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Filled.Delete,
-                contentDescription = null,
-                tint = Color(0xFFFF6B6B),
+                contentDescription = "Supprimer les paroles",
+                tint = Color(0xFFFF6B6B).copy(alpha = 0.85f),
                 modifier = Modifier.size(16.dp)
             )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Supprimer", fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -713,12 +721,17 @@ private fun SyncedLyricsList(
     accentColor: Color,
     inactiveColor: Color,
     autoScrollEnabled: Boolean,
-    onLineClick: (Long) -> Unit
+    onLineClick: (Long) -> Unit,
+    onScrollBusyChange: (Boolean) -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val reducedMotion = rememberSgReducedMotion()
     var lastScrolledLine by remember { mutableStateOf(-1) }
+
+    LaunchedEffect(listState.isScrollInProgress) {
+        onScrollBusyChange(listState.isScrollInProgress)
+    }
 
     LaunchedEffect(currentLineIndex, lines.size, autoScrollEnabled, reducedMotion) {
         if (autoScrollEnabled && currentLineIndex >= 0 && lines.isNotEmpty()) {
@@ -756,7 +769,11 @@ private fun SyncedLyricsList(
         ),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        itemsIndexed(lines, key = { index, line -> "$index:${line.timeMs}" }) { index, line ->
+        itemsIndexed(
+            lines,
+            key = { index, line -> "$index:${line.timeMs}" },
+            contentType = { _, _ -> "lyrics_line" }
+        ) { index, line ->
             val isActive = index == currentLineIndex
             val isPast = index < currentLineIndex
 
@@ -972,7 +989,7 @@ private fun EmptyLyricsState(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Recherchez les paroles en ligne, copiez-les, puis enregistrez-les pour ce morceau. Les paroles trouvées automatiquement ou saisies manuellement seront mémorisées pour les prochaines écoutes.",
+            text = "Cherche en ligne, colle le texte, ou saisis manuellement. Une fois enregistrées, les paroles restent liées à ce morceau.",
             color = palette.secondaryText,
             fontSize = 13.sp,
             lineHeight = 18.sp,

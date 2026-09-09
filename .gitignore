@@ -15,9 +15,29 @@
 .cxx
 local.properties
 
+# Tools (générateur Rive, scripts)
+/tools/node_modules
+
 # Next.js website (website/)
 /website/node_modules
 /website/.next
 /website/out
+/website/.env
+/website/.env.*
+!/website/.env.example
 /website/.env*.local
+/website/.netlify
 /website/public/downloads/*.apk
+
+# Secrets locaux (racine)
+.env
+.env.*
+!.env.example
+*.pem
+*.jks
+*.keystore
+**/keystore.properties
+
+# google-services.json : N/A tant qu’il n’y a pas de Firebase.
+# Si Firebase est ajouté, versionner le fichier client est courant (clés « publiques »
+# Android) mais les règles Firestore/Storage doivent rester strictes côté serveur.

@@ -31,8 +31,16 @@ object EqualizerManager {
         controller?.setEnabled(enabled)
     }
 
-    fun applyPreset(context: Context, preset: EqualizerPreset) {
-        PlaybackPreferences.setEqualizerPreset(context, preset)
+    /**
+     * Applique un preset sur le hardware.
+     * @param persistGlobal si true, écrit le preset global dans les prefs.
+     *   Les overrides per-track doivent passer [persistGlobal]=false pour ne pas
+     *   écraser le preset global au skip de piste.
+     */
+    fun applyPreset(context: Context, preset: EqualizerPreset, persistGlobal: Boolean = true) {
+        if (persistGlobal) {
+            PlaybackPreferences.setEqualizerPreset(context, preset)
+        }
         if (preset != EqualizerPreset.CUSTOM) {
             controller?.applyPreset(preset)
         } else {
@@ -48,11 +56,7 @@ object EqualizerManager {
     fun applyForTrack(context: Context, songId: Long) {
         val preset = PlaybackPreferences.getTrackEqualizerPreset(context, songId)
             ?: PlaybackPreferences.equalizerPreset(context)
-        if (preset == EqualizerPreset.CUSTOM) {
-            controller?.applyFromPreferences()
-        } else {
-            applyPreset(context, preset)
-        }
+        applyPreset(context, preset, persistGlobal = false)
     }
 
     fun effectivePresetForTrack(context: Context, songId: Long): EqualizerPreset =

@@ -47,8 +47,8 @@ fun SongListItem(
     // appelants qui ne suivent pas encore l'état play/pause (comportement inchangé).
     isPlaying: Boolean = isCurrentSong,
     /**
-     * Active les clés shared mini ↔ Player (`album_art_`, `track_meta_`, `play_control_`)
-     * — requis pour Recherche → Player.
+     * Active la clé shared pochette mini ↔ Player (`album_art_`) — Recherche → Player.
+     * Titre / play non partagés (évite overlaps pendant le morph).
      */
     enablePlayerSharedElements: Boolean = false
 ) {
@@ -63,21 +63,9 @@ fun SongListItem(
     } else {
         Modifier
     }
-    val trackMetaMod = if (enablePlayerSharedElements) {
-        Modifier.sgSharedBounds(key = "track_meta_${song.id}")
-    } else {
-        Modifier
-    }
-    val playControlMod = if (enablePlayerSharedElements) {
-        Modifier.sgSharedBounds(
-            key = sgPlayControlSharedKey(song.id),
-            clipShape = CircleShape,
-        )
-    } else {
-        Modifier
-    }
 
-    // Trailing slots : [favori?] [durée?] [play shared?] — height 56 cohérente partout.
+    // Trailing slots : [favori?] [durée?] — height 56 cohérente partout.
+    // Pas de sharedBounds titre/play : morph mini↔player = pochette seule (évite overlaps).
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -92,7 +80,7 @@ fun SongListItem(
         horizontalArrangement = Arrangement.spacedBy(SgSpacing.md)
     ) {
         AlbumArtThumb(
-            albumArtUri = song.albumArtUri,
+            song = song,
             size = 44.dp,
             cornerRadius = SgRadius.sm,
             accentColor = accentColor,
@@ -100,9 +88,7 @@ fun SongListItem(
         )
 
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .then(trackMetaMod),
+            modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -149,23 +135,6 @@ fun SongListItem(
                     style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary.copy(alpha = 0.7f)
                 )
-            }
-
-            if (enablePlayerSharedElements) {
-                Box(
-                    modifier = playControlMod
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(accentColor.copy(alpha = 0.14f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_play),
-                        contentDescription = null,
-                        tint = accentColor,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
             }
 
             Box(

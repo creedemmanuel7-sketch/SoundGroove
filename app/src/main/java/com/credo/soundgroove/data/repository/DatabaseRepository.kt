@@ -1,12 +1,10 @@
 package com.credo.soundgroove.data.repository
 
-import com.credo.soundgroove.FavoriteDao
-import com.credo.soundgroove.MetadataOverrideDao
+import androidx.room.withTransaction
 import com.credo.soundgroove.MetadataOverrideEntity
-import com.credo.soundgroove.PlaylistDao
 import com.credo.soundgroove.PlaylistEntity
 import com.credo.soundgroove.PlaylistSongEntity
-import com.credo.soundgroove.RecentlyPlayedDao
+import com.credo.soundgroove.SoundGrooveDatabase
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.SmartPlaylistIds
 import com.credo.soundgroove.data.model.Song
@@ -15,27 +13,29 @@ import com.credo.soundgroove.toRecentlyPlayedEntity
 import com.credo.soundgroove.toSong
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 class DatabaseRepository(
-    private val favoriteDao: FavoriteDao,
-    private val recentlyPlayedDao: RecentlyPlayedDao,
-    private val playlistDao: PlaylistDao,
-    private val metadataOverrideDao: MetadataOverrideDao
+    private val db: SoundGrooveDatabase
 ) {
+    private val favoriteDao = db.favoriteDao()
+    private val recentlyPlayedDao = db.recentlyPlayedDao()
+    private val playlistDao = db.playlistDao()
+    private val metadataOverrideDao = db.metadataOverrideDao()
+
     // --- Favorites ---
     fun getFavorites(): Flow<List<Song>> = favoriteDao.getAll().map { list ->
         list.map { it.toSong() }
     }
 
     suspend fun toggleFavorite(song: Song) {
-        val isFav = favoriteDao.isFavorite(song.id)
-        if (isFav) {
-            favoriteDao.delete(song.id)
-        } else {
-            favoriteDao.insert(song.toFavoriteEntity())
+        db.withTransaction {
+            val isFav = favoriteDao.isFavorite(song.id)
+            if (isFav) {
+                favoriteDao.delete(song.id)
+            } else {
+                favoriteDao.insert(song.toFavoriteEntity())
+            }
         }
     }
 
@@ -51,17 +51,7 @@ class DatabaseRepository(
     }
 
     suspend fun addRecentlyPlayed(song: Song) {
-        val existing = recentlyPlayedDao.getBySongId(song.id)
-        val entity = if (existing != null) {
-            song.toRecentlyPlayedEntity().copy(
-                playedAt = System.currentTimeMillis(),
-                playCount = existing.playCount + 1
-            )
-        } else {
-            song.toRecentlyPlayedEntity()
-        }
-        recentlyPlayedDao.insert(entity)
-        recentlyPlayedDao.trimToLimit()
+        recentlyPlayedDao.upsertAndTrim(song.toRecentlyPlayedEntity())
     }
 
     suspend fun clearRecentlyPlayed() {
@@ -69,22 +59,24 @@ class DatabaseRepository(
     }
 
     // --- Playlists ---
+    /**
+     * Charge playlists + toutes les entrées en **2 Flux** (pas 1 requête par playlist).
+     * Les songs sont groupées en mémoire — adapté aux bibliothèques locales typiques.
+     */
     fun getAllPlaylists(): Flow<List<Playlist>> {
-        return playlistDao.getAllPlaylists().flatMapLatest { entities ->
-            if (entities.isEmpty()) {
-                flowOf(emptyList())
-            } else {
-                combine(
-                    entities.map { entity ->
-                        playlistDao.getSongsForPlaylist(entity.id).map { playlistSongs ->
-                            Playlist(
-                                id = entity.id,
-                                name = entity.name,
-                                songs = playlistSongs.map { it.toSong() }
-                            )
-                        }
-                    }
-                ) { playlists -> playlists.toList() }
+        return combine(
+            playlistDao.getAllPlaylists(),
+            playlistDao.getAllPlaylistSongs()
+        ) { entities, allSongs ->
+            val byPlaylist = allSongs.groupBy { it.playlistId }
+            entities.map { entity ->
+                Playlist(
+                    id = entity.id,
+                    name = entity.name,
+                    songs = byPlaylist[entity.id]
+                        .orEmpty()
+                        .map { it.toSong() }
+                )
             }
         }
     }
@@ -121,8 +113,8 @@ class DatabaseRepository(
 
     suspend fun deletePlaylist(playlistId: Long) {
         if (SmartPlaylistIds.isSmart(playlistId)) return
-        playlistDao.clearPlaylist(playlistId)
-        playlistDao.deletePlaylist(playlistId)
+        // FK ON DELETE CASCADE retire playlist_songs automatiquement.
+        playlistDao.deletePlaylistWithSongs(playlistId)
     }
 
     suspend fun renamePlaylist(playlistId: Long, newName: String) {
@@ -147,17 +139,29 @@ class DatabaseRepository(
 
     suspend fun addSongsToPlaylist(playlistId: Long, songs: List<Song>, startPosition: Int) {
         if (SmartPlaylistIds.isSmart(playlistId) || songs.isEmpty()) return
-        val existingIds = playlistDao.getAllPlaylistSongsOnce()
-            .asSequence()
-            .filter { it.playlistId == playlistId }
-            .map { it.songId }
-            .toHashSet()
-        var position = startPosition
-        songs.forEach { song ->
-            if (song.id in existingIds) return@forEach
-            addSongToPlaylist(playlistId, song, position)
-            existingIds.add(song.id)
-            position++
+        db.withTransaction {
+            val existingIds = playlistDao.getSongIdsForPlaylist(playlistId).toHashSet()
+            var position = startPosition
+            val toInsert = ArrayList<PlaylistSongEntity>(songs.size)
+            for (song in songs) {
+                if (song.id in existingIds) continue
+                toInsert.add(
+                    PlaylistSongEntity(
+                        playlistId = playlistId,
+                        songId = song.id,
+                        title = song.title,
+                        artist = song.artist,
+                        uri = song.uri.toString(),
+                        albumArtUri = song.albumArtUri?.toString(),
+                        position = position
+                    )
+                )
+                existingIds.add(song.id)
+                position++
+            }
+            if (toInsert.isNotEmpty()) {
+                playlistDao.insertSongs(toInsert)
+            }
         }
     }
 
@@ -172,28 +176,32 @@ class DatabaseRepository(
     suspend fun getPlaylistsSnapshot(): List<Playlist> {
         val entities = playlistDao.getAllPlaylistsOnce()
         val allSongs = playlistDao.getAllPlaylistSongsOnce()
+        val byPlaylist = allSongs.groupBy { it.playlistId }
         return entities.map { entity ->
             Playlist(
                 id = entity.id,
                 name = entity.name,
-                songs = allSongs
-                    .filter { it.playlistId == entity.id }
-                    .sortedBy { it.position }
+                songs = byPlaylist[entity.id]
+                    .orEmpty()
                     .map { it.toSong() }
             )
         }
     }
 
     suspend fun replaceLibraryData(favorites: List<Song>, playlists: List<Playlist>) {
-        favoriteDao.clearAll()
-        favorites.forEach { favoriteDao.insert(it.toFavoriteEntity()) }
+        db.withTransaction {
+            favoriteDao.clearAll()
+            if (favorites.isNotEmpty()) {
+                favoriteDao.insertAll(favorites.map { it.toFavoriteEntity() })
+            }
 
-        playlistDao.clearAllSongs()
-        playlistDao.clearAllPlaylists()
-        playlists.forEach { playlist ->
-            playlistDao.insertPlaylist(PlaylistEntity(playlist.id, playlist.name))
-            playlist.songs.forEachIndexed { index, song ->
-                playlistDao.insertSong(
+            // CASCADE : supprimer les playlists retire aussi playlist_songs.
+            playlistDao.clearAllPlaylists()
+            if (playlists.isEmpty()) return@withTransaction
+
+            playlistDao.insertPlaylists(playlists.map { PlaylistEntity(it.id, it.name) })
+            val songRows = playlists.flatMap { playlist ->
+                playlist.songs.mapIndexed { index, song ->
                     PlaylistSongEntity(
                         playlistId = playlist.id,
                         songId = song.id,
@@ -203,9 +211,45 @@ class DatabaseRepository(
                         albumArtUri = song.albumArtUri?.toString(),
                         position = index
                     )
-                )
+                }
+            }
+            if (songRows.isNotEmpty()) {
+                playlistDao.insertSongs(songRows)
             }
         }
+    }
+
+    /**
+     * Retire les références Room vers des MediaStore IDs absents du scan courant.
+     * Ne fait rien si [validSongIds] est vide (scan échoué / permissions) pour ne pas
+     * vider favoris/playlists par accident.
+     */
+    suspend fun purgeOrphanSongReferences(validSongIds: Set<Long>) {
+        if (validSongIds.isEmpty()) return
+
+        db.withTransaction {
+            deleteOrphanIds(favoriteDao.getAllSongIds(), validSongIds) { favoriteDao.deleteByIds(it) }
+            deleteOrphanIds(recentlyPlayedDao.getAllSongIds(), validSongIds) {
+                recentlyPlayedDao.deleteByIds(it)
+            }
+            deleteOrphanIds(playlistDao.getAllSongIds(), validSongIds) {
+                playlistDao.removeSongsByIds(it)
+            }
+            deleteOrphanIds(metadataOverrideDao.getAllSongIds(), validSongIds) {
+                metadataOverrideDao.deleteByIds(it)
+            }
+        }
+    }
+
+    private suspend fun deleteOrphanIds(
+        presentIds: List<Long>,
+        validSongIds: Set<Long>,
+        deleteChunk: suspend (List<Long>) -> Unit
+    ) {
+        val orphans = presentIds.filter { it !in validSongIds }
+        if (orphans.isEmpty()) return
+        // Limite variables SQLite (~999) : chunks de 400.
+        orphans.chunked(ORPHAN_DELETE_CHUNK).forEach { chunk -> deleteChunk(chunk) }
     }
 
     // --- Metadata overrides ---
@@ -220,28 +264,36 @@ class DatabaseRepository(
         artist: String?,
         album: String?
     ) {
-        val existing = metadataOverrideDao.getBySongId(songId)
-        metadataOverrideDao.upsert(
-            MetadataOverrideEntity(
-                songId = songId,
-                title = title?.takeIf { it.isNotBlank() } ?: existing?.title,
-                artist = artist?.takeIf { it.isNotBlank() } ?: existing?.artist,
-                album = album?.takeIf { it.isNotBlank() } ?: existing?.album,
-                coverArtUri = existing?.coverArtUri
+        db.withTransaction {
+            val existing = metadataOverrideDao.getBySongId(songId)
+            metadataOverrideDao.upsert(
+                MetadataOverrideEntity(
+                    songId = songId,
+                    title = title?.takeIf { it.isNotBlank() } ?: existing?.title,
+                    artist = artist?.takeIf { it.isNotBlank() } ?: existing?.artist,
+                    album = album?.takeIf { it.isNotBlank() } ?: existing?.album,
+                    coverArtUri = existing?.coverArtUri
+                )
             )
-        )
+        }
     }
 
     suspend fun saveCoverArtOverride(songId: Long, coverArtUri: String) {
-        val existing = metadataOverrideDao.getBySongId(songId)
-        metadataOverrideDao.upsert(
-            MetadataOverrideEntity(
-                songId = songId,
-                title = existing?.title,
-                artist = existing?.artist,
-                album = existing?.album,
-                coverArtUri = coverArtUri
+        db.withTransaction {
+            val existing = metadataOverrideDao.getBySongId(songId)
+            metadataOverrideDao.upsert(
+                MetadataOverrideEntity(
+                    songId = songId,
+                    title = existing?.title,
+                    artist = existing?.artist,
+                    album = existing?.album,
+                    coverArtUri = coverArtUri
+                )
             )
-        )
+        }
+    }
+
+    companion object {
+        private const val ORPHAN_DELETE_CHUNK = 400
     }
 }

@@ -12,12 +12,14 @@ import com.credo.soundgroove.util.AppLinks
 object PlayerActions {
 
     fun shareSong(context: Context, song: Song) {
-        val text = AppLinks.shareText(song.title, song.artist)
+        val title = SongDisplay.title(song.title, song.folderPath)
+        val artist = SongDisplay.artist(song.artist, song.title, song.folderPath)
+        val text = AppLinks.shareText(title, artist)
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "audio/*"
             putExtra(Intent.EXTRA_STREAM, song.uri)
             putExtra(Intent.EXTRA_TEXT, text)
-            putExtra(Intent.EXTRA_SUBJECT, song.title)
+            putExtra(Intent.EXTRA_SUBJECT, title)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             clipData = android.content.ClipData.newRawUri("audio", song.uri)
         }

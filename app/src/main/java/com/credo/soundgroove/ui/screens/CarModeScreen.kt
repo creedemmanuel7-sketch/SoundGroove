@@ -218,7 +218,11 @@ fun CarModeScreen(
                             fontWeight = FontWeight.Bold,
                         )
                     }
-                    items(shortFavorites, key = { "fav-${it.id}" }) { song ->
+                    items(
+                        shortFavorites,
+                        key = { "fav-${it.id}" },
+                        contentType = { "song_row" }
+                    ) { song ->
                         CarSongRow(
                             song = song,
                             onClick = { onPlaySong(song, queueForSong.ifEmpty { listOf(song) }) },
@@ -235,7 +239,11 @@ fun CarModeScreen(
                             fontWeight = FontWeight.Bold,
                         )
                     }
-                    items(shortRecent, key = { "recent-${it.id}" }) { song ->
+                    items(
+                        shortRecent,
+                        key = { "recent-${it.id}" },
+                        contentType = { "song_row" }
+                    ) { song ->
                         CarSongRow(
                             song = song,
                             onClick = { onPlaySong(song, queueForSong.ifEmpty { listOf(song) }) },
@@ -301,7 +309,7 @@ private fun CarSongRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = song.title,
+                text = com.credo.soundgroove.util.SongDisplay.title(song.title, song.folderPath),
                 color = CarText,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -309,7 +317,11 @@ private fun CarSongRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = song.artist,
+                text = com.credo.soundgroove.util.SongDisplay.artist(
+                    song.artist,
+                    song.title,
+                    song.folderPath,
+                ),
                 color = CarMuted,
                 fontSize = 14.sp,
                 maxLines = 1,

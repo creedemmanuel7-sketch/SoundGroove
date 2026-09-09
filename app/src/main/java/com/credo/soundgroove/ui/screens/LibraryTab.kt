@@ -40,14 +40,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,15 +56,15 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.session.MediaController
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.SmartPlaylistIds
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.ListeningSectionHeader
 import com.credo.soundgroove.ui.components.SongItem
 import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.components.formatDuration
+import com.credo.soundgroove.ui.motion.SgCoverImage
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.ui.util.songsCountLabel
 import com.credo.soundgroove.ui.util.tracksCountLabel
@@ -145,11 +143,12 @@ fun LibraryTab(
 
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // Contenu principal
+        // Contenu principal — plafonné / centré sur tablette & fenêtres larges.
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = SgSpacing.screenHorizontal)
+                .sgConstrainWidth(sgContentMaxWidth())
+                .padding(horizontal = sgScreenHorizontal())
         ) {
             Spacer(modifier = Modifier.height(SgSpacing.screenTop))
 
@@ -160,7 +159,7 @@ fun LibraryTab(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = tracksCountLabel(songs.size),
+                text = "Ta collection d'écoute",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextTertiary,
                 modifier = Modifier.padding(top = 4.dp)
@@ -298,8 +297,8 @@ fun LibraryTab(
                             ) {
                                 Text(
                                     text = tracksCountLabel(songs.size),
-                                    color = TextSecondary,
-                                    fontSize = 13.sp
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = TextTertiary
                                 )
                                 // Chip Tri = utility (surface-2 + text-secondary)
                                 Row(
@@ -331,8 +330,8 @@ fun LibraryTab(
                             if (displaySongs.isEmpty()) {
                                 SgEmptyState(
                                     iconPainter = painterResource(R.drawable.ic_songs),
-                                    title = "Bibliothèque vide",
-                                    subtitle = "Aucun morceau détecté. Vérifiez les permissions ou ajoutez des fichiers audio sur l'appareil.",
+                                    title = "Rien à écouter pour l'instant",
+                                    subtitle = "Ajoute des fichiers audio sur l'appareil ou vérifie les permissions pour remplir ton espace.",
                                     modifier = Modifier.weight(1f)
                                 )
                             } else {
@@ -358,7 +357,11 @@ fun LibraryTab(
                                     verticalArrangement = Arrangement.spacedBy(SgSpacing.listItemGap),
                                     contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)
                                 ) {
-                                    items(displaySongs, key = { it.id }) { song ->
+                                    items(
+                                        items = displaySongs,
+                                        key = { it.id },
+                                        contentType = { "song_row" }
+                                    ) { song ->
                                         com.credo.soundgroove.ui.components.SongListItem(
                                             song = song,
                                             isFavorite = favoriteSongs.any { it.id == song.id },
@@ -381,7 +384,10 @@ fun LibraryTab(
                                     },
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
-                                        .padding(end = SgSpacing.sm, bottom = SgSpacing.lg)
+                                        .padding(
+                                            end = SgSpacing.sm,
+                                            bottom = SgSpacing.fabAboveMiniInset
+                                        )
                                 )
                             }
                             }
@@ -412,12 +418,18 @@ fun LibraryTab(
                         }
                     }
 
-                1 -> LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(SgSpacing.md),
-                    contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)
-                ) {
-                    val rows = albums.chunked(2)
-                    items(rows, key = { row -> row.joinToString("|") { it.first } }) { rowAlbums ->
+                1 -> {
+                    val albumColumns = sgAlbumGridColumns()
+                    val rows = albums.chunked(albumColumns)
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(SgSpacing.md),
+                        contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)
+                    ) {
+                    items(
+                        items = rows,
+                        key = { row -> row.joinToString("|") { it.first } },
+                        contentType = { "album_row" }
+                    ) { rowAlbums ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(SgSpacing.md)
@@ -440,13 +452,11 @@ fun LibraryTab(
                                     ) {
                                         val coverSong =
                                             albumSongs.firstOrNull { it.albumArtUri != null }
-                                        if (coverSong?.albumArtUri != null) {
-                                            AsyncImage(
-                                                model = ImageRequest.Builder(LocalContext.current)
-                                                    .data(coverSong.albumArtUri)
-                                                    .crossfade(true)
-                                                    .build(),
-                                                contentDescription = null,
+                                            if (coverSong?.albumArtUri != null) {
+                                            SgCoverImage(
+                                                albumArtUri = coverSong.albumArtUri,
+                                                uriCrossfade = false,
+                                                decodeEdgeDp = 160.dp,
                                                 contentScale = ContentScale.Crop,
                                                 modifier = Modifier.fillMaxSize()
                                             )
@@ -498,8 +508,11 @@ fun LibraryTab(
                                     }
                                 }
                             }
-                            if (rowAlbums.size == 1) Spacer(modifier = Modifier.weight(1f))
+                            repeat(albumColumns - rowAlbums.size) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
                         }
+                    }
                     }
                 }
 
@@ -507,7 +520,11 @@ fun LibraryTab(
                     verticalArrangement = Arrangement.spacedBy(SgSpacing.sm),
                     contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)
                 ) {
-                    items(artists, key = { it }) { artist ->
+                    items(
+                        items = artists,
+                        key = { it },
+                        contentType = { "artist_row" }
+                    ) { artist ->
                         val artistSongs = songs.filter { it.artist == artist }
                         GlassCard(
                             modifier = Modifier
@@ -611,7 +628,7 @@ fun LibraryTab(
                                 SgEmptyState(
                                     iconPainter = painterResource(R.drawable.ic_queue),
                                     title = "Aucune playlist",
-                                    subtitle = "Crée ta première playlist pour organiser tes morceaux préférés.",
+                                    subtitle = "Compose ta première sélection pour enchaîner tes morceaux préférés.",
                                     actionLabel = "Créer une playlist",
                                     accentColor = accentColor,
                                     onAction = { showCreateSheet = true },
@@ -619,7 +636,11 @@ fun LibraryTab(
                                 )
                             } else {
                                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)) {
-                                    items(playlists, key = { it.id }) { playlist ->
+                                    items(
+                                        items = playlists,
+                                        key = { it.id },
+                                        contentType = { "playlist_row" }
+                                    ) { playlist ->
                                         var showMenu by remember { mutableStateOf(false) }
                                         var showRenameDialog by remember { mutableStateOf(false) }
 
@@ -649,12 +670,10 @@ fun LibraryTab(
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 if (playlist.songs.isNotEmpty() && playlist.songs.first().albumArtUri != null) {
-                                                    AsyncImage(
-                                                        model = ImageRequest.Builder(LocalContext.current)
-                                                            .data(playlist.songs.first().albumArtUri)
-                                                            .crossfade(true)
-                                                            .build(),
-                                                        contentDescription = null,
+                                                    SgCoverImage(
+                                                        albumArtUri = playlist.songs.first().albumArtUri,
+                                                        uriCrossfade = false,
+                                                        decodeEdgeDp = 52.dp,
                                                         contentScale = ContentScale.Crop,
                                                         modifier = Modifier.fillMaxSize()
                                                     )
@@ -918,7 +937,7 @@ fun LibraryTab(
                         SgEmptyState(
                             iconPainter = painterResource(R.drawable.ic_songs),
                             title = "Aucun dossier trouvé",
-                            subtitle = "Scannez votre bibliothèque ou vérifiez les permissions d'accès aux fichiers audio.",
+                            subtitle = "Scanne ta bibliothèque ou vérifie les permissions pour retrouver tes dossiers d'écoute.",
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
@@ -927,16 +946,17 @@ fun LibraryTab(
                             contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)
                         ) {
                             if (hiddenFolders.isNotEmpty()) {
-                                item {
-                                    Text(
-                                        text = "DOSSIERS MASQUÉS",
-                                        color = TextTertiary,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
+                                item(contentType = "section_header") {
+                                    ListeningSectionHeader(
+                                        title = "Dossiers masqués",
                                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
                                     )
                                 }
-                                items(hiddenFolders.toList(), key = { "hidden_$it" }) { hiddenPath ->
+                                items(
+                                    items = hiddenFolders.toList(),
+                                    key = { "hidden_$it" },
+                                    contentType = { "folder_hidden_row" }
+                                ) { hiddenPath ->
                                     val hiddenLabel = hiddenPath.substringAfterLast('/').ifBlank { hiddenPath }
                                     GlassCard(
                                         modifier = Modifier
@@ -966,7 +986,11 @@ fun LibraryTab(
                                 }
                                 item { Spacer(modifier = Modifier.height(8.dp)) }
                             }
-                            items(folders, key = { it.first }) { (folderName, folderSongs) ->
+                            items(
+                                items = folders,
+                                key = { it.first },
+                                contentType = { "folder_row" }
+                            ) { (folderName, folderSongs) ->
                                 val folderLabel = folderName.substringAfterLast('/').ifBlank { "Dossier inconnu" }
                                 val parentPath = folderName.substringBeforeLast('/', "").takeIf { it.isNotBlank() }
                                 Box {
@@ -1025,7 +1049,7 @@ fun LibraryTab(
                         SgEmptyState(
                             iconPainter = painterResource(R.drawable.ic_favorite_outline),
                             title = "Aucun favori pour l'instant",
-                            subtitle = "Appuie sur le cœur d'un morceau pour le retrouver ici rapidement.",
+                            subtitle = "Touche le cœur sur un titre pour le retrouver ici, même hors connexion.",
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
@@ -1034,7 +1058,11 @@ fun LibraryTab(
                                 verticalArrangement = Arrangement.spacedBy(SgSpacing.listItemGap),
                                 contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom)
                             ) {
-                                items(favoriteSongs, key = { it.id }) { song ->
+                                items(
+                                    items = favoriteSongs,
+                                    key = { it.id },
+                                    contentType = { "song_row" }
+                                ) { song ->
                                     GlassCard(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -1063,12 +1091,10 @@ fun LibraryTab(
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 if (song.albumArtUri != null) {
-                                                    AsyncImage(
-                                                        model = ImageRequest.Builder(LocalContext.current)
-                                                            .data(song.albumArtUri)
-                                                            .crossfade(true)
-                                                            .build(),
-                                                        contentDescription = null,
+                                                    SgCoverImage(
+                                                        albumArtUri = song.albumArtUri,
+                                                        uriCrossfade = false,
+                                                        decodeEdgeDp = 46.dp,
                                                         contentScale = ContentScale.Crop,
                                                         modifier = Modifier.fillMaxSize()
                                                     )
@@ -1289,7 +1315,11 @@ fun FolderDetailContent(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(top = 4.dp, bottom = SgSpacing.contentInsetBottom)
         ) {
-            items(folderSongs, key = { it.id }) { song ->
+            items(
+                items = folderSongs,
+                key = { it.id },
+                contentType = { "song_row" }
+            ) { song ->
                 com.credo.soundgroove.ui.components.SongListItem(
                     song = song,
                     isFavorite = favoriteSongs.any { it.id == song.id },
@@ -1409,7 +1439,11 @@ fun PlaylistScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(songs) { song ->
+                items(
+                    songs,
+                    key = { it.id },
+                    contentType = { "song_row" }
+                ) { song ->
                     SongItem(
                         song = song,
                         isPlaying = currentSong?.id == song.id && isPlaying,

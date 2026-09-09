@@ -96,7 +96,11 @@ object ShareCardGenerator {
         val titleY = artTop + artSize + if (format == ShareCardFormat.SQUARE) 80f else 96f
         drawTextWithShadow(
             canvas,
-            ellipsize(song.title, titlePaint, textMaxWidth),
+            ellipsize(
+                SongDisplay.title(song.title, song.folderPath),
+                titlePaint,
+                textMaxWidth,
+            ),
             textCenterX,
             titleY,
             titlePaint,
@@ -105,7 +109,11 @@ object ShareCardGenerator {
         )
         drawTextWithShadow(
             canvas,
-            ellipsize(song.artist, artistPaint, textMaxWidth),
+            ellipsize(
+                SongDisplay.artist(song.artist, song.title, song.folderPath),
+                artistPaint,
+                textMaxWidth,
+            ),
             textCenterX,
             titleY + if (format == ShareCardFormat.SQUARE) 62f else 72f,
             artistPaint,
@@ -148,7 +156,10 @@ object ShareCardGenerator {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "image/png"
             putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_TEXT, "${song.title} — ${song.artist}")
+            putExtra(
+                Intent.EXTRA_TEXT,
+                "${SongDisplay.title(song.title, song.folderPath)} — ${SongDisplay.artist(song.artist, song.title, song.folderPath)}"
+            )
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             clipData = android.content.ClipData.newRawUri("image", uri)
         }

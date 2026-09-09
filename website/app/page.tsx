@@ -1,11 +1,24 @@
+import dynamic from "next/dynamic";
 import { DownloadButton } from "@/components/DownloadButton";
 import { AppMockup } from "@/components/AppMockup";
-import { Features } from "@/components/Features";
-import { AppScreens } from "@/components/AppScreens";
-import { Privacy } from "@/components/Privacy";
-import { InstallGuide } from "@/components/InstallGuide";
-import { FAQ } from "@/components/FAQ";
-import { Footer } from "@/components/Footer";
+
+/** Below-the-fold : hors du bundle critique pour FCP / TBT. */
+const Features = dynamic(
+  () => import("@/components/Features").then((m) => m.Features),
+);
+const AppScreens = dynamic(
+  () => import("@/components/AppScreens").then((m) => m.AppScreens),
+);
+const Privacy = dynamic(
+  () => import("@/components/Privacy").then((m) => m.Privacy),
+);
+const InstallGuide = dynamic(
+  () => import("@/components/InstallGuide").then((m) => m.InstallGuide),
+);
+const FAQ = dynamic(() => import("@/components/FAQ").then((m) => m.FAQ));
+const Footer = dynamic(
+  () => import("@/components/Footer").then((m) => m.Footer),
+);
 
 export default function HomePage() {
   return (
@@ -22,6 +35,7 @@ export default function HomePage() {
                 alt=""
                 width={48}
                 height={48}
+                decoding="async"
               />
               <span className="hero__brand">SoundGroove</span>
             </div>

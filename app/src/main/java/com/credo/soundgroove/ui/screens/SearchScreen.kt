@@ -43,6 +43,7 @@ import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.AlbumArtThumb
 import com.credo.soundgroove.ui.components.ArtistAvatarView
+import com.credo.soundgroove.ui.components.ListeningSectionHeader
 import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.components.SongListItem
 import com.credo.soundgroove.ui.theme.*
@@ -70,13 +71,22 @@ fun SearchScreen(
     onArtistClick: (String) -> Unit,
     onPlaylistClick: (Long) -> Unit,
     onFolderClick: (String) -> Unit,
-    onMenuClick: (Song) -> Unit,
+    onMenuClick: (Song) -> Unit = {},
+    onToggleFavorite: (Song) -> Unit = {},
+    onPlayNext: (Song) -> Unit = {},
+    onAddToQueue: (Song) -> Unit = {},
+    onAddToPlaylist: (Song) -> Unit = {},
+    onViewSongInfo: (Song) -> Unit = {},
+    onShareCard: (Song) -> Unit = {},
+    onEditMetadata: (Song) -> Unit = {},
+    onSetCoverArt: (Song) -> Unit = {},
     onSearchSubmitted: (String) -> Unit = {},
     onClearSearchHistory: () -> Unit = {},
     searchViewModel: SearchViewModel = viewModel()
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf<SearchFilter?>(null) }
+    var menuSong by remember { mutableStateOf<Song?>(null) }
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
@@ -144,6 +154,8 @@ fun SearchScreen(
             focusRequester.requestFocus()
         }
     }
+
+    val overlayBottomInset = sgOverlayBottomInset()
 
     Box(
         modifier = Modifier
@@ -222,7 +234,8 @@ fun SearchScreen(
                 SgEmptyState(
                     icon = Icons.Default.Lock,
                     title = "Accès à la musique requis",
-                    subtitle = "Autorisez SoundGroove à lire vos fichiers audio pour rechercher dans votre bibliothèque.",
+                    subtitle = "Sans permission, la recherche reste vide (pas de crash). " +
+                        "Autorisez SoundGroove à lire vos fichiers audio, ou activez-la dans Réglages → Apps → SoundGroove.",
                     actionLabel = "Accorder la permission",
                     accentColor = accentColor,
                     onAction = { permissionLauncher.launch(audioPermission) }
@@ -236,50 +249,49 @@ fun SearchScreen(
 
                 LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = SgSpacing.lg, vertical = SgSpacing.md)
+                        contentPadding = PaddingValues(
+                            start = SgSpacing.lg,
+                            end = SgSpacing.lg,
+                            top = SgSpacing.md,
+                            bottom = overlayBottomInset
+                        )
                     ) {
-                        item {
+                        item(contentType = "empty_prompt") {
                             SgEmptyState(
                                 icon = Icons.Default.Search,
-                                title = "Rechercher dans votre bibliothèque",
+                                title = "Cherche dans ton espace d'écoute",
                                 subtitle = if (selectedFilter != null) {
-                                    "Filtre « ${selectedFilter!!.label} » actif — saisissez un mot-clé."
+                                    "Filtre « ${selectedFilter!!.label} » actif — saisis un mot-clé."
                                 } else {
-                                    "Saisissez un titre, un album, un artiste, une playlist, un dossier ou des paroles en cache."
+                                    "Titre, album, artiste, playlist, dossier ou paroles en cache."
                                 },
                                 compact = true,
                                 accentColor = accentColor
                             )
                             Spacer(modifier = Modifier.height(SgSpacing.lg))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Recherches récentes",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextTertiary,
-                                    modifier = Modifier.padding(horizontal = SgSpacing.sm)
-                                )
-                                if (recentSearches.isNotEmpty()) {
-                                    TextButton(onClick = onClearSearchHistory) {
-                                        Text("Effacer", color = accentColor, style = MaterialTheme.typography.labelMedium)
-                                    }
-                                }
-                            }
+                            ListeningSectionHeader(
+                                title = "Recherches récentes",
+                                actionLabel = if (recentSearches.isNotEmpty()) "Effacer" else null,
+                                accentColor = accentColor,
+                                onAction = if (recentSearches.isNotEmpty()) onClearSearchHistory else null,
+                                modifier = Modifier.padding(horizontal = SgSpacing.sm)
+                            )
                         }
                         if (recentSearches.isEmpty()) {
-                            item {
+                            item(contentType = "empty_recent") {
                                 Text(
-                                    text = "Vos recherches récentes apparaîtront ici.",
+                                    text = "Tes recherches d'écoute apparaîtront ici.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = TextSecondary,
                                     modifier = Modifier.padding(bottom = SgSpacing.md)
                                 )
                             }
                         }
-                        items(recentSearches) { term ->
+                        items(
+                            items = recentSearches,
+                            key = { it },
+                            contentType = { "recent_search" }
+                        ) { term ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -305,11 +317,25 @@ fun SearchScreen(
 
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = SgSpacing.sm, vertical = SgSpacing.xs)
+                        contentPadding = PaddingValues(
+                            start = SgSpacing.sm,
+                            end = SgSpacing.sm,
+                            top = SgSpacing.xs,
+                            bottom = overlayBottomInset
+                        )
                     ) {
                     if (suggestions.isNotEmpty()) {
-                        item { SectionTitle("Suggestions") }
-                        items(suggestions, key = { "${it.kind}:${it.label}" }) { suggestion ->
+                        item(contentType = "section_header") {
+                            ListeningSectionHeader(
+                                title = "Suggestions",
+                                modifier = Modifier.padding(horizontal = SgSpacing.sm, vertical = SgSpacing.md)
+                            )
+                        }
+                        items(
+                            items = suggestions,
+                            key = { "${it.kind}:${it.label}" },
+                            contentType = { "suggestion_row" }
+                        ) { suggestion ->
                             SearchSuggestionRow(
                                 suggestion = suggestion,
                                 accentColor = accentColor,
@@ -322,18 +348,18 @@ fun SearchScreen(
                     }
 
                     if (!hasResults) {
-                        item {
+                        item(contentType = "empty_results") {
                             SgEmptyState(
                                 icon = Icons.Default.SearchOff,
                                 title = "Aucun résultat pour « $searchQuery »",
                                 subtitle = when (selectedFilter) {
-                                    SearchFilter.Songs -> "Essayez un autre titre ou artiste."
-                                    SearchFilter.Albums -> "Aucun album ne correspond à cette recherche."
-                                    SearchFilter.Artists -> "Aucun artiste ne correspond à cette recherche."
+                                    SearchFilter.Songs -> "Essaie un autre titre, artiste, ou retire un filtre."
+                                    SearchFilter.Albums -> "Aucun album ne correspond. Vérifie l'orthographe ou cherche par artiste."
+                                    SearchFilter.Artists -> "Aucun artiste trouvé. Un extrait du nom suffit souvent."
                                     SearchFilter.Playlists -> "Aucune playlist ne correspond à cette recherche."
-                                    SearchFilter.Folders -> "Aucun dossier ne correspond à cette recherche."
-                                    SearchFilter.Lyrics -> "Aucun morceau avec paroles en cache ne correspond. Ouvrez le lecteur pour importer des paroles."
-                                    null -> "Essayez un autre mot-clé ou changez de filtre."
+                                    SearchFilter.Folders -> "Aucun dossier ne correspond. Les dossiers viennent de ta bibliothèque locale."
+                                    SearchFilter.Lyrics -> "Pas de paroles en cache pour cette recherche. Ouvre un titre puis importe des paroles."
+                                    null -> "Essaie un autre mot-clé, ou change de filtre en haut."
                                 },
                                 compact = true
                             )
@@ -341,23 +367,44 @@ fun SearchScreen(
                     }
 
                     if (showSongs && filteredSongs.isNotEmpty()) {
-                        item { SectionTitle(songsCountLabel(filteredSongs.size)) }
-                        items(filteredSongs, key = { it.id }) { song ->
+                        item(contentType = "section_header") {
+                            ListeningSectionHeader(
+                                title = songsCountLabel(filteredSongs.size),
+                                modifier = Modifier.padding(horizontal = SgSpacing.sm, vertical = SgSpacing.md)
+                            )
+                        }
+                        items(
+                            items = filteredSongs,
+                            key = { it.id },
+                            contentType = { "song_row" }
+                        ) { song ->
                             SongListItem(
                                 song = song,
                                 isFavorite = favoriteSongs.any { it.id == song.id },
                                 isCurrentSong = currentSong?.id == song.id,
                                 accentColor = accentColor,
                                 onClick = { onPlaySong(song, filteredSongs) },
-                                onMenuClick = { onMenuClick(song) },
+                                onMenuClick = {
+                                    menuSong = song
+                                    onMenuClick(song)
+                                },
                                 enablePlayerSharedElements = true
                             )
                         }
                     }
 
                     if (showAlbums && filteredAlbums.isNotEmpty()) {
-                        item { SectionTitle("Albums") }
-                        items(filteredAlbums, key = { it.first }) { (albumName, albumSongs) ->
+                        item(contentType = "section_header") {
+                            ListeningSectionHeader(
+                                title = "Albums",
+                                modifier = Modifier.padding(horizontal = SgSpacing.sm, vertical = SgSpacing.md)
+                            )
+                        }
+                        items(
+                            items = filteredAlbums,
+                            key = { it.first },
+                            contentType = { "album_row" }
+                        ) { (albumName, albumSongs) ->
                             val coverUri =
                                 albumSongs.firstOrNull { it.albumArtUri != null }?.albumArtUri
                             SearchEntityRow(
@@ -372,6 +419,9 @@ fun SearchScreen(
                                         size = 46.dp,
                                         cornerRadius = SgRadius.xl,
                                         accentColor = accentColor,
+                                        fallbackSeed = albumName,
+                                        placeholderLabel = albumName.firstOrNull { it.isLetterOrDigit() }
+                                            ?.uppercaseChar()?.toString() ?: "?",
                                         modifier = Modifier.sgSharedBounds(
                                             key = sgAlbumCoverSharedKey(albumName),
                                             clipShape = SgAlbumCoverSharedClip,
@@ -383,8 +433,17 @@ fun SearchScreen(
                     }
 
                     if (showArtists && filteredArtists.isNotEmpty()) {
-                        item { SectionTitle("Artistes") }
-                        items(filteredArtists, key = { it.first }) { (artistName, songCount) ->
+                        item(contentType = "section_header") {
+                            ListeningSectionHeader(
+                                title = "Artistes",
+                                modifier = Modifier.padding(horizontal = SgSpacing.sm, vertical = SgSpacing.md)
+                            )
+                        }
+                        items(
+                            items = filteredArtists,
+                            key = { it.first },
+                            contentType = { "artist_row" }
+                        ) { (artistName, songCount) ->
                             val coverUri = allSongs
                                 .firstOrNull { it.artist == artistName && it.albumArtUri != null }
                                 ?.albumArtUri
@@ -412,8 +471,17 @@ fun SearchScreen(
                     }
 
                     if (showPlaylists && filteredPlaylists.isNotEmpty()) {
-                        item { SectionTitle("Playlists") }
-                        items(filteredPlaylists, key = { it.id }) { playlist ->
+                        item(contentType = "section_header") {
+                            ListeningSectionHeader(
+                                title = "Playlists",
+                                modifier = Modifier.padding(horizontal = SgSpacing.sm, vertical = SgSpacing.md)
+                            )
+                        }
+                        items(
+                            items = filteredPlaylists,
+                            key = { it.id },
+                            contentType = { "playlist_row" }
+                        ) { playlist ->
                             SearchEntityRow(
                                 title = playlist.name,
                                 subtitle = songsCountLabel(playlist.songs.size),
@@ -425,8 +493,17 @@ fun SearchScreen(
                     }
 
                     if (showFolders && filteredFolders.isNotEmpty()) {
-                        item { SectionTitle("Dossiers") }
-                        items(filteredFolders, key = { it.first }) { (folderPath, folderSongs) ->
+                        item(contentType = "section_header") {
+                            ListeningSectionHeader(
+                                title = "Dossiers",
+                                modifier = Modifier.padding(horizontal = SgSpacing.sm, vertical = SgSpacing.md)
+                            )
+                        }
+                        items(
+                            items = filteredFolders,
+                            key = { it.first },
+                            contentType = { "folder_row" }
+                        ) { (folderPath, folderSongs) ->
                             val folderCountLabel = songsCountLabel(folderSongs.size)
                             SearchEntityRow(
                                 title = folderLabel(folderPath),
@@ -445,8 +522,17 @@ fun SearchScreen(
                     }
 
                     if (showLyrics && filteredLyricsMatches.isNotEmpty()) {
-                        item { SectionTitle("Paroles en cache") }
-                        items(filteredLyricsMatches, key = { "lyrics-${it.id}" }) { song ->
+                        item(contentType = "section_header") {
+                            ListeningSectionHeader(
+                                title = "Paroles en cache",
+                                modifier = Modifier.padding(horizontal = SgSpacing.sm, vertical = SgSpacing.md)
+                            )
+                        }
+                        items(
+                            items = filteredLyricsMatches,
+                            key = { "lyrics-${it.id}" },
+                            contentType = { "lyrics_row" }
+                        ) { song ->
                             SearchEntityRow(
                                 title = song.title,
                                 subtitle = "${SongDisplay.artist(song.artist)} · paroles disponibles",
@@ -457,9 +543,25 @@ fun SearchScreen(
                         }
                     }
 
-                    item { Spacer(modifier = Modifier.height(96.dp)) }
+                    item(contentType = "spacer") { Spacer(modifier = Modifier.height(96.dp)) }
                 }
             }
+        }
+
+        menuSong?.let { song ->
+            com.credo.soundgroove.ui.components.SongContextMenuSheet(
+                song = song,
+                isFavorite = favoriteSongs.any { it.id == song.id },
+                onToggleFavorite = { onToggleFavorite(song) },
+                onPlayNext = { onPlayNext(song); menuSong = null },
+                onAddToQueue = { onAddToQueue(song); menuSong = null },
+                onAddToPlaylist = { onAddToPlaylist(song); menuSong = null },
+                onViewInfo = { onViewSongInfo(song); menuSong = null },
+                onShareCard = { onShareCard(song); menuSong = null },
+                onEditMetadata = { onEditMetadata(song); menuSong = null },
+                onSetCoverArt = { onSetCoverArt(song); menuSong = null },
+                onDismiss = { menuSong = null }
+            )
         }
     }
 }
@@ -535,7 +637,11 @@ private fun SearchFilterRow(
                 onClick = { onFilterSelected(null) }
             )
         }
-        items(SearchFilter.entries) { filter ->
+        items(
+            SearchFilter.entries,
+            key = { it.name },
+            contentType = { "filter_chip" }
+        ) { filter ->
             SgChip(
                 text = filter.label,
                 selected = selectedFilter == filter,
@@ -546,16 +652,6 @@ private fun SearchFilterRow(
             )
         }
     }
-}
-
-@Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium,
-        color = TextTertiary,
-        modifier = Modifier.padding(horizontal = SgSpacing.sm, vertical = SgSpacing.md)
-    )
 }
 
 @Composable

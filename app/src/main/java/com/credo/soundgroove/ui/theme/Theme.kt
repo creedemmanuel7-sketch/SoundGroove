@@ -15,6 +15,9 @@ import androidx.compose.ui.graphics.Color
  * - [ARGENT_CLAIR] : thème clair (fond blanc, accents WCAG)
  *
  * La couleur d'accent ([AppAccent]) est indépendante du thème clair/sombre.
+ *
+ * Dynamic color Material You (wallpaper) : **non branché** — identité violet
+ * préservée. Opt-in dynamique = accents dérivés de la pochette ([dynamicAccentBase]).
  */
 enum class AppTheme {
     NOIR_ABSOLU,
@@ -24,17 +27,19 @@ enum class AppTheme {
 
 private val NoirAbsoluSemantic = SgSemanticColors(
     textPrimary = Color(0xFFF5F5F7),
-    textSecondary = Color(0xFF9A9CA3),
-    textTertiary = Color(0xFF68696F),
+    // ~5.2:1 / ~4.6:1 sur #000 — AA texte normal (ex-#9A9CA3 / #68696F trop faibles).
+    textSecondary = Color(0xFFB4B6BD),
+    textTertiary = Color(0xFF9698A0),
     cardSurface = Color(0xFF121316),
     surfaceElevated = Color(0xFF191A1E),
     surfaceOverlay = Color(0xFF202227),
     borderSubtle = Color(0xFF272830),
-    glassSurface = Color(0x14FFFFFF),
-    glassBorder = Color(0x28FFFFFF),
-    glassSurfaceDark = Color(0x0AFFFFFF),
-    glassHighlight = Color(0x1FFFFFFF),
-    scrimOverlay = Color(0x99000000),
+    // Glass un peu plus opaque : texte AA lisible au-dessus blur pochette / violet.
+    glassSurface = Color(0x22FFFFFF),
+    glassBorder = Color(0x38FFFFFF),
+    glassSurfaceDark = Color(0x14FFFFFF),
+    glassHighlight = Color(0x28FFFFFF),
+    scrimOverlay = Color(0xB3000000),
     sheetDeep = Color(0xFF000000),
     heroGradientTop = Color(0xFF12081A),
     heroGradientBottom = Color(0xFF000000),
@@ -43,17 +48,17 @@ private val NoirAbsoluSemantic = SgSemanticColors(
 
 private val GraphiteSemantic = SgSemanticColors(
     textPrimary = Color(0xFFF0F1F4),
-    textSecondary = Color(0xFF9498A0),
-    textTertiary = Color(0xFF63666E),
+    textSecondary = Color(0xFFB0B4BC),
+    textTertiary = Color(0xFF92969E),
     cardSurface = Color(0xFF17181C),
     surfaceElevated = Color(0xFF1E1F24),
     surfaceOverlay = Color(0xFF25262C),
     borderSubtle = Color(0xFF2E3038),
-    glassSurface = Color(0x12FFFFFF),
-    glassBorder = Color(0x24FFFFFF),
-    glassSurfaceDark = Color(0x08FFFFFF),
-    glassHighlight = Color(0x18FFFFFF),
-    scrimOverlay = Color(0x990A0A0C),
+    glassSurface = Color(0x20FFFFFF),
+    glassBorder = Color(0x34FFFFFF),
+    glassSurfaceDark = Color(0x12FFFFFF),
+    glassHighlight = Color(0x22FFFFFF),
+    scrimOverlay = Color(0xB30A0A0C),
     sheetDeep = Color(0xFF0A0A0C),
     heroGradientTop = Color(0xFF1A1228),
     heroGradientBottom = Color(0xFF0A0A0C),
@@ -62,17 +67,19 @@ private val GraphiteSemantic = SgSemanticColors(
 
 private val ArgentClairSemantic = SgSemanticColors(
     textPrimary = Color(0xFF1A1D23),
-    textSecondary = Color(0xFF5C6370),
-    textTertiary = Color(0xFF8A919C),
+    // Secondaire un peu plus sombre pour AA sur blanc ; tertiaire reste légende.
+    textSecondary = Color(0xFF4A5160),
+    textTertiary = Color(0xFF6B7280),
     cardSurface = Color(0xFFFFFFFF),
     surfaceElevated = Color(0xFFF3F5F8),
     surfaceOverlay = Color(0xFFE8ECF1),
     borderSubtle = Color(0xFFD8DEE6),
-    glassSurface = Color(0x1A1A1D23),
-    glassBorder = Color(0x331A1D23),
-    glassSurfaceDark = Color(0x0D1A1D23),
-    glassHighlight = Color(0x24FFFFFF),
-    scrimOverlay = Color(0x661A1D23),
+    // Glass clair : teinte plus dense pour contraste sur fond flou / dégradé.
+    glassSurface = Color(0x2E1A1D23),
+    glassBorder = Color(0x401A1D23),
+    glassSurfaceDark = Color(0x181A1D23),
+    glassHighlight = Color(0x33FFFFFF),
+    scrimOverlay = Color(0x801A1D23),
     sheetDeep = Color(0xFFEEF1F5),
     heroGradientTop = Color(0xFFF0EBFA),
     heroGradientBottom = Color(0xFFF7F8FA),
@@ -275,6 +282,28 @@ fun sgModalContentBrush(): Brush = Brush.verticalGradient(
 fun sgHeroPlaceholderBrush(): Brush = Brush.verticalGradient(
     listOf(HeroGradientTop, HeroGradientBottom)
 )
+
+/**
+ * Fallback pochette illustratif (pas un carré noir plat) : dégradé dérivé du seed
+ * + teinte d'accent pour distinguer les pistes sans art embarqué.
+ */
+fun sgCoverFallbackBrush(seed: String, accent: Color): Brush {
+    val hash = seed.hashCode()
+    val hueShift = ((hash ushr 16) and 0xFF) / 255f
+    val toneA = Color(
+        red = (accent.red * 0.45f + hueShift * 0.18f).coerceIn(0f, 1f),
+        green = (accent.green * 0.35f + ((hash ushr 8) and 0xFF) / 255f * 0.14f).coerceIn(0f, 1f),
+        blue = (accent.blue * 0.55f + (hash and 0xFF) / 255f * 0.20f).coerceIn(0f, 1f),
+        alpha = 1f,
+    )
+    val toneB = Color(
+        red = (toneA.red * 0.35f).coerceIn(0f, 1f),
+        green = (toneA.green * 0.32f).coerceIn(0f, 1f),
+        blue = (toneA.blue * 0.40f).coerceIn(0f, 1f),
+        alpha = 1f,
+    )
+    return Brush.linearGradient(listOf(toneA.copy(alpha = 0.92f), toneB, Color.Black.copy(alpha = 0.92f)))
+}
 
 @Composable
 fun sgHeroScrimBrush(): Brush = Brush.verticalGradient(

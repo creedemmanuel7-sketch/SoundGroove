@@ -1,7 +1,9 @@
 package com.credo.soundgroove
 
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
@@ -21,7 +23,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CoilImageConfig.install(this)
-        enableEdgeToEdge()
+        // Pré-bind agressif : réchauffe PlaybackService avant le premier tap play
+        // (MediaController.Builder le fera aussi via le ViewModel).
+        runCatching {
+            startService(android.content.Intent(this, PlaybackService::class.java))
+        }
+        // Barres transparentes : le contenu dessine edge-to-edge et Compose reçoit
+        // de vrais WindowInsets.navigationBars (gestes ≈ mince, 3 boutons ≈ 48dp).
+        // Une navigationBarColor opaque (thème) peut sinon faire remonter 0 inset
+        // sur certains OEM en mode 3 boutons — chrome masqué sous la barre système.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+        )
         setContent {
             val viewModel: SoundGrooveViewModel = viewModel()
             val currentTheme by viewModel.currentTheme.collectAsState()

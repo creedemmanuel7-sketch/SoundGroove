@@ -28,8 +28,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
@@ -37,14 +35,18 @@ import com.credo.soundgroove.data.repository.ListeningStats
 import com.credo.soundgroove.data.repository.LocalScrobbleStats
 import com.credo.soundgroove.data.repository.TopArtistStat
 import com.credo.soundgroove.data.repository.TopTrackStat
+import com.credo.soundgroove.ui.components.ListeningSectionHeader
 import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.components.SgSwitch
 import com.credo.soundgroove.ui.components.SongItem
 import com.credo.soundgroove.ui.components.ThemePicker
 import com.credo.soundgroove.ui.components.themeFullLabel
+import com.credo.soundgroove.ui.motion.SgCoverImage
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.ui.util.playlistsCountLabel
 import com.credo.soundgroove.ui.util.tracksCountLabel
+import com.credo.soundgroove.util.SongDisplay
+import com.credo.soundgroove.util.displayArtist
 
 @Composable
 fun ProfileTab(
@@ -92,7 +94,7 @@ fun ProfileTab(
 
     val topArtists = remember(recentlyPlayed) {
         recentlyPlayed
-            .groupBy { it.artist }
+            .groupBy { it.displayArtist() }
             .entries
             .sortedByDescending { it.value.size }
             .take(5)
@@ -169,12 +171,8 @@ fun ProfileTab(
             }
         }
 
-        item {
-            Text(
-                text = "Raccourcis",
-                style = MaterialTheme.typography.labelMedium,
-                color = TextTertiary
-            )
+        item(key = "shortcuts_header", contentType = "section_header") {
+            ListeningSectionHeader(title = "Raccourcis")
             Spacer(modifier = Modifier.height(10.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
@@ -252,20 +250,24 @@ fun ProfileTab(
 
         if (topArtists.isNotEmpty()) {
             item {
-                ProfileTopArtistsSection(topArtists = topArtists, recentlyPlayed = recentlyPlayed)
+                ProfileTopArtistsSection(
+                    topArtists = topArtists,
+                    recentlyPlayed = recentlyPlayed,
+                    accentColor = accentColor,
+                )
             }
         }
 
         if (mostPlayedRecentSongs.isNotEmpty()) {
-            item {
-                Text(
-                    text = "Morceaux à retrouver",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = TextTertiary
-                )
+            item(key = "most_played_header", contentType = "section_header") {
+                ListeningSectionHeader(title = "Morceaux à retrouver")
                 Spacer(modifier = Modifier.height(12.dp))
             }
-            items(mostPlayedRecentSongs) { (song, count) ->
+            items(
+                mostPlayedRecentSongs,
+                key = { (song, _) -> song.id },
+                contentType = { "song_row" }
+            ) { (song, count) ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -423,11 +425,10 @@ private fun ProfileIdentityCard(
                 contentAlignment = Alignment.Center
             ) {
                 if (avatarUri != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(avatarUri)
-                            .crossfade(true)
-                            .build(),
+                    SgCoverImage(
+                        albumArtUri = avatarUri,
+                        uriCrossfade = false,
+                        decodeEdgeDp = 68.dp,
                         contentDescription = "Photo de profil",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
@@ -807,7 +808,7 @@ private fun ProfileTopThisMonthSection(
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = track.title.ifBlank { "Titre inconnu" },
+                                text = SongDisplay.title(track.title),
                                 color = TextPrimary,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
@@ -815,7 +816,7 @@ private fun ProfileTopThisMonthSection(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = track.artist.ifBlank { "Artiste inconnu" },
+                                text = SongDisplay.artist(track.artist, track.title),
                                 color = TextSecondary,
                                 fontSize = 11.sp,
                                 maxLines = 1,
@@ -855,7 +856,7 @@ private fun ProfileTopThisMonthSection(
                             modifier = Modifier.width(22.dp)
                         )
                         Text(
-                            text = artist.artist,
+                            text = SongDisplay.artist(artist.artist),
                             color = TextPrimary,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
@@ -879,7 +880,8 @@ private fun ProfileTopThisMonthSection(
 @Composable
 private fun ProfileTopArtistsSection(
     topArtists: List<String>,
-    recentlyPlayed: List<Song>
+    recentlyPlayed: List<Song>,
+    accentColor: Color,
 ) {
     Text(
         text = "TOP ARTISTES",
@@ -898,24 +900,20 @@ private fun ProfileTopArtistsSection(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.weight(1f)
             ) {
-                val artistSong = recentlyPlayed.firstOrNull { it.artist == artist }
+                val artistSong = recentlyPlayed.firstOrNull { it.displayArtist() == artist }
+                val initial = artist.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "?"
                 Box(
                     modifier = Modifier
                         .size(64.dp)
-                        .background(
-                            Brush.radialGradient(listOf(GraphiteMid, GraphiteCard)),
-                            CircleShape
-                        )
+                        .background(sgCoverFallbackBrush(artist, accentColor), CircleShape)
                         .border(1.5.dp, GlassBorder.copy(alpha = 0.4f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     if (artistSong?.albumArtUri != null) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(artistSong.albumArtUri)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = null,
+                        SgCoverImage(
+                            albumArtUri = artistSong.albumArtUri,
+                            uriCrossfade = false,
+                            decodeEdgeDp = 64.dp,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .fillMaxSize()
@@ -923,7 +921,7 @@ private fun ProfileTopArtistsSection(
                         )
                     } else {
                         Text(
-                            text = artist.firstOrNull()?.uppercase() ?: "?",
+                            text = initial,
                             color = Color.White,
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Bold

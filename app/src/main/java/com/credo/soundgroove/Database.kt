@@ -1,14 +1,44 @@
 package com.credo.soundgroove
 
 import android.content.Context
+import android.database.sqlite.SQLiteCantOpenDatabaseException
+import android.database.sqlite.SQLiteDatabaseCorruptException
+import android.database.sqlite.SQLiteDiskIOException
+import android.database.sqlite.SQLiteException
+import android.database.sqlite.SQLiteFullException
 import android.net.Uri
-import androidx.room.*
+import android.util.Log
+import androidx.room.Dao
+import androidx.room.Database
+import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.PrimaryKey
+import androidx.room.Query
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.room.Transaction
+import com.credo.soundgroove.BuildConfig
+import com.credo.soundgroove.data.db.SoundGrooveMigrations
 import com.credo.soundgroove.data.model.Song
 import kotlinx.coroutines.flow.Flow
+import java.util.concurrent.atomic.AtomicReference
 
 // ─── Entités Room ───
+// Les morceaux MediaStore ne sont PAS stockés ici : favoris / playlists / historique
+// dénormalisent titre/artiste/uri. Intégrité « song → refs » = purge applicative
+// (voir DatabaseRepository.purgeOrphanSongReferences), pas de FK vers une table songs.
 
-@Entity(tableName = "favorites")
+@Entity(
+    tableName = "favorites",
+    indices = [
+        Index(value = ["artist"]),
+        Index(value = ["title"]),
+        Index(value = ["uri"]),
+    ]
+)
 data class FavoriteEntity(
     @PrimaryKey val songId: Long,
     val title: String,
@@ -17,7 +47,16 @@ data class FavoriteEntity(
     val albumArtUri: String?
 )
 
-@Entity(tableName = "recently_played")
+@Entity(
+    tableName = "recently_played",
+    indices = [
+        Index(value = ["playedAt"]),
+        Index(value = ["playCount"]),
+        Index(value = ["title"]),
+        Index(value = ["artist"]),
+        Index(value = ["uri"]),
+    ]
+)
 data class RecentlyPlayedEntity(
     @PrimaryKey val songId: Long,
     val title: String,
@@ -36,7 +75,23 @@ data class PlaylistEntity(
 
 @Entity(
     tableName = "playlist_songs",
-    primaryKeys = ["playlistId", "songId"]
+    primaryKeys = ["playlistId", "songId"],
+    foreignKeys = [
+        ForeignKey(
+            entity = PlaylistEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["playlistId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["playlistId"]),
+        Index(value = ["songId"]),
+        Index(value = ["playlistId", "position"]),
+        Index(value = ["artist"]),
+        Index(value = ["title"]),
+        Index(value = ["uri"]),
+    ]
 )
 data class PlaylistSongEntity(
     val playlistId: Long,
@@ -48,7 +103,10 @@ data class PlaylistSongEntity(
     val position: Int
 )
 
-@Entity(tableName = "metadata_overrides")
+@Entity(
+    tableName = "metadata_overrides",
+    indices = [Index(value = ["updatedAt"])]
+)
 data class MetadataOverrideEntity(
     @PrimaryKey val songId: Long,
     val title: String?,
@@ -68,17 +126,45 @@ interface FavoriteDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(favorite: FavoriteEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(favorites: List<FavoriteEntity>)
+
     @Query("DELETE FROM favorites WHERE songId = :songId")
     suspend fun delete(songId: Long)
+
+    @Query("DELETE FROM favorites WHERE songId IN (:songIds)")
+    suspend fun deleteByIds(songIds: List<Long>)
 
     @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE songId = :songId)")
     suspend fun isFavorite(songId: Long): Boolean
 
+    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE uri = :uri)")
+    suspend fun isFavoriteByUri(uri: String): Boolean
+
+    @Query("SELECT * FROM favorites WHERE uri = :uri LIMIT 1")
+    suspend fun getByUri(uri: String): FavoriteEntity?
+
     @Query("SELECT * FROM favorites")
     suspend fun getAllOnce(): List<FavoriteEntity>
 
+    @Query("SELECT songId FROM favorites")
+    suspend fun getAllSongIds(): List<Long>
+
     @Query("DELETE FROM favorites")
     suspend fun clearAll()
+
+    @Query("SELECT COUNT(*) FROM favorites")
+    suspend fun count(): Int
+
+    @Query(
+        """
+        SELECT * FROM favorites
+        WHERE title LIKE '%' || :query || '%'
+           OR artist LIKE '%' || :query || '%'
+           OR uri LIKE '%' || :query || '%'
+        """
+    )
+    suspend fun search(query: String): List<FavoriteEntity>
 }
 
 @Dao
@@ -92,14 +178,42 @@ interface RecentlyPlayedDao {
     @Query("SELECT * FROM recently_played WHERE songId = :songId LIMIT 1")
     suspend fun getBySongId(songId: Long): RecentlyPlayedEntity?
 
+    @Query("SELECT * FROM recently_played WHERE uri = :uri LIMIT 1")
+    suspend fun getByUri(uri: String): RecentlyPlayedEntity?
+
+    @Query("SELECT * FROM recently_played ORDER BY playedAt DESC LIMIT :limit")
+    suspend fun getRecentOnce(limit: Int): List<RecentlyPlayedEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(song: RecentlyPlayedEntity)
 
     @Query("DELETE FROM recently_played WHERE songId NOT IN (SELECT songId FROM recently_played ORDER BY playedAt DESC LIMIT 70)")
     suspend fun trimToLimit()
 
+    @Query("SELECT songId FROM recently_played")
+    suspend fun getAllSongIds(): List<Long>
+
+    @Query("DELETE FROM recently_played WHERE songId IN (:songIds)")
+    suspend fun deleteByIds(songIds: List<Long>)
+
     @Query("DELETE FROM recently_played")
     suspend fun clearAll()
+
+    /** Lecture + upsert + trim atomiques. */
+    @Transaction
+    suspend fun upsertAndTrim(song: RecentlyPlayedEntity) {
+        val existing = getBySongId(song.songId)
+        val entity = if (existing != null) {
+            song.copy(
+                playedAt = System.currentTimeMillis(),
+                playCount = existing.playCount + 1
+            )
+        } else {
+            song
+        }
+        insert(entity)
+        trimToLimit()
+    }
 }
 
 @Dao
@@ -110,8 +224,15 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlist_songs WHERE playlistId = :playlistId ORDER BY position")
     fun getSongsForPlaylist(playlistId: Long): Flow<List<PlaylistSongEntity>>
 
+    /** Une seule requête pour toutes les entrées — évite le N+1 Flow par playlist. */
+    @Query("SELECT * FROM playlist_songs ORDER BY playlistId, position")
+    fun getAllPlaylistSongs(): Flow<List<PlaylistSongEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPlaylist(playlist: PlaylistEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPlaylists(playlists: List<PlaylistEntity>)
 
     @Query("DELETE FROM playlists WHERE id = :playlistId")
     suspend fun deletePlaylist(playlistId: Long)
@@ -122,11 +243,23 @@ interface PlaylistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSong(song: PlaylistSongEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSongs(songs: List<PlaylistSongEntity>)
+
     @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId AND songId = :songId")
     suspend fun removeSong(playlistId: Long, songId: Long)
 
     @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId")
     suspend fun clearPlaylist(playlistId: Long)
+
+    @Query("SELECT songId FROM playlist_songs WHERE playlistId = :playlistId")
+    suspend fun getSongIdsForPlaylist(playlistId: Long): List<Long>
+
+    @Query("SELECT songId FROM playlist_songs")
+    suspend fun getAllSongIds(): List<Long>
+
+    @Query("DELETE FROM playlist_songs WHERE songId IN (:songIds)")
+    suspend fun removeSongsByIds(songIds: List<Long>)
 
     @Query("SELECT * FROM playlists")
     suspend fun getAllPlaylistsOnce(): List<PlaylistEntity>
@@ -134,11 +267,43 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlist_songs ORDER BY playlistId, position")
     suspend fun getAllPlaylistSongsOnce(): List<PlaylistSongEntity>
 
+    @Query("SELECT COUNT(*) FROM playlist_songs")
+    suspend fun countSongs(): Int
+
+    @Query(
+        """
+        SELECT * FROM playlist_songs
+        WHERE title LIKE '%' || :query || '%'
+           OR artist LIKE '%' || :query || '%'
+           OR uri LIKE '%' || :query || '%'
+        ORDER BY playlistId, position
+        """
+    )
+    suspend fun searchSongs(query: String): List<PlaylistSongEntity>
+
     @Query("DELETE FROM playlist_songs")
     suspend fun clearAllSongs()
 
     @Query("DELETE FROM playlists")
     suspend fun clearAllPlaylists()
+
+    /** CASCADE FK playlist_songs → playlists : une seule DELETE suffit. */
+    @Transaction
+    suspend fun deletePlaylistWithSongs(playlistId: Long) {
+        deletePlaylist(playlistId)
+    }
+
+    /** Insert playlist + morceaux dans une seule transaction. */
+    @Transaction
+    suspend fun insertPlaylistWithSongs(
+        playlist: PlaylistEntity,
+        songs: List<PlaylistSongEntity>
+    ) {
+        insertPlaylist(playlist)
+        if (songs.isNotEmpty()) {
+            insertSongs(songs)
+        }
+    }
 }
 
 @Dao
@@ -154,6 +319,12 @@ interface MetadataOverrideDao {
 
     @Query("DELETE FROM metadata_overrides WHERE songId = :songId")
     suspend fun delete(songId: Long)
+
+    @Query("SELECT songId FROM metadata_overrides")
+    suspend fun getAllSongIds(): List<Long>
+
+    @Query("DELETE FROM metadata_overrides WHERE songId IN (:songIds)")
+    suspend fun deleteByIds(songIds: List<Long>)
 }
 
 // ─── Database ───
@@ -166,7 +337,7 @@ interface MetadataOverrideDao {
         PlaylistSongEntity::class,
         MetadataOverrideEntity::class
     ],
-    version = 4,
+    version = 6,
     exportSchema = false
 )
 abstract class SoundGrooveDatabase : RoomDatabase() {
@@ -176,50 +347,103 @@ abstract class SoundGrooveDatabase : RoomDatabase() {
     abstract fun metadataOverrideDao(): MetadataOverrideDao
 
     companion object {
-        @Volatile private var INSTANCE: SoundGrooveDatabase? = null
+        private const val TAG = "SoundGrooveDb"
+        const val DB_NAME = "soundgroove.db"
 
-        private val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
-            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS metadata_overrides (
-                        songId INTEGER NOT NULL PRIMARY KEY,
-                        title TEXT,
-                        artist TEXT,
-                        album TEXT,
-                        updatedAt INTEGER NOT NULL
-                    )
-                    """.trimIndent()
-                )
-            }
-        }
+        @Volatile
+        private var INSTANCE: SoundGrooveDatabase? = null
 
-        private val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
-            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
-                db.execSQL(
-                    "ALTER TABLE metadata_overrides ADD COLUMN coverArtUri TEXT"
-                )
-            }
-        }
+        private val openWarning = AtomicReference<String?>(null)
 
-        private val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
-            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
-                db.execSQL(
-                    "ALTER TABLE recently_played ADD COLUMN playCount INTEGER NOT NULL DEFAULT 1"
-                )
-            }
-        }
+        /** Message one-shot après récupération (corruption / disque plein). */
+        fun consumeOpenWarning(): String? = openWarning.getAndSet(null)
 
         fun getInstance(context: Context): SoundGrooveDatabase {
             return INSTANCE ?: synchronized(this) {
-                Room.databaseBuilder(
-                    context.applicationContext,
-                    SoundGrooveDatabase::class.java,
-                    "soundgroove.db"
-                )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
-                    .build().also { INSTANCE = it }
+                INSTANCE ?: openWithRecovery(context.applicationContext).also { INSTANCE = it }
             }
+        }
+
+        /** Remet le singleton (tests). */
+        fun clearInstanceForTests() {
+            synchronized(this) {
+                INSTANCE?.close()
+                INSTANCE = null
+            }
+        }
+
+        private fun openWithRecovery(context: Context): SoundGrooveDatabase {
+            return try {
+                buildDatabase(context).also { probeOpen(it) }
+            } catch (t: Throwable) {
+                if (!isRecoverableDbFailure(t)) throw t
+                Log.e(TAG, "Ouverture Room échouée — recréation de la base", t)
+                runCatching { context.deleteDatabase(DB_NAME) }
+                openWarning.set(
+                    when (t) {
+                        is SQLiteFullException ->
+                            "Stockage insuffisant : bibliothèque locale réinitialisée. Libérez de l’espace puis réimportez une sauvegarde."
+                        is SQLiteDatabaseCorruptException ->
+                            "Base locale corrompue : données Room réinitialisées. Restaurez une sauvegarde si besoin."
+                        else ->
+                            "Impossible d’ouvrir la base locale : données réinitialisées. Restaurez une sauvegarde si besoin."
+                    }
+                )
+                buildDatabase(context).also { probeOpen(it) }
+            }
+        }
+
+        private fun buildDatabase(context: Context): SoundGrooveDatabase {
+            val builder = Room.databaseBuilder(
+                context,
+                SoundGrooveDatabase::class.java,
+                DB_NAME
+            )
+                .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
+                .addMigrations(*SoundGrooveMigrations.ALL)
+            // Destructive uniquement en debug si un chemin de migration manque (dev).
+            if (BuildConfig.DEBUG) {
+                @Suppress("DEPRECATION")
+                builder.fallbackToDestructiveMigration()
+            }
+            return builder.build()
+        }
+
+        private fun probeOpen(db: SoundGrooveDatabase) {
+            // Force l’ouverture pour faire remonter corruption / disque plein au démarrage.
+            db.openHelper.readableDatabase
+        }
+
+        fun isRecoverableDbFailure(t: Throwable): Boolean {
+            var current: Throwable? = t
+            while (current != null) {
+                when (current) {
+                    is SQLiteDatabaseCorruptException,
+                    is SQLiteCantOpenDatabaseException,
+                    is SQLiteDiskIOException,
+                    is SQLiteFullException -> return true
+                    else -> {
+                        // Message heuristics (SQLiteException stubs JVM + wrappers).
+                        if (current is SQLiteException || looksLikeSqliteFailureMessage(current.message)) {
+                            if (looksLikeSqliteFailureMessage(current.message)) return true
+                        }
+                    }
+                }
+                current = current.cause
+            }
+            return false
+        }
+
+        fun looksLikeSqliteFailureMessage(message: String?): Boolean {
+            val msg = message.orEmpty().lowercase()
+            return msg.contains("corrupt") ||
+                msg.contains("malformed") ||
+                msg.contains("disk is full") ||
+                msg.contains("database or disk is full") ||
+                msg.contains("unable to open") ||
+                msg.contains("disk i/o") ||
+                msg.contains("sqlite_full") ||
+                msg.contains("sqlite_corrupt")
         }
     }
 }

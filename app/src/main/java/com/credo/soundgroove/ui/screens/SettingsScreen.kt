@@ -25,6 +25,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.credo.soundgroove.R
+import com.credo.soundgroove.ui.components.ListeningSectionHeader
 import com.credo.soundgroove.ui.components.SgSwitch
 import com.credo.soundgroove.ui.components.ThemePicker
 import com.credo.soundgroove.ui.theme.*
@@ -80,6 +81,8 @@ fun SettingsScreen(
     performanceModeEnabled: Boolean = false,
     onPerformanceModeChange: (Boolean) -> Unit = {},
     onOpenCarMode: () -> Unit = {},
+    vinylModeEnabled: Boolean = false,
+    onVinylModeChange: (Boolean) -> Unit = {},
     remoteHostEnabled: Boolean = false,
     remotePin: String? = null,
     remoteLanIp: String? = null,
@@ -135,7 +138,13 @@ fun SettingsScreen(
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = SgSpacing.gutter)
-                        .padding(bottom = SgSpacing.contentInsetBottom)
+                        // Mini opaque au-dessus du bas : marge = overlay mini + une rangée
+                        // (évite Mode voiture / Crossfade coincés sous le mini).
+                        .padding(
+                            // Settings plein écran : mini masqué (homeSuppressed) —
+                            // garder seulement la barre système + une marge de confort.
+                            bottom = sgNavigationBarsBottom() + SgSpacing.xxl
+                        )
                 ) {
             Spacer(modifier = Modifier.height(SgSpacing.screenTop))
 
@@ -167,7 +176,7 @@ fun SettingsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             SettingsSection(title = "Apparence") {
                 Text(
@@ -227,7 +236,7 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(22.dp))
 
             SettingsSection(title = "Lecture") {
                 Row(
@@ -418,11 +427,30 @@ fun SettingsScreen(
                     accentColor = accentColor,
                     onClick = onOpenCarMode
                 )
+            }
+
+            Spacer(modifier = Modifier.height(22.dp))
+
+            SettingsSection(title = "Avancé") {
+                Text(
+                    text = "Outils niche — hors chemin d'écoute quotidien",
+                    color = TextTertiary,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
+                SettingsToggleRow(
+                    icon = Icons.Filled.Album,
+                    title = "Mode vinyle",
+                    description = "Pochette en disque tournant (décoratif)",
+                    checked = vinylModeEnabled,
+                    accentColor = accentColor,
+                    onCheckedChange = onVinylModeChange
+                )
                 Spacer(modifier = Modifier.height(12.dp))
                 SettingsToggleRow(
                     icon = Icons.Filled.Computer,
-                    title = "Remote PC",
-                    description = "Exposer le lecteur sur le LAN (WebSocket port $remotePort)",
+                    title = "Remote PC (LAN)",
+                    description = "Exposer le lecteur sur le réseau local (WebSocket port $remotePort)",
                     checked = remoteHostEnabled,
                     accentColor = accentColor,
                     onCheckedChange = onRemoteHostChange
@@ -448,9 +476,9 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(22.dp))
 
-            SettingsSection(title = "Sauvegarde") {
+            SettingsSection(title = "Données") {
                 SettingsActionRow(
                     iconRes = R.drawable.ic_songs,
                     title = "Exporter les données",
@@ -458,7 +486,7 @@ fun SettingsScreen(
                     accentColor = accentColor,
                     onClick = onExportBackup
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
                 SettingsActionRow(
                     iconRes = R.drawable.ic_playlists,
                     title = "Restaurer une sauvegarde",
@@ -468,7 +496,7 @@ fun SettingsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(22.dp))
 
             SettingsSection(title = "Bibliothèque") {
                 SettingsActionRow(
@@ -784,15 +812,10 @@ private fun SettingsSection(
             .fillMaxWidth()
             .padding(vertical = SgSpacing.sm)
     ) {
-        Text(
-            text = title.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = TextTertiary,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(12.dp))
+        ListeningSectionHeader(title = title)
+        Spacer(modifier = Modifier.height(14.dp))
         content()
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
         HorizontalDivider(color = GlassBorder.copy(alpha = 0.22f))
     }
 }

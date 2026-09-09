@@ -1,16 +1,17 @@
+import { resolveSafeApkUrl } from "@/lib/security/validate";
+
 const APK_FALLBACK = "/downloads/soundgroove.apk";
 
 function getApkUrl(): string {
-  const envUrl = process.env.NEXT_PUBLIC_APK_URL?.trim();
-  return envUrl && envUrl.length > 0 ? envUrl : APK_FALLBACK;
+  return resolveSafeApkUrl(process.env.NEXT_PUBLIC_APK_URL, APK_FALLBACK);
 }
 
 export function DownloadButton() {
   const apkUrl = getApkUrl();
-  const isExternal = apkUrl.startsWith("http");
+  const isExternal = apkUrl.startsWith("https://");
 
   return (
-    <div>
+    <div className="cta-wrap">
       <a
         href={apkUrl}
         className="cta"

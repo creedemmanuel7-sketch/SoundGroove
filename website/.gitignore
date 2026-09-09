@@ -11,7 +11,15 @@
 # misc
 .DS_Store
 *.pem
+
+# secrets / env (ne jamais committer de vrais secrets)
+.env
+.env.*
+!.env.example
 .env*.local
+
+# Netlify CLI local
+.netlify
 
 # debug
 npm-debug.log*

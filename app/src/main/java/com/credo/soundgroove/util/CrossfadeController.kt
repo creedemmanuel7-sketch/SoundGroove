@@ -23,18 +23,26 @@ class CrossfadeController(
 
     private val listener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
-            if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
-                reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK
-            ) {
+            // Fade / mute uniquement sur enchaînement auto.
+            // SEEK / PLAYLIST_CHANGED / REPEAT = action user ou setMediaItem → jamais volume 0
+            // (sinon READY sans son pendant le fade = latence audio « réelle »).
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                onTrackChanged()
+            } else {
                 resetVolume()
-                return
             }
-            onTrackChanged()
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (!isPlaying) stopVolumeTick()
             else startVolumeTick()
+        }
+
+        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            // Ne jamais laisser le volume à 0 après un échec mid-fade.
+            cancelFadeIn()
+            stopVolumeTick()
+            resetVolume()
         }
     }
 
@@ -78,6 +86,12 @@ class CrossfadeController(
         }
     }
 
+    /** Garantit un volume audible après un play explicite (évite un mute résiduel). */
+    fun ensureAudible() {
+        cancelFadeIn()
+        resetVolume()
+    }
+
     private fun startVolumeTick() {
         stopVolumeTick()
         val tick = object : Runnable {
@@ -96,20 +110,30 @@ class CrossfadeController(
     }
 
     private fun updateFadeOut() {
-        val player = playerProvider() ?: return
-        val crossfadeMs = PlaybackPreferences.crossfadeDurationMs(context)
-        if (crossfadeMs <= 0 || !player.isPlaying) return
+        try {
+            val player = playerProvider() ?: return
+            if (player.playbackState == Player.STATE_IDLE ||
+                player.playerError != null
+            ) {
+                resetVolume()
+                return
+            }
+            val crossfadeMs = PlaybackPreferences.crossfadeDurationMs(context)
+            if (crossfadeMs <= 0 || !player.isPlaying) return
 
-        val duration = player.duration
-        if (duration <= 0) return
+            val duration = player.duration
+            if (duration <= 0) return
 
-        val remaining = duration - player.currentPosition
-        if (remaining in 1..crossfadeMs) {
-            val progress = remaining.toFloat() / crossfadeMs
-            val eased = easeInOut(progress.coerceIn(0f, 1f))
-            player.volume = (eased * fadeOutStartVolume).coerceIn(0f, 1f)
-        } else if (remaining > crossfadeMs && player.volume < fadeOutStartVolume) {
-            player.volume = fadeOutStartVolume
+            val remaining = duration - player.currentPosition
+            if (remaining in 1..crossfadeMs) {
+                val progress = remaining.toFloat() / crossfadeMs
+                val eased = easeInOut(progress.coerceIn(0f, 1f))
+                player.volume = (eased * fadeOutStartVolume).coerceIn(0f, 1f)
+            } else if (remaining > crossfadeMs && player.volume < fadeOutStartVolume) {
+                player.volume = fadeOutStartVolume
+            }
+        } catch (_: Exception) {
+            resetVolume()
         }
     }
 

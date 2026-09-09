@@ -1,5 +1,6 @@
 package com.credo.soundgroove.lyrics
 
+import com.credo.soundgroove.BuildConfig
 import com.credo.soundgroove.data.model.Song
 import org.json.JSONArray
 import org.json.JSONObject
@@ -11,10 +12,12 @@ import kotlin.math.abs
 /**
  * Client minimal pour l'API publique LRCLIB (sans clé).
  * Usage raisonnable : cache interne d'abord, puis get-cached, puis get, puis search.
+ *
+ * Base URL surchargée via `lrclib.base.url` dans `local.properties` → BuildConfig.
  */
 object LrcLibClient {
 
-    private const val BASE_URL = "https://lrclib.net"
+    private val BASE_URL: String = BuildConfig.LRCLIB_BASE_URL.trimEnd('/')
     private const val USER_AGENT = "SoundGroove/1.0 (com.credo.soundgroove)"
     private const val CONNECT_TIMEOUT_MS = 5_000
     private const val READ_TIMEOUT_MS = 8_000

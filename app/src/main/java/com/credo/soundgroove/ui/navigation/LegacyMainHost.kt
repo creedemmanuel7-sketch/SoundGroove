@@ -55,6 +55,8 @@ fun LegacyMainHost(
     val playlists by viewModel.playlists.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
+    val isBuffering by viewModel.isBuffering.collectAsState()
+    val isControllerConnecting by viewModel.isControllerConnecting.collectAsState()
     val playbackPosition by viewModel.playbackPosition.collectAsState()
     val listeningStats by viewModel.listeningStats.collectAsState()
     val mainSelectedTab by viewModel.mainSelectedTab.collectAsState()
@@ -62,6 +64,7 @@ fun LegacyMainHost(
     val smartNotificationsEnabled by viewModel.smartNotificationsEnabled.collectAsState()
     val persistentMiniPlayerEnabled by viewModel.persistentMiniPlayerEnabled.collectAsState()
     val performanceModeEnabled by viewModel.performanceModeEnabled.collectAsState()
+    val vinylModeEnabled by viewModel.vinylModeEnabled.collectAsState()
     val remoteHostEnabled by viewModel.remoteHostEnabled.collectAsState()
     val remotePin by viewModel.remotePin.collectAsState()
     val remoteLanIp by viewModel.remoteLanIp.collectAsState()
@@ -73,6 +76,7 @@ fun LegacyMainHost(
     val playbackQueue by viewModel.playbackQueue.collectAsState()
     val backupMessage by viewModel.backupMessage.collectAsState()
     val playlistMessage by viewModel.playlistMessage.collectAsState()
+    val playbackError by viewModel.playbackError.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -87,6 +91,13 @@ fun LegacyMainHost(
         playlistMessage?.let { message ->
             snackbarHostState.showSnackbar(message)
             viewModel.clearPlaylistMessage()
+        }
+    }
+
+    LaunchedEffect(playbackError) {
+        playbackError?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearPlaybackError()
         }
     }
 
@@ -162,6 +173,8 @@ fun LegacyMainHost(
             playlists = playlists,
             currentSong = currentSong,
             isPlaying = isPlaying,
+            isBuffering = isBuffering,
+            isControllerConnecting = isControllerConnecting,
             playbackPosition = playbackPosition,
             playbackQueue = playbackQueue,
             onPlaySongs = { queue, song -> viewModel.playSongs(queue, song) },
@@ -182,6 +195,8 @@ fun LegacyMainHost(
             onPersistentMiniPlayerChange = { viewModel.setPersistentMiniPlayerEnabled(it) },
             performanceModeEnabled = performanceModeEnabled,
             onPerformanceModeChange = { viewModel.setPerformanceModeEnabled(it) },
+            vinylModeEnabled = vinylModeEnabled,
+            onVinylModeChange = { viewModel.setVinylModeEnabled(it) },
             remoteHostEnabled = remoteHostEnabled,
             remotePin = remotePin,
             remoteLanIp = remoteLanIp,

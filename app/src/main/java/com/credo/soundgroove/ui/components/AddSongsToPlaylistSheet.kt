@@ -215,7 +215,11 @@ fun AddSongsToPlaylistSheet(
                     contentPadding = PaddingValues(bottom = SgSpacing.md),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    items(filteredSongs, key = { it.id }) { song ->
+                    items(
+                        filteredSongs,
+                        key = { it.id },
+                        contentType = { "song_row" }
+                    ) { song ->
                         val selected = song.id in selectedIds
                         Row(
                             modifier = Modifier

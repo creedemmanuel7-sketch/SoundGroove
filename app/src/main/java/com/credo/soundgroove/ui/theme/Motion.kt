@@ -13,10 +13,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** Clé sharedBounds grille album → hero détail (`Uri.encode` = route Nav). */
@@ -362,6 +364,21 @@ fun rememberSgReducedMotion(): Boolean {
     val performanceMode = LocalSgPerformanceMode.current
     return systemReduced || performanceMode
 }
+
+/**
+ * Autorise un blur runtime (pochette ambiance) : faux si reduced motion / Mode perf
+ * ou pendant un fling / scroll actif (évite le coût GPU/CPU pendant le scroll 60 FPS).
+ */
+@Composable
+fun rememberSgAllowBlur(scrollInProgress: Boolean = false): Boolean =
+    !rememberSgReducedMotion() && !scrollInProgress
+
+/**
+ * Blur soft GPU-friendly : no-op si [enabled] est faux (pas de RenderEffect inutile).
+ * Préférer des rayons ≤ 16.dp et une image déjà sous-échantillonnée (Coil decode*).
+ */
+fun Modifier.sgSoftBlur(enabled: Boolean, radius: Dp = 12.dp): Modifier =
+    if (enabled && radius > 0.dp) this.blur(radius) else this
 
 /**
  * Durée Coil crossfade : 0 en Mode perf / reduced motion, sinon [defaultMs]

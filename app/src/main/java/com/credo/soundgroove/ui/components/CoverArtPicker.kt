@@ -25,6 +25,8 @@ fun rememberSongCoverArtPicker(
     }
     return { song ->
         pendingSong = song
+        // image/* : galerie / fichiers — JPG, JPEG, PNG, WebP (et MIME voisins).
+        // Le filtrage MIME strict et le décodage sont gérés dans CoverArtStorage.
         launcher.launch("image/*")
     }
 }

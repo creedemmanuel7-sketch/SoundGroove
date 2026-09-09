@@ -53,6 +53,8 @@ fun ThemeSelectionScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
                     .padding(horizontal = SgSpacing.screenHorizontal)
                     .padding(bottom = SgSpacing.lg),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -60,7 +62,7 @@ fun ThemeSelectionScreen(
                 OnboardingStepIndicator(
                     currentStep = step,
                     accentColor = previewAccent,
-                    modifier = Modifier.padding(top = SgSpacing.screenTop)
+                    modifier = Modifier.padding(top = SgSpacing.xxl)
                 )
 
                 AnimatedContent(

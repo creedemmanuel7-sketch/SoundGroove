@@ -40,7 +40,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -49,6 +48,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -58,11 +59,10 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.session.MediaController
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.motion.SgCoverImage
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.util.PlayerGuards
 import com.credo.soundgroove.util.SongDisplay
@@ -90,10 +90,18 @@ fun SongItem(
     onAddToQueue: (() -> Unit)? = null
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val talkBackLabel = buildString {
+        append(song.displayTitle())
+        append(", ")
+        append(song.displayArtist())
+        if (isPlaying) append(", en lecture")
+        if (isFavorite) append(", favori")
+    }
 
     GlassCard(
         modifier = modifier
             .fillMaxWidth()
+            .semantics { contentDescription = talkBackLabel }
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = {
@@ -123,12 +131,10 @@ fun SongItem(
                 contentAlignment = Alignment.Center
             ) {
                 if (song.albumArtUri != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(song.albumArtUri)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = null,
+                    SgCoverImage(
+                        albumArtUri = song.albumArtUri,
+                        uriCrossfade = false,
+                        decodeEdgeDp = 44.dp,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )

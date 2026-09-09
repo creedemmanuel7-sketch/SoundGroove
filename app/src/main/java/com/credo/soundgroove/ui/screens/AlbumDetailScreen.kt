@@ -21,8 +21,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.ui.components.AlbumArtThumb
@@ -34,6 +32,7 @@ import com.credo.soundgroove.ui.components.EditMetadataBottomSheet
 import com.credo.soundgroove.ui.components.SongContextMenuSheet
 import com.credo.soundgroove.ui.components.SongInfoBottomSheet
 import com.credo.soundgroove.ui.components.rememberSongCoverArtPicker
+import com.credo.soundgroove.ui.motion.SgCoverImage
 import com.credo.soundgroove.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -88,9 +87,10 @@ fun AlbumDetailScreen(
                             .clip(RoundedCornerShape(SgRadius.xl))
                     ) {
                         if (albumCover != null) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current).data(albumCover).crossfade(true).build(),
-                                contentDescription = null,
+                            SgCoverImage(
+                                albumArtUri = albumCover,
+                                uriCrossfade = true,
+                                decodeEdgeDp = 320.dp,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()
                             )
@@ -184,7 +184,11 @@ fun AlbumDetailScreen(
                     )
                 }
             } else {
-            itemsIndexed(songs) { index, song ->
+            itemsIndexed(
+                songs,
+                key = { _, song -> song.id },
+                contentType = { _, _ -> "song_row" }
+            ) { index, song ->
                 val isCurrent = song.id == currentSong?.id
 
                 Row(
@@ -233,7 +237,7 @@ fun AlbumDetailScreen(
                 }
             }
             }
-            item { Spacer(modifier = Modifier.height(120.dp)) }
+            item { Spacer(modifier = Modifier.height(sgOverlayBottomInset())) }
         }
 
         // Song context menu

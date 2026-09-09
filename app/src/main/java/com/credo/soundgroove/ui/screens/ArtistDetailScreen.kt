@@ -142,7 +142,11 @@ fun ArtistDetailScreen(
                 )
             }
 
-            itemsIndexed(songs) { _, song ->
+            itemsIndexed(
+                songs,
+                key = { _, song -> song.id },
+                contentType = { _, _ -> "song_row" }
+            ) { _, song ->
                 val isCurrent = song.id == currentSong?.id
 
                 Row(
@@ -206,7 +210,7 @@ fun ArtistDetailScreen(
                     )
                 }
             }
-            item { Spacer(modifier = Modifier.height(120.dp)) }
+            item { Spacer(modifier = Modifier.height(sgOverlayBottomInset())) }
         }
 
         songMenuTarget?.let { song ->

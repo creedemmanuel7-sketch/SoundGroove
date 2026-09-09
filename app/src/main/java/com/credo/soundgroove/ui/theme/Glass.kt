@@ -18,10 +18,11 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun surfaceBrush(accentColor: Color = MaterialTheme.colorScheme.primary): Brush = Brush.linearGradient(
+    // Opacité ↑ : contraste texte sur glass/blur (WCAG AA sur dark violet).
     colors = listOf(
-        SurfaceElevated.copy(alpha = 0.72f),
-        SurfaceOverlay.copy(alpha = 0.58f),
-        accentColor.copy(alpha = 0.035f)
+        SurfaceElevated.copy(alpha = if (IsLightTheme) 0.88f else 0.82f),
+        SurfaceOverlay.copy(alpha = if (IsLightTheme) 0.78f else 0.70f),
+        accentColor.copy(alpha = if (IsLightTheme) 0.05f else 0.04f)
     )
 )
 

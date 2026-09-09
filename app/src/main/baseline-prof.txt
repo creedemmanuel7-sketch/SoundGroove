@@ -1,0 +1,26 @@
+# Baseline Profile — SoundGroove (startup + lecture locale)
+# Génération idéale : Macrobenchmark BaselineProfileRule → remplacer ce fichier.
+# En attendant : règles HRF manuelles pour ART AOT des chemins critiques.
+# https://developer.android.com/topic/performance/baselineprofiles
+
+# ── Activity / Application ──
+HSPLcom/credo/soundgroove/SoundGrooveApplication;->onCreate()V
+HSPLcom/credo/soundgroove/MainActivity;->onCreate(Landroid/os/Bundle;)V
+
+# ── Playback service / Media3 session ──
+HSPLcom/credo/soundgroove/PlaybackService;->onCreate()V
+HSPLcom/credo/soundgroove/viewmodel/SoundGrooveViewModel;-><init>(Landroid/app/Application;)V
+HSPLcom/credo/soundgroove/viewmodel/SoundGrooveViewModel;->playSongs(Ljava/util/List;Lcom/credo/soundgroove/data/model/Song;)V
+HSPLcom/credo/soundgroove/viewmodel/SoundGrooveViewModel;->playSongsExclusive(Ljava/util/List;Lcom/credo/soundgroove/data/model/Song;)V
+HSPLcom/credo/soundgroove/util/PlayLatencyTracker;->markTap(Ljava/lang/String;)V
+HSPLcom/credo/soundgroove/util/PlayLatencyTracker;->markIsPlaying()V
+
+# ── UI shell ──
+HSPLcom/credo/soundgroove/ui/navigation/AppNavigationKt;->AppNavigation*
+HSPLcom/credo/soundgroove/ui/theme/ThemeKt;->SoundGrooveTheme*
+HSPLcom/credo/soundgroove/ui/components/MiniPlayerKt;->MiniPlayer*
+
+# ── Data / Room ──
+HSPLcom/credo/soundgroove/DatabaseKt;->getDatabase*
+HSPLcom/credo/soundgroove/data/repository/CombinedMusicRepository;->getAllSongs*
+HSPLcom/credo/soundgroove/data/repository/MusicRepository;->getSongs*

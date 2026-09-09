@@ -66,7 +66,9 @@ fun rememberAlbumArtRolePalette(
             val loader = Coil.imageLoader(context)
             val request = ImageRequest.Builder(context)
                 .data(albumArtUri)
+                .size(96, 96)
                 .allowHardware(false)
+                .allowRgb565(true)
                 .build()
 
             val result = loader.execute(request)
@@ -354,7 +356,9 @@ fun rememberLyricsPalette(albumArtUri: Uri?, fallbackAccent: Color): LyricsPalet
             val loader = Coil.imageLoader(context)
             val request = ImageRequest.Builder(context)
                 .data(albumArtUri)
+                .size(96, 96)
                 .allowHardware(false)
+                .allowRgb565(true)
                 .build()
             val result = loader.execute(request)
             val bitmap = (result as? SuccessResult)?.drawable as? BitmapDrawable
@@ -460,7 +464,9 @@ fun rememberPlayerAmbiencePalette(
             val loader = Coil.imageLoader(context)
             val request = ImageRequest.Builder(context)
                 .data(albumArtUri)
+                .size(96, 96)
                 .allowHardware(false)
+                .allowRgb565(true)
                 .build()
             val result = loader.execute(request)
             val bitmap = (result as? SuccessResult)?.drawable as? BitmapDrawable

@@ -25,10 +25,17 @@ object SongDisplay {
     private val ExtensionRegex =
         Regex("""\.(mp3|aac|flac|ogg|opus|wav|m4a|alac|aiff?|wma)$""", RegexOption.IGNORE_CASE)
 
-    fun artist(raw: String?): String {
+    /** "Artiste - Titre", "Artiste – Titre", "Artiste — Titre". */
+    private val ArtistFromTitleRegex =
+        Regex("""^\s*(.+?)\s*[-–—]\s+(.+?)\s*$""")
+
+    fun artist(raw: String?, titleHint: String? = null, pathHint: String? = null): String {
         val value = raw?.trim().orEmpty()
-        if (isUnknownMarker(value)) return "Artiste inconnu"
-        return value
+        if (!isUnknownMarker(value)) return value
+        parseArtistFromCompoundTitle(titleHint)?.let { return it }
+        val fromPath = cleanFilenameTitle(fileNameFromPath(pathHint))
+        parseArtistFromCompoundTitle(fromPath)?.let { return it }
+        return "Artiste inconnu"
     }
 
     fun album(raw: String?): String {
@@ -61,8 +68,32 @@ object SongDisplay {
 
     fun formatDurationOrEmpty(durationMs: Long): String = formatDurationOrNull(durationMs).orEmpty()
 
+    /** Initiale pour fallback pochette (titre / artiste assaini). */
+    fun coverInitial(titleRaw: String?, artistRaw: String?, pathHint: String? = null): String {
+        val displayTitle = title(titleRaw, pathHint)
+        val displayArtist = artist(artistRaw, titleRaw, pathHint)
+        val source = when {
+            !isUnknownMarker(displayArtist) && displayArtist != "Artiste inconnu" -> displayArtist
+            displayTitle.isNotBlank() && displayTitle != "Titre inconnu" -> displayTitle
+            else -> "?"
+        }
+        val ch = source.firstOrNull { it.isLetterOrDigit() } ?: return "?"
+        return ch.uppercaseChar().toString()
+    }
+
     private fun isUnknownMarker(value: String): Boolean =
         value.lowercase() in UnknownMarkers
+
+    private fun parseArtistFromCompoundTitle(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val match = ArtistFromTitleRegex.matchEntire(raw.trim()) ?: return null
+        val candidate = match.groupValues[1].trim()
+        if (candidate.length < 2 || isUnknownMarker(candidate)) return null
+        // Évite de prendre un titre trop long comme "artiste" (ex. phrases entières).
+        if (candidate.length > 48) return null
+        if (candidate.count { it == ' ' } > 4) return null
+        return candidate
+    }
 
     private fun looksLikeFilename(value: String): Boolean {
         if (value.contains('/') || value.contains('\\')) return true
@@ -96,6 +127,8 @@ object SongDisplay {
 
 fun Song.displayTitle(): String = SongDisplay.title(title, folderPath.ifBlank { null })
 
-fun Song.displayArtist(): String = SongDisplay.artist(artist)
+fun Song.displayArtist(): String = SongDisplay.artist(artist, title, folderPath.ifBlank { null })
 
 fun Song.displayAlbum(): String = SongDisplay.album(albumName)
+
+fun Song.coverInitial(): String = SongDisplay.coverInitial(title, artist, folderPath.ifBlank { null })

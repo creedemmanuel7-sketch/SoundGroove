@@ -29,6 +29,10 @@ import com.credo.soundgroove.ui.screens.PlayerScreen
 import com.credo.soundgroove.ui.screens.PlayerQueueBanner
 import com.credo.soundgroove.ui.screens.QueueScreen
 import com.credo.soundgroove.data.model.Playlist
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import com.credo.soundgroove.ui.components.AddToPlaylistSheet
+import com.credo.soundgroove.ui.components.CreatePlaylistSheet
 import com.credo.soundgroove.ui.components.MiniPlayer
 import com.credo.soundgroove.ui.components.CrossfadeBottomSheet
 import com.credo.soundgroove.ui.components.PlayerOptionsBottomSheet
@@ -38,6 +42,7 @@ import com.credo.soundgroove.ui.components.PlaybackSpeedBottomSheet
 import com.credo.soundgroove.ui.components.SleepTimerBottomSheet
 import com.credo.soundgroove.ui.components.SongInfoBottomSheet
 import com.credo.soundgroove.ui.components.rememberSongCoverArtPicker
+import com.credo.soundgroove.ui.player.PlayerUiState
 import com.credo.soundgroove.ui.screens.AlbumDetailScreen
 import com.credo.soundgroove.ui.screens.ArtistDetailScreen
 import com.credo.soundgroove.ui.screens.FolderDetailContent
@@ -47,7 +52,6 @@ import com.credo.soundgroove.ui.theme.LocalSgPerformanceMode
 import com.credo.soundgroove.ui.theme.LocalSharedTransitionScope
 import com.credo.soundgroove.ui.theme.SgMotion
 import com.credo.soundgroove.ui.theme.rememberSgReducedMotion
-import com.credo.soundgroove.util.PlaybackPreferences
 import com.credo.soundgroove.viewmodel.SoundGrooveViewModel
 
 object Routes {
@@ -78,7 +82,10 @@ fun AppNavigation(
     val songs by viewModel.songs.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
+    val isBuffering by viewModel.isBuffering.collectAsState()
+    val isControllerConnecting by viewModel.isControllerConnecting.collectAsState()
     val playbackPosition by viewModel.playbackPosition.collectAsState()
+    val playbackDuration by viewModel.playbackDuration.collectAsState()
     val favoriteSongs by viewModel.favoriteSongs.collectAsState()
     val recentlyPlayed by viewModel.recentlyPlayed.collectAsState()
     val recentSearches by viewModel.recentSearches.collectAsState()
@@ -95,6 +102,7 @@ fun AppNavigation(
     val equalizerEnabled by viewModel.equalizerEnabled.collectAsState()
     val equalizerPreset by viewModel.equalizerPreset.collectAsState()
     val equalizerBands by viewModel.equalizerBands.collectAsState()
+    val currentTrackEqPinned by viewModel.currentTrackEqPinned.collectAsState()
     val metadataEditMessage by viewModel.metadataEditMessage.collectAsState()
     val playbackQueue by viewModel.playbackQueue.collectAsState()
     val playbackQueueIndex by viewModel.playbackQueueIndex.collectAsState()
@@ -114,7 +122,10 @@ fun AppNavigation(
         songs = songs,
         currentSong = currentSong,
         isPlaying = isPlaying,
+        isBuffering = isBuffering,
+        isControllerConnecting = isControllerConnecting,
         playbackPosition = playbackPosition,
+        playbackDuration = playbackDuration,
         favoriteSongs = favoriteSongs,
         recentlyPlayed = recentlyPlayed,
         recentSearches = recentSearches,
@@ -131,6 +142,7 @@ fun AppNavigation(
         equalizerEnabled = equalizerEnabled,
         equalizerPreset = equalizerPreset,
         equalizerBands = equalizerBands,
+        currentTrackEqPinned = currentTrackEqPinned,
         metadataEditMessage = metadataEditMessage,
         playbackQueue = playbackQueue,
         playbackQueueIndex = playbackQueueIndex,
@@ -152,7 +164,10 @@ private fun AppNavigationContent(
     songs: List<com.credo.soundgroove.data.model.Song>,
     currentSong: com.credo.soundgroove.data.model.Song?,
     isPlaying: Boolean,
+    isBuffering: Boolean,
+    isControllerConnecting: Boolean,
     playbackPosition: Long,
+    playbackDuration: Long,
     favoriteSongs: List<com.credo.soundgroove.data.model.Song>,
     recentlyPlayed: List<com.credo.soundgroove.data.model.Song>,
     recentSearches: List<String>,
@@ -169,6 +184,7 @@ private fun AppNavigationContent(
     equalizerEnabled: Boolean,
     equalizerPreset: com.credo.soundgroove.util.EqualizerPreset,
     equalizerBands: List<com.credo.soundgroove.util.EqualizerBandInfo>,
+    currentTrackEqPinned: Boolean,
     metadataEditMessage: String?,
     playbackQueue: List<com.credo.soundgroove.data.model.Song>,
     playbackQueueIndex: Int,
@@ -178,6 +194,9 @@ private fun AppNavigationContent(
     scope: kotlinx.coroutines.CoroutineScope
 ) {
     val reducedMotion = rememberSgReducedMotion()
+    val shuffleEnabled by viewModel.shuffleEnabled.collectAsState()
+    val repeatMode by viewModel.repeatMode.collectAsState()
+    val playbackError by viewModel.playbackError.collectAsState()
     // Overlay Accueil « Récemment joué » : masque le mini sur HOME uniquement.
     var homeMiniPlayerSuppressed by remember { mutableStateOf(false) }
 
@@ -232,6 +251,49 @@ private fun AppNavigationContent(
     var showCrossfadeSheet by remember { mutableStateOf(false) }
     var showSleepTimerSheet by remember { mutableStateOf(false) }
     var showPlayerOptionsSheet by remember { mutableStateOf(false) }
+    var searchInfoSong by remember { mutableStateOf<com.credo.soundgroove.data.model.Song?>(null) }
+    var searchEditSong by remember { mutableStateOf<com.credo.soundgroove.data.model.Song?>(null) }
+    // Picker playlist unifié (offline) — tue les fantômes Search / détail album-artiste-playlist-dossier.
+    var songForPlaylistPicker by remember { mutableStateOf<com.credo.soundgroove.data.model.Song?>(null) }
+    var pendingCreatePlaylistSong by remember { mutableStateOf<com.credo.soundgroove.data.model.Song?>(null) }
+    var folderInfoSong by remember { mutableStateOf<com.credo.soundgroove.data.model.Song?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val playlistMessage by viewModel.playlistMessage.collectAsState()
+    // Snapshot lecture pour réduire le drilling Player / Mini (sans rewrite NavHost).
+    val playerUiState = remember(
+        currentSong, isPlaying, isBuffering, isControllerConnecting,
+        playbackPosition, playbackDuration, playbackQueue, playbackQueueIndex,
+        shuffleEnabled, repeatMode, playbackSpeed, playbackPitch,
+        gaplessEnabled, crossfadeDurationMs, sleepTimerRemainingSeconds,
+        vinylModeEnabled, equalizerEnabled, equalizerPreset, equalizerBands,
+        currentTrackEqPinned, lyricsSyncOffsetMs, albumCoverAccentEnabled, playbackError
+    ) {
+        PlayerUiState(
+            currentSong = currentSong,
+            isPlaying = isPlaying,
+            isBuffering = isBuffering,
+            isControllerConnecting = isControllerConnecting,
+            playbackPosition = playbackPosition,
+            playbackDuration = playbackDuration,
+            playbackQueue = playbackQueue,
+            playbackQueueIndex = playbackQueueIndex,
+            shuffleEnabled = shuffleEnabled,
+            repeatMode = repeatMode,
+            playbackSpeed = playbackSpeed,
+            playbackPitch = playbackPitch,
+            gaplessEnabled = gaplessEnabled,
+            crossfadeDurationMs = crossfadeDurationMs,
+            sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
+            vinylModeEnabled = vinylModeEnabled,
+            equalizerEnabled = equalizerEnabled,
+            equalizerPreset = equalizerPreset,
+            equalizerBands = equalizerBands,
+            currentTrackEqPinned = currentTrackEqPinned,
+            lyricsSyncOffsetMs = lyricsSyncOffsetMs,
+            albumCoverAccentEnabled = albumCoverAccentEnabled,
+            playbackError = playbackError,
+        )
+    }
 
     // Ouverture "discrète" (tap aperçu paroles / a11y, pas un drag) : anime jusqu'au
     // bout avec la même courbe que l'ancien SgMotion.lyricsEnter (conservé pour
@@ -331,6 +393,20 @@ private fun AppNavigationContent(
         }
     }
 
+    LaunchedEffect(playbackError) {
+        playbackError?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearPlaybackError()
+        }
+    }
+
+    LaunchedEffect(playlistMessage) {
+        playlistMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearPlaylistMessage()
+        }
+    }
+
     LaunchedEffect(currentRoute) {
         if (currentRoute != Routes.PLAYER) {
             lyricsMounted = false
@@ -397,6 +473,7 @@ private fun AppNavigationContent(
                         navController.navigate(Routes.playlistDetail(playlistId))
                     },
                     onNavigateToSearch = {
+                        viewModel.updateMainSelectedTab(2)
                         navController.navigate(Routes.SEARCH)
                     },
                     onNavigateToAlbum = { albumName ->
@@ -406,6 +483,8 @@ private fun AppNavigationContent(
                         navController.navigate(Routes.artistDetail(artistName))
                     },
                     onNavigateToPlayer = {
+                        showQueue = false
+                        scope.launch { queueBannerProgress.snapTo(0f) }
                         navController.navigate(Routes.PLAYER)
                     },
                     onNavigateToCarMode = {
@@ -462,7 +541,12 @@ private fun AppNavigationContent(
                     currentSong = currentSong,
                     accentColor = accentColor,
                     recentSearches = recentSearches,
-                    onBack = { navController.popBackStack() },
+                    onBack = {
+                        navController.popBackStack()
+                        if (viewModel.mainSelectedTab.value == 2) {
+                            viewModel.updateMainSelectedTab(0)
+                        }
+                    },
                     onPlaySong = { song, queue ->
                         viewModel.playSongs(queue, song)
                         navController.navigate(Routes.PLAYER)
@@ -471,7 +555,20 @@ private fun AppNavigationContent(
                     onArtistClick = { artistName -> navController.navigate(Routes.artistDetail(artistName)) },
                     onPlaylistClick = { playlistId -> navController.navigate(Routes.playlistDetail(playlistId)) },
                     onFolderClick = { folderPath -> navController.navigate(Routes.folderDetail(folderPath)) },
-                    onMenuClick = { /* menu contextuel depuis la recherche : à brancher */ },
+                    onMenuClick = { /* SongContextMenuSheet ouvert via menuSong interne */ },
+                    onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
+                    onPlayNext = { song -> viewModel.playNext(song) },
+                    onAddToQueue = { song -> viewModel.addToQueue(song) },
+                    onAddToPlaylist = { song -> songForPlaylistPicker = song },
+                    onViewSongInfo = { song -> searchInfoSong = song },
+                    onShareCard = { song ->
+                        com.credo.soundgroove.util.PlayerActions.shareSongCard(
+                            context,
+                            song,
+                            accentColor.hashCode()
+                        )
+                    },
+                    onEditMetadata = { song -> searchEditSong = song },
                     onSearchSubmitted = { viewModel.addRecentSearch(it) },
                     onClearSearchHistory = { viewModel.clearSearchHistory() }
                 )
@@ -534,54 +631,83 @@ private fun AppNavigationContent(
                     // scope, combiné à celui du mini-player global (overlay AppNavigation),
                     // qui permet à Modifier.sharedElement de morpher la pochette.
                     CompositionLocalProvider(LocalSgAnimatedVisibilityScope provides this@composable) {
-                    // Réduction du Player en bandeau pendant que la Queue est ouverte : léger
-                    // scale-down + fade + léger décalage vers le haut (PAS le même morph que
-                    // le dismiss vers le mini-player — volontairement plus discret, cf. "light
-                    // dismiss/expand" demandé, pas un shrink façon Apple Music). L'alpha à 0
-                    // rend en plus le Player non "visible" sous le bandeau/la Queue, qui sont
-                    // dessinés après lui (donc au-dessus) et interceptent le toucher.
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer {
-                                val p = queueBannerProgress.value
-                                val scale = 1f - 0.06f * p
-                                scaleX = scale
-                                scaleY = scale
-                                alpha = 1f - p
-                                translationY = -0.05f * p * size.height
+                    val queueMorph = queueBannerProgress.value
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        if (queueMorph > 0.02f) {
+                            PlayerQueueBanner(
+                                song = song,
+                                isPlaying = isPlaying,
+                                accentColor = accentColor,
+                                onPlayPause = { viewModel.togglePlayPause() },
+                                onSkipPrevious = { viewModel.skipPrevious() },
+                                onSkipNext = { viewModel.skipNext() },
+                                onExpand = { closeQueue() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .fillMaxHeight(0.22f + queueMorph * 0.03f),
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                            ) {
+                                PlayerScreen(
+                                    song = song,
+                                    isPlaying = isPlaying,
+                                    isBuffering = isBuffering,
+                                    isControllerConnecting = isControllerConnecting,
+                                    accentColor = accentColor,
+                                    isFavorite = favoriteSongs.any { it.id == song.id },
+                                    onPlayPause = { viewModel.togglePlayPause() },
+                                    onClose = { navController.popBackStack() },
+                                    onSwipeDown = { navController.popBackStack() },
+                                    onSwipeUp = { openQueue() },
+                                    onToggleFavorite = { viewModel.toggleFavorite(song) },
+                                    onOpenQueue = { openQueue() },
+                                    player = player,
+                                    onOpenPlayerOptions = { showPlayerOptionsSheet = true },
+                                    onOpenLyrics = { openLyricsDiscrete() },
+                                    lyricsPeekProgress = lyricsPeekProgress.value,
+                                    onLyricsPeekDragStart = { onLyricsPeekDragStart() },
+                                    onLyricsPeekDrag = { delta -> onLyricsPeekDrag(delta) },
+                                    onLyricsPeekDragEnd = { onLyricsPeekDragEnd() },
+                                    gaplessEnabled = gaplessEnabled,
+                                    crossfadeDurationMs = crossfadeDurationMs,
+                                    equalizerEnabled = equalizerEnabled,
+                                    equalizerPresetLabel = equalizerPreset.label,
+                                    playbackSpeed = playbackSpeed,
+                                    playbackPitch = playbackPitch,
+                                    sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
+                                    vinylModeEnabled = vinylModeEnabled,
+                                    lyricsSyncOffsetMs = lyricsSyncOffsetMs,
+                                    albumCoverAccentEnabled = albumCoverAccentEnabled,
+                                    queueOpen = false,
+                                    shuffleEnabled = shuffleEnabled,
+                                    repeatMode = repeatMode,
+                                    onSkipNext = { viewModel.skipNext() },
+                                    onSkipPrevious = { viewModel.skipPrevious() },
+                                    onToggleShuffle = { viewModel.toggleShuffle() },
+                                    onCycleRepeat = { viewModel.cycleRepeatMode() },
+                                )
                             }
-                    ) {
-                        PlayerScreen(
-                            song = song,
-                            isPlaying = isPlaying,
-                            accentColor = accentColor,
-                            isFavorite = favoriteSongs.any { it.id == song.id },
-                            onPlayPause = { viewModel.togglePlayPause() },
-                            onClose = { navController.popBackStack() },
-                            onSwipeDown = { navController.popBackStack() },
-                            onSwipeUp = { openQueue() },
-                            onToggleFavorite = { viewModel.toggleFavorite(song) },
-                            onOpenQueue = { openQueue() },
-                            player = player,
-                            onOpenPlayerOptions = { showPlayerOptionsSheet = true },
-                            onOpenLyrics = { openLyricsDiscrete() },
-                            lyricsPeekProgress = lyricsPeekProgress.value,
-                            onLyricsPeekDragStart = { onLyricsPeekDragStart() },
-                            onLyricsPeekDrag = { delta -> onLyricsPeekDrag(delta) },
-                            onLyricsPeekDragEnd = { onLyricsPeekDragEnd() },
-                            gaplessEnabled = gaplessEnabled,
-                            crossfadeDurationMs = crossfadeDurationMs,
-                            equalizerEnabled = equalizerEnabled,
-                            equalizerPresetLabel = equalizerPreset.label,
-                            playbackSpeed = playbackSpeed,
-                            playbackPitch = playbackPitch,
-                            sleepTimerRemainingSeconds = sleepTimerRemainingSeconds,
-                            vinylModeEnabled = vinylModeEnabled,
-                            lyricsSyncOffsetMs = lyricsSyncOffsetMs,
-                            albumCoverAccentEnabled = albumCoverAccentEnabled,
-                            queueOpen = showQueue || queueBannerProgress.value > 0.001f,
-                        )
+                        }
+                        if (queueMorph > 0.02f) {
+                            QueueScreen(
+                                playlist = playbackQueue,
+                                currentIndex = playbackQueueIndex,
+                                isPlaying = isPlaying,
+                                accentColor = accentColor,
+                                morphProgress = queueMorph,
+                                onClose = { closeQueue() },
+                                onPlaySong = { index -> viewModel.seekToQueueIndex(index) },
+                                onRemoveSong = { index -> viewModel.removeFromPlaybackQueue(index) },
+                                onMoveSong = { from, to -> viewModel.moveInPlaybackQueue(from, to) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight((0.22f + queueMorph * 0.78f).coerceIn(0.22f, 1f)),
+                            )
+                        }
                     }
                     }
                 } else {
@@ -639,7 +765,7 @@ private fun AppNavigationContent(
                         },
                         onPlayNext = { song -> viewModel.playNext(song) },
                         onAddToQueue = { song -> viewModel.addToQueue(song) },
-                        onAddToPlaylist = { /* sélecteur de playlist non disponible depuis le détail */ },
+                        onAddToPlaylist = { song -> songForPlaylistPicker = song },
                         onSaveMetadata = { song, title, artist, album ->
                             viewModel.saveSongMetadata(song, title, artist, album)
                         },
@@ -662,6 +788,7 @@ private fun AppNavigationContent(
                         .fillMaxSize()
                         .background(com.credo.soundgroove.ui.theme.GraphiteAbyss)
                         .statusBarsPadding()
+                        .navigationBarsPadding()
                         .padding(horizontal = 16.dp)
                 ) {
                     FolderDetailContent(
@@ -681,8 +808,8 @@ private fun AppNavigationContent(
                         onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
                         onPlayNext = { song -> viewModel.playNext(song) },
                         onAddToQueue = { song -> viewModel.addToQueue(song) },
-                        onShowSongInfo = { /* info chanson non branchée depuis le détail dossier */ },
-                        onShowPlaylistPicker = { /* sélecteur de playlist non disponible depuis le détail dossier */ },
+                        onShowSongInfo = { song -> folderInfoSong = song },
+                        onShowPlaylistPicker = { song -> songForPlaylistPicker = song },
                         onSetCoverArt = { song, uri -> viewModel.saveSongCoverArt(song, uri) }
                     )
                 }
@@ -727,7 +854,7 @@ private fun AppNavigationContent(
                     onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
                     onPlayNext = { song -> viewModel.playNext(song) },
                     onAddToQueue = { song -> viewModel.addToQueue(song) },
-                    onAddToPlaylist = { /* sélecteur de playlist non disponible depuis le détail */ },
+                    onAddToPlaylist = { song -> songForPlaylistPicker = song },
                     onSaveMetadata = { song, title, artist, album ->
                         viewModel.saveSongMetadata(song, title, artist, album)
                     },
@@ -775,7 +902,7 @@ private fun AppNavigationContent(
                     onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
                     onPlayNext = { song -> viewModel.playNext(song) },
                     onAddToQueue = { song -> viewModel.addToQueue(song) },
-                    onAddToPlaylist = { /* sélecteur de playlist non disponible depuis le détail */ },
+                    onAddToPlaylist = { song -> songForPlaylistPicker = song },
                     onSaveMetadata = { song, title, artist, album ->
                         viewModel.saveSongMetadata(song, title, artist, album)
                     },
@@ -787,6 +914,7 @@ private fun AppNavigationContent(
         }
 
         // Mini-player global unique — cf. MiniPlayerVisibility + docs/NAVIGATION_CONTRACT.md
+        // navigationBarsPadding() = inset réel (3 boutons / gestes) ; bottomPadding = chrome app.
         currentSong?.let { song ->
             val miniVisible = MiniPlayerVisibility.shouldShow(
                 currentRoute = currentRoute,
@@ -805,28 +933,29 @@ private fun AppNavigationContent(
                     .padding(bottom = MiniPlayerVisibility.bottomPadding(currentRoute))
             ) {
                 CompositionLocalProvider(LocalSgAnimatedVisibilityScope provides this@AnimatedVisibility) {
-                    val duration = song.duration.takeIf { it > 0L } ?: 1L
+                    val duration = playbackDuration.takeIf { it > 0L }
+                        ?: song.duration.takeIf { it > 0L }
+                        ?: 1L
                     MiniPlayer(
                         song = song,
-                        isPlaying = isPlaying,
-                        progress = (playbackPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f),
+                        isPlaying = playerUiState.isPlaying,
+                        isBuffering = playerUiState.isBuffering,
+                        isControllerConnecting = playerUiState.isControllerConnecting,
+                        progress = (playerUiState.playbackPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f),
                         accentColor = accentColor,
                         onPlayPause = { viewModel.togglePlayPause() },
                         onSkipPrevious = { viewModel.skipPrevious() },
                         onSkipNext = { viewModel.skipNext() },
                         onOpen = { navController.navigate(Routes.PLAYER) },
-                        gaplessEnabled = gaplessEnabled,
-                        crossfadeDurationMs = crossfadeDurationMs,
-                        albumCoverAccentEnabled = albumCoverAccentEnabled,
+                        gaplessEnabled = playerUiState.gaplessEnabled,
+                        crossfadeDurationMs = playerUiState.crossfadeDurationMs,
+                        albumCoverAccentEnabled = playerUiState.albumCoverAccentEnabled,
                     )
                 }
             }
         }
 
-        // Monté tant que l'anim d'ouverture/fermeture n'est pas terminée (comme
-        // `lyricsMounted`) — pas seulement `showQueue`, sinon le bandeau/la Queue
-        // disparaîtraient net à la fermeture au lieu de suivre `queueBannerProgress`
-        // jusqu'à 0 (cf. "ré-expanse avec animation légère").
+        // Back handler queue intégré dans la route Player (Column morph).
         if ((showQueue || queueBannerProgress.value > 0.001f) && currentRoute == Routes.PLAYER) {
             SgPredictiveBackHandler(
                 enabled = true,
@@ -845,44 +974,6 @@ private fun AppNavigationContent(
                     }
                 },
             )
-            val song = currentSong
-            Box(modifier = Modifier.fillMaxSize()) {
-                // Bandeau Player réduit (~1/4 écran, cf. correction utilisateur) — remplace
-                // le Player plein écran (rendu transparent juste au-dessus, cf. graphicsLayer
-                // sur PlayerScreen) pendant que la Queue est ouverte.
-                if (song != null) {
-                    PlayerQueueBanner(
-                        song = song,
-                        isPlaying = isPlaying,
-                        accentColor = accentColor,
-                        onPlayPause = { viewModel.togglePlayPause() },
-                        onSkipPrevious = { viewModel.skipPrevious() },
-                        onSkipNext = { viewModel.skipNext() },
-                        onExpand = { closeQueue() },
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .fillMaxHeight(0.25f)
-                            .graphicsLayer { alpha = queueBannerProgress.value }
-                    )
-                }
-                QueueScreen(
-                    playlist = playbackQueue,
-                    currentIndex = playbackQueueIndex,
-                    isPlaying = isPlaying,
-                    accentColor = accentColor,
-                    onClose = { closeQueue() },
-                    onPlaySong = { index -> viewModel.seekToQueueIndex(index) },
-                    onRemoveSong = { index -> viewModel.removeFromPlaybackQueue(index) },
-                    onMoveSong = { from, to -> viewModel.moveInPlaybackQueue(from, to) },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .graphicsLayer {
-                            val p = queueBannerProgress.value
-                            alpha = p
-                            translationY = (1f - p) * size.height * 0.12f
-                        }
-                )
-            }
         }
 
         // Paroles = écran plein écran "pair" du Player (pas un bottom sheet), affiché
@@ -970,6 +1061,46 @@ private fun AppNavigationContent(
             }
         }
 
+        searchInfoSong?.let { song ->
+            SongInfoBottomSheet(
+                song = song,
+                accentColor = accentColor,
+                isFavorite = favoriteSongs.any { it.id == song.id },
+                onToggleFavorite = { viewModel.toggleFavorite(song) },
+                onShare = { com.credo.soundgroove.util.PlayerActions.shareSong(context, song) },
+                onShareCard = {
+                    com.credo.soundgroove.util.PlayerActions.shareSongCard(
+                        context,
+                        song,
+                        accentColor.hashCode()
+                    )
+                },
+                onEditMetadata = {
+                    searchInfoSong = null
+                    searchEditSong = song
+                },
+                onSetCoverArt = {
+                    searchInfoSong = null
+                    launchCoverPicker(song)
+                },
+                onSetRingtone = { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, song) },
+                onDismiss = { searchInfoSong = null }
+            )
+        }
+
+        searchEditSong?.let { song ->
+            EditMetadataBottomSheet(
+                song = song,
+                accentColor = accentColor,
+                onSave = { title, artist, album ->
+                    viewModel.saveSongMetadata(song, title, artist, album)
+                    searchEditSong = null
+                },
+                onSetCoverArt = { launchCoverPicker(song) },
+                onDismiss = { searchEditSong = null }
+            )
+        }
+
         if (showPlaybackSpeedSheet) {
             PlaybackSpeedBottomSheet(
                 currentSpeed = playbackSpeed,
@@ -983,8 +1114,6 @@ private fun AppNavigationContent(
 
         if (showEqualizerSheet) {
             val trackId = currentSong?.id ?: 0L
-            val trackPinned = trackId != 0L &&
-                PlaybackPreferences.getTrackEqualizerPreset(context, trackId) != null
             EqualizerBottomSheet(
                 enabled = equalizerEnabled,
                 preset = equalizerPreset,
@@ -992,10 +1121,16 @@ private fun AppNavigationContent(
                 accentColor = accentColor,
                 onEnabledChange = { viewModel.setEqualizerEnabled(it) },
                 onPresetSelected = { viewModel.setEqualizerPreset(it, forCurrentTrack = false) },
-                onBandLevelChange = { band, level -> viewModel.setEqualizerBandLevel(band, level) },
+                onBandLevelChange = { band, level ->
+                    viewModel.setEqualizerBandLevel(
+                        band,
+                        level,
+                        forCurrentTrack = currentTrackEqPinned
+                    )
+                },
                 onDismiss = { showEqualizerSheet = false },
                 hasCurrentTrack = trackId != 0L,
-                pinForCurrentTrack = trackPinned,
+                pinForCurrentTrack = currentTrackEqPinned,
                 onPinForCurrentTrackChange = { pinned ->
                     if (!pinned && trackId != 0L) {
                         viewModel.clearTrackEqualizerPreset(trackId)
@@ -1040,7 +1175,6 @@ private fun AppNavigationContent(
                     playbackPitch = playbackPitch,
                     equalizerEnabled = equalizerEnabled,
                     equalizerPresetLabel = equalizerPreset.label,
-                    vinylModeEnabled = vinylModeEnabled,
                     lyricsSyncOffsetMs = lyricsSyncOffsetMs,
                     onLyricsSyncOffsetChange = { viewModel.setLyricsSyncOffsetMs(it) },
                     onOpenCrossfade = { showCrossfadeSheet = true },
@@ -1050,7 +1184,6 @@ private fun AppNavigationContent(
                         viewModel.refreshEqualizerBands()
                         showEqualizerSheet = true
                     },
-                    onToggleVinylMode = { viewModel.toggleVinylMode() },
                     onShowInfo = { showSongInfo = true },
                     onShare = { com.credo.soundgroove.util.PlayerActions.shareSong(context, song) },
                     onShareCard = {
@@ -1067,6 +1200,69 @@ private fun AppNavigationContent(
                 )
             }
         }
+
+        songForPlaylistPicker?.let { song ->
+            AddToPlaylistSheet(
+                song = song,
+                playlists = playlists,
+                onAddToPlaylist = { playlist ->
+                    viewModel.addSongToPlaylist(playlist.id, song, playlist.songs.size)
+                    songForPlaylistPicker = null
+                },
+                onCreateAndAdd = {
+                    pendingCreatePlaylistSong = song
+                    songForPlaylistPicker = null
+                },
+                onDismiss = { songForPlaylistPicker = null }
+            )
+        }
+
+        pendingCreatePlaylistSong?.let { song ->
+            CreatePlaylistSheet(
+                onDismiss = { pendingCreatePlaylistSong = null },
+                onCreate = { name ->
+                    viewModel.createPlaylist(name) { playlistId ->
+                        viewModel.addSongToPlaylist(playlistId, song, 0)
+                    }
+                    pendingCreatePlaylistSong = null
+                }
+            )
+        }
+
+        folderInfoSong?.let { song ->
+            SongInfoBottomSheet(
+                song = song,
+                accentColor = accentColor,
+                isFavorite = favoriteSongs.any { it.id == song.id },
+                onToggleFavorite = { viewModel.toggleFavorite(song) },
+                onShare = { com.credo.soundgroove.util.PlayerActions.shareSong(context, song) },
+                onShareCard = {
+                    com.credo.soundgroove.util.PlayerActions.shareSongCard(
+                        context,
+                        song,
+                        accentColor.hashCode()
+                    )
+                },
+                onEditMetadata = {
+                    folderInfoSong = null
+                    searchEditSong = song
+                },
+                onSetCoverArt = {
+                    folderInfoSong = null
+                    launchCoverPicker(song)
+                },
+                onSetRingtone = { com.credo.soundgroove.util.PlayerActions.setAsRingtone(context, song) },
+                onDismiss = { folderInfoSong = null }
+            )
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 88.dp)
+        )
     }
     }
     }

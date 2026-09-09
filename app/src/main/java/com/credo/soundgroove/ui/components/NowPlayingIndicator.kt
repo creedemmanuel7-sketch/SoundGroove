@@ -34,6 +34,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.credo.soundgroove.R
+import com.credo.soundgroove.ui.motion.SgLottie
 import com.credo.soundgroove.ui.theme.SgMotion
 import com.credo.soundgroove.ui.theme.rememberSgReducedMotion
 
@@ -68,6 +70,42 @@ fun NowPlayingBadge(
 /** Les barres seules (sans le fond pilule) — pour les emplacements déjà "badgés" (ex. pochette de la file d'attente). */
 @Composable
 fun NowPlayingBars(
+    isPlaying: Boolean,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+    barHeight: androidx.compose.ui.unit.Dp = 12.dp
+) {
+    val reducedMotion = rememberSgReducedMotion()
+    // Lottie = accent (égaliseur soft) ; Compose = fallback reduced / pause / échec load.
+    if (!reducedMotion && isPlaying) {
+        SgLottie(
+            rawRes = R.raw.sg_eq_bars,
+            modifier = modifier
+                .height(barHeight)
+                .width((barHeight.value * 1.35f).dp.coerceAtLeast(16.dp)),
+            isPlaying = true,
+            tint = accentColor,
+            reducedMotionProgress = 0.45f,
+            fallback = {
+                ComposeNowPlayingBars(
+                    isPlaying = isPlaying,
+                    accentColor = accentColor,
+                    barHeight = barHeight
+                )
+            }
+        )
+    } else {
+        ComposeNowPlayingBars(
+            isPlaying = isPlaying,
+            accentColor = accentColor,
+            modifier = modifier,
+            barHeight = barHeight
+        )
+    }
+}
+
+@Composable
+private fun ComposeNowPlayingBars(
     isPlaying: Boolean,
     accentColor: Color,
     modifier: Modifier = Modifier,

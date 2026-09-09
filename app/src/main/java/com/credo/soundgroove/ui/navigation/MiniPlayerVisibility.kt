@@ -30,9 +30,12 @@ object MiniPlayerVisibility {
         return true
     }
 
-    /** Décalage bas pour aligner le mini au-dessus du bottom nav sur [Routes.HOME]. */
+    /** Décalage bas pour aligner le mini au-dessus du bottom nav sur [Routes.HOME].
+     *  Les [androidx.compose.foundation.layout.WindowInsets.navigationBars] sont
+     *  appliquées séparément via `navigationBarsPadding()` sur l'overlay mini-player
+     *  (même contrat que le Spacer navigationBars de [com.credo.soundgroove.ui.components.BottomNavBar]). */
     fun bottomPadding(currentRoute: String?): Dp = when (currentRoute) {
-        Routes.HOME -> SgSpacing.navHeight + SgSpacing.sm
+        Routes.HOME -> SgSpacing.shellBottomNavChrome
         Routes.SEARCH -> 12.dp
         Routes.CAR_MODE -> 0.dp
         else -> 8.dp

@@ -24,8 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.SmartPlaylistIds
@@ -38,6 +36,7 @@ import com.credo.soundgroove.ui.components.EditMetadataBottomSheet
 import com.credo.soundgroove.ui.components.SongContextMenuSheet
 import com.credo.soundgroove.ui.components.SongInfoBottomSheet
 import com.credo.soundgroove.ui.components.rememberSongCoverArtPicker
+import com.credo.soundgroove.ui.motion.SgCoverImage
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.util.displayArtist
 import com.credo.soundgroove.util.displayTitle
@@ -97,9 +96,10 @@ fun PlaylistDetailScreen(
                         Column(modifier = Modifier.fillMaxSize()) {
                             Row(modifier = Modifier.weight(1f)) {
                                 covers.take(2).forEach { uri ->
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(LocalContext.current).data(uri).crossfade(true).build(),
-                                        contentDescription = null,
+                                    SgCoverImage(
+                                        albumArtUri = uri,
+                                        uriCrossfade = true,
+                                        decodeEdgeDp = 160.dp,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.weight(1f).fillMaxHeight()
                                     )
@@ -107,9 +107,10 @@ fun PlaylistDetailScreen(
                             }
                             Row(modifier = Modifier.weight(1f)) {
                                 covers.drop(2).forEach { uri ->
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(LocalContext.current).data(uri).crossfade(true).build(),
-                                        contentDescription = null,
+                                    SgCoverImage(
+                                        albumArtUri = uri,
+                                        uriCrossfade = true,
+                                        decodeEdgeDp = 160.dp,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.weight(1f).fillMaxHeight()
                                     )
@@ -117,9 +118,10 @@ fun PlaylistDetailScreen(
                             }
                         }
                     } else if (covers.isNotEmpty()) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current).data(covers.first()).crossfade(true).build(),
-                            contentDescription = null,
+                        SgCoverImage(
+                            albumArtUri = covers.first(),
+                            uriCrossfade = true,
+                            decodeEdgeDp = 320.dp,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
                         )
@@ -301,7 +303,11 @@ fun PlaylistDetailScreen(
                     )
                 }
             } else {
-                itemsIndexed(playlist.songs) { index, song ->
+                itemsIndexed(
+                    playlist.songs,
+                    key = { _, song -> song.id },
+                    contentType = { _, _ -> "song_row" }
+                ) { index, song ->
                     val isCurrent = song.id == currentSong?.id
 
                     Row(
@@ -374,7 +380,7 @@ fun PlaylistDetailScreen(
                         )
                     }
                 }
-                item { Spacer(modifier = Modifier.height(120.dp)) }
+                item { Spacer(modifier = Modifier.height(sgOverlayBottomInset())) }
             }
         }
 

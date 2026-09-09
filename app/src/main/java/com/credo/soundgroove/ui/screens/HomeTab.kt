@@ -37,37 +37,41 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.ListeningSectionHeader
 import com.credo.soundgroove.ui.components.SongItem
 import com.credo.soundgroove.ui.components.SgEmptyState
+import com.credo.soundgroove.ui.motion.SgCoverImage
 import com.credo.soundgroove.ui.theme.CardSurface
 import com.credo.soundgroove.ui.theme.GlassBorder
 import com.credo.soundgroove.ui.theme.GlassCard
+import com.credo.soundgroove.ui.theme.SgAdaptive
 import com.credo.soundgroove.ui.theme.SgIconButton
 import com.credo.soundgroove.ui.theme.SgRadius
 import com.credo.soundgroove.ui.theme.SgSpacing
 import com.credo.soundgroove.ui.theme.TextPrimary
 import com.credo.soundgroove.ui.theme.TextSecondary
 import com.credo.soundgroove.ui.theme.TextTertiary
+import com.credo.soundgroove.ui.theme.sgConstrainWidth
 import com.credo.soundgroove.ui.theme.sgPressScale
+import com.credo.soundgroove.ui.theme.sgScreenHorizontal
 import com.credo.soundgroove.ui.theme.themeSecondaryAccent
 import com.credo.soundgroove.ui.util.tracksCountLabel
+import com.credo.soundgroove.util.coverInitial
 import com.credo.soundgroove.util.displayArtist
 import com.credo.soundgroove.util.displayTitle
 import com.credo.soundgroove.util.ensureContrast
 import com.credo.soundgroove.viewmodel.ContinueListening
 import com.credo.soundgroove.viewmodel.HomeViewModel
+import com.credo.soundgroove.data.repository.LocalScrobbleStats
 import java.util.Calendar
 
 private object LibrarySection {
@@ -86,6 +90,8 @@ fun HomeTab(
     playlists: List<Playlist>,
     playbackPosition: Long = 0L,
     playbackQueue: List<Song> = emptyList(),
+    isBuffering: Boolean = false,
+    isControllerConnecting: Boolean = false,
     onSeeAllRecent: () -> Unit,
     onPlaySong: (Song, List<Song>) -> Unit,
     onToggleFavorite: (Song) -> Unit,
@@ -100,8 +106,10 @@ fun HomeTab(
     onNavigateToLibrarySection: (Int) -> Unit = {},
     accentColor: Color,
     secondaryAccent: Color = themeSecondaryAccent(accentColor),
+    scrobbleStats: LocalScrobbleStats? = null,
     homeViewModel: HomeViewModel = viewModel()
 ) {
+    @Suppress("UNUSED_VARIABLE")
     val foldersCount = remember(songs) {
         songs
             .map { song -> song.folderPath.takeIf { it.isNotBlank() } ?: "Dossier inconnu" }
@@ -115,8 +123,11 @@ fun HomeTab(
         favoriteSongs,
         currentSong,
         isPlaying,
+        isBuffering,
+        isControllerConnecting,
         playbackPosition,
-        playbackQueue
+        playbackQueue,
+        scrobbleStats
     ) {
         homeViewModel.buildUiState(
             songs = songs,
@@ -124,8 +135,11 @@ fun HomeTab(
             favoriteSongs = favoriteSongs,
             currentSong = currentSong,
             isPlaying = isPlaying,
+            isBuffering = isBuffering,
+            isControllerConnecting = isControllerConnecting,
             playbackPosition = playbackPosition,
-            playbackQueue = playbackQueue
+            playbackQueue = playbackQueue,
+            scrobbleStats = scrobbleStats
         )
     }
 
@@ -139,9 +153,10 @@ fun HomeTab(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = SgSpacing.screenHorizontal),
+            .sgConstrainWidth(SgAdaptive.ContentMax)
+            .padding(horizontal = sgScreenHorizontal()),
         contentPadding = PaddingValues(bottom = SgSpacing.contentInsetBottom),
-        verticalArrangement = Arrangement.spacedBy(SgSpacing.sectionGap)
+        verticalArrangement = Arrangement.spacedBy(SgSpacing.lg)
     ) {
         item {
             Spacer(modifier = Modifier.height(SgSpacing.screenTop))
@@ -158,7 +173,7 @@ fun HomeTab(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Prêt à écouter ?",
+                        text = "Ton espace d'écoute",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextTertiary
                     )
@@ -219,7 +234,10 @@ fun HomeTab(
         }
 
         homeState.continueListening?.let { session ->
-                item {
+                item(
+                    key = "continue_listening",
+                    contentType = "continue_listening"
+                ) {
                     ContinueListeningSection(
                         session = session,
                         accentColor = accentColor,
@@ -230,121 +248,36 @@ fun HomeTab(
                 }
             }
 
-            item {
-                QuickAccessSection(
-                    accentColor = accentColor,
-                    favoritesCount = favoriteSongs.size,
-                    playlistsCount = playlists.count { !it.isSmart },
-                    foldersCount = foldersCount,
-                    onNavigateToLibrarySection = onNavigateToLibrarySection
-                )
-            }
-
-            if (homeState.mixSuggestions.isNotEmpty()) {
-                item {
-                    DailyMixHero(
-                        songs = homeState.mixSuggestions,
+            // Accueil allégé : Continuer + Pulse local + Récents (pas de dashboard).
+            val pulse = homeState.pulseSongs.ifEmpty { homeState.mixSuggestions }
+            if (pulse.isNotEmpty()) {
+                item(key = "pulse_hero", contentType = "pulse_hero") {
+                    PulseLocalHero(
+                        songs = pulse,
                         accentColor = accentColor,
                         secondaryAccent = secondaryAccent,
-                        onPlayAll = {
-                            onPlaySong(homeState.mixSuggestions.first(), homeState.mixSuggestions)
-                        }
+                        onPlayAll = { onPlaySong(pulse.first(), pulse) }
                     )
                 }
-                item {
+                item(key = "pulse_row", contentType = "mix_row") {
                     MixSuggestionsRow(
-                        songs = homeState.mixSuggestions,
+                        songs = pulse.take(12),
                         currentSong = currentSong,
                         isPlaying = isPlaying,
                         accentColor = accentColor,
                         onPlaySong = onPlaySong
-                    )
-                }
-            }
-
-            if (homeState.similarSongs.isNotEmpty()) {
-                item {
-                    DiscoverySectionHeader(
-                        title = "Similaires",
-                        subtitle = "Même artiste ou album",
-                        actionLabel = "Tout lire",
-                        accentColor = accentColor,
-                        onAction = {
-                            onPlaySong(homeState.similarSongs.first(), homeState.similarSongs)
-                        }
-                    )
-                }
-                item {
-                    MixSuggestionsRow(
-                        songs = homeState.similarSongs,
-                        currentSong = currentSong,
-                        isPlaying = isPlaying,
-                        accentColor = accentColor,
-                        onPlaySong = onPlaySong
-                    )
-                }
-            }
-
-            if (homeState.localRadio.isNotEmpty()) {
-                item {
-                    DiscoverySectionHeader(
-                        title = "Radio locale",
-                        subtitle = "File aléatoire · ${tracksCountLabel(homeState.localRadio.size)}",
-                        actionLabel = "Lancer",
-                        accentColor = accentColor,
-                        onAction = {
-                            onPlaySong(homeState.localRadio.first(), homeState.localRadio)
-                        }
-                    )
-                }
-                item {
-                    LocalRadioRow(
-                        songs = homeState.localRadio,
-                        currentSong = currentSong,
-                        isPlaying = isPlaying,
-                        accentColor = accentColor,
-                        onPlaySong = onPlaySong
-                    )
-                }
-            }
-
-            if (homeState.newAdditions.isNotEmpty()) {
-                item {
-                    SectionHeader(title = "Nouveaux ajouts")
-                }
-                items(homeState.newAdditions, key = { "new-${it.id}" }) { song ->
-                    SongItem(
-                        song = song,
-                        isPlaying = currentSong?.id == song.id && isPlaying,
-                        onClick = { onPlaySong(song, homeState.newAdditions) },
-                        showMenu = true,
-                        isFavorite = favoriteSongs.any { it.id == song.id },
-                        accentColor = accentColor,
-                        onToggleFavorite = { onToggleFavorite(song) },
-                        onShowInfo = { onShowSongInfo(song) },
-                        onShowPlaylistPicker = { onShowPlaylistPicker(song) },
-                        onPlayNow = { onPlaySong(song, homeState.newAdditions) },
-                        onPlayNext = { onPlayNext(song) },
-                        onAddToQueue = { onAddToQueue(song) }
                     )
                 }
             }
 
             if (recentlyPlayed.isNotEmpty()) {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        SectionHeader(title = "Récemment écoutés", modifier = Modifier.weight(1f))
-                        Text(
-                            text = "Voir tout",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = accentColor,
-                            modifier = Modifier.clickable { onSeeAllRecent() }
-                        )
-                    }
+                item(key = "recent_grid", contentType = "recent_grid") {
+                    ListeningSectionHeader(
+                        title = "Récemment écoutés",
+                        actionLabel = "Voir tout",
+                        accentColor = accentColor,
+                        onAction = onSeeAllRecent
+                    )
                     Spacer(modifier = Modifier.height(SgSpacing.sm + 2.dp))
                     val rows = recentlyPlayed.take(4).chunked(2)
                     rows.forEach { rowSongs ->
@@ -374,16 +307,6 @@ fun HomeTab(
 }
 
 @Composable
-private fun SectionHeader(title: String, modifier: Modifier = Modifier) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelMedium,
-        color = TextTertiary,
-        modifier = modifier.padding(bottom = 2.dp)
-    )
-}
-
-@Composable
 private fun ContinueListeningSection(
     session: ContinueListening,
     accentColor: Color,
@@ -392,8 +315,13 @@ private fun ContinueListeningSection(
     onResumeListening: () -> Unit
 ) {
     Column {
-        SectionHeader(title = "Continuer l'écoute")
-        Spacer(modifier = Modifier.height(SgSpacing.sm))
+        ListeningSectionHeader(title = "Continuer l'écoute")
+        Text(
+            text = "Reprends exactement où tu t'étais arrêté",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(bottom = SgSpacing.sm)
+        )
         GlassCard(
             modifier = Modifier.fillMaxWidth(),
             cornerRadius = SgRadius.lg,
@@ -413,7 +341,7 @@ private fun ContinueListeningSection(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    AlbumArtThumb(
+                    HomeAlbumArt(
                         song = session.song,
                         size = 72.dp,
                         cornerRadius = SgRadius.sm
@@ -470,14 +398,15 @@ private fun ContinueListeningSection(
                 ResumeButton(
                     label = when {
                         session.isActiveSession && session.isPlaying -> "Ouvrir le lecteur"
+                        session.isActiveSession && session.isBuffering -> "Ouvrir le lecteur"
                         session.isActiveSession -> "Reprendre"
                         else -> "Rejouer"
                     },
                     accentColor = accentColor,
                     filled = true,
                     onClick = {
-                        if (session.isActiveSession && session.isPlaying) onOpenPlayer()
-                        else onResumeListening()
+                        // onResumeListening = lecture + navigation Player (jamais Queue).
+                        onResumeListening()
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -536,7 +465,7 @@ private fun QuickAccessSection(
     onNavigateToLibrarySection: (Int) -> Unit
 ) {
     Column {
-        SectionHeader(title = "Accès rapide")
+        ListeningSectionHeader(title = "Accès rapide")
         Spacer(modifier = Modifier.height(SgSpacing.sm))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -617,38 +546,7 @@ private fun QuickAccessChip(
 }
 
 @Composable
-private fun DiscoverySectionHeader(
-    title: String,
-    subtitle: String,
-    actionLabel: String,
-    accentColor: Color,
-    onAction: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            SectionHeader(title = title)
-            Text(
-                text = subtitle,
-                color = TextTertiary,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(top = 2.dp)
-            )
-        }
-        Text(
-            text = actionLabel,
-            style = MaterialTheme.typography.labelMedium,
-            color = accentColor,
-            modifier = Modifier.clickable(onClick = onAction)
-        )
-    }
-}
-
-@Composable
-private fun DailyMixHero(
+private fun PulseLocalHero(
     songs: List<Song>,
     accentColor: Color,
     secondaryAccent: Color,
@@ -657,8 +555,13 @@ private fun DailyMixHero(
     val featured = songs.first()
     val preview = songs.take(3)
     Column {
-        SectionHeader(title = "Mix du jour")
-        Spacer(modifier = Modifier.height(SgSpacing.sm))
+        ListeningSectionHeader(title = "Pulse local")
+        Text(
+            text = "Mix du jour depuis vos scrobbles, favoris et récents",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(bottom = SgSpacing.sm)
+        )
         GlassCard(
             modifier = Modifier
                 .fillMaxWidth()
@@ -689,7 +592,7 @@ private fun DailyMixHero(
                         modifier = Modifier.padding(end = SgSpacing.md)
                     ) {
                         preview.forEachIndexed { index, song ->
-                            AlbumArtThumb(
+                            HomeAlbumArt(
                                 song = song,
                                 size = if (index == 0) 72.dp else 56.dp,
                                 cornerRadius = SgRadius.sm,
@@ -699,7 +602,7 @@ private fun DailyMixHero(
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = featured.title,
+                            text = featured.displayTitle(),
                             color = TextPrimary,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
@@ -716,38 +619,34 @@ private fun DailyMixHero(
                         )
                         Spacer(modifier = Modifier.height(SgSpacing.sm))
                         Text(
-                            text = "${tracksCountLabel(songs.size)} · votre sélection du jour",
+                            text = "${tracksCountLabel(songs.size)} · 100 % local",
                             color = TextSecondary,
                             fontSize = 12.sp
                         )
                     }
                 }
                 Spacer(modifier = Modifier.height(SgSpacing.md))
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(SgRadius.pill))
-                        .background(accentColor.copy(alpha = 0.24f))
-                        .clickable(onClick = onPlayAll)
-                        .padding(horizontal = SgSpacing.md + 4.dp, vertical = SgSpacing.sm),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(SgSpacing.xs)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_play),
-                        contentDescription = null,
-                        tint = accentColor,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = "Lancer le mix",
-                        color = accentColor,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
+                ResumeButton(
+                    label = "Lancer le Pulse",
+                    accentColor = accentColor,
+                    filled = true,
+                    onClick = onPlayAll,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
+}
+
+@Composable
+private fun DailyMixHero(
+    songs: List<Song>,
+    accentColor: Color,
+    secondaryAccent: Color,
+    onPlayAll: () -> Unit
+) {
+    // Alias rétrocompat — délègue au Pulse local.
+    PulseLocalHero(songs, accentColor, secondaryAccent, onPlayAll)
 }
 
 @Composable
@@ -762,7 +661,11 @@ private fun LocalRadioRow(
         horizontalArrangement = Arrangement.spacedBy(SgSpacing.sm + 2.dp),
         contentPadding = PaddingValues(end = SgSpacing.xs)
     ) {
-        items(songs, key = { "radio-${it.id}" }) { song ->
+        items(
+            songs,
+            key = { "radio-${it.id}" },
+            contentType = { "radio_card" }
+        ) { song ->
             val isCurrent = currentSong?.id == song.id && isPlaying
             GlassCard(
                 modifier = Modifier
@@ -777,8 +680,8 @@ private fun LocalRadioRow(
                             .fillMaxWidth()
                             .aspectRatio(1f)
                     ) {
-                        AlbumArtThumb(
-                            song = song,
+                        HomeAlbumArt(
+                        song = song,
                             size = null,
                             cornerRadius = 0.dp,
                             modifier = Modifier.fillMaxSize()
@@ -850,7 +753,11 @@ private fun MixSuggestionsRow(
         horizontalArrangement = Arrangement.spacedBy(SgSpacing.sm + 2.dp),
         contentPadding = PaddingValues(end = SgSpacing.xs)
     ) {
-        items(songs, key = { "mix-${it.id}" }) { song ->
+        items(
+            songs,
+            key = { "mix-${it.id}" },
+            contentType = { "mix_card" }
+        ) { song ->
             val isCurrent = currentSong?.id == song.id && isPlaying
             GlassCard(
                 modifier = Modifier
@@ -865,8 +772,8 @@ private fun MixSuggestionsRow(
                             .fillMaxWidth()
                             .aspectRatio(1f)
                     ) {
-                        AlbumArtThumb(
-                            song = song,
+                        HomeAlbumArt(
+                        song = song,
                             size = null,
                             cornerRadius = 0.dp,
                             modifier = Modifier.fillMaxSize()
@@ -928,8 +835,8 @@ private fun RecentSongTile(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.BottomStart
         ) {
-            AlbumArtThumb(
-                song = song,
+            HomeAlbumArt(
+                        song = song,
                 size = null,
                 cornerRadius = 0.dp,
                 modifier = Modifier.fillMaxSize()
@@ -957,42 +864,30 @@ private fun RecentSongTile(
 }
 
 @Composable
-private fun AlbumArtThumb(
+private fun HomeAlbumArt(
     song: Song,
     size: androidx.compose.ui.unit.Dp?,
     cornerRadius: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier
 ) {
-    val boxModifier = if (size != null) {
-        modifier
-            .size(size)
-            .clip(RoundedCornerShape(cornerRadius))
-            .background(CardSurface)
+    if (size != null) {
+        com.credo.soundgroove.ui.components.AlbumArtThumb(
+            song = song,
+            size = size,
+            cornerRadius = cornerRadius,
+            modifier = modifier,
+        )
     } else {
-        modifier.background(CardSurface)
-    }
-    Box(
-        modifier = boxModifier,
-        contentAlignment = Alignment.Center
-    ) {
-        if (song.albumArtUri != null) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(song.albumArtUri)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        } else {
-            Icon(
-                painter = painterResource(R.drawable.ic_songs),
-                contentDescription = null,
-                tint = TextSecondary,
-                modifier = Modifier.size(if (size != null) 32.dp else 40.dp)
-            )
-        }
+        com.credo.soundgroove.ui.components.AlbumArtView(
+            albumArtUri = song.albumArtUri,
+            modifier = modifier.fillMaxSize(),
+            shape = RoundedCornerShape(cornerRadius),
+            placeholderLabel = song.coverInitial(),
+            placeholderIconSize = 40.dp,
+            placeholderLabelSize = 22.sp,
+            fallbackSeed = song.id.toString(),
+            decodeEdgeDp = 200.dp,
+        )
     }
 }
 

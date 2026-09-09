@@ -50,6 +50,44 @@ fun SmokeNavGraph() {
                             .testTag("smoke_open_player")
                             .clickable { navController.navigate(Routes.PLAYER) },
                     )
+                    Text(
+                        text = "Ouvrir la recherche",
+                        modifier = Modifier
+                            .padding(top = 12.dp)
+                            .testTag("smoke_open_search")
+                            .clickable { navController.navigate(Routes.SEARCH) },
+                    )
+                }
+            }
+            composable(Routes.SEARCH) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp)
+                        .testTag("smoke_search"),
+                ) {
+                    Text("Recherche")
+                    Text(
+                        text = "Ajouter à playlist (mock)",
+                        modifier = Modifier
+                            .padding(top = 12.dp)
+                            .testTag("smoke_add_playlist")
+                            .clickable { /* état local via route suivante */ },
+                    )
+                    Text(
+                        text = "Play intent mock",
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .testTag("smoke_play_intent")
+                            .clickable { navController.navigate(Routes.PLAYER) },
+                    )
+                    Text(
+                        text = "Retour",
+                        modifier = Modifier
+                            .padding(top = 12.dp)
+                            .testTag("smoke_search_back")
+                            .clickable { navController.popBackStack() },
+                    )
                 }
             }
             composable(Routes.PLAYER) {

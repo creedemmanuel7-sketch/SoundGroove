@@ -19,14 +19,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import com.credo.soundgroove.R
@@ -39,6 +36,7 @@ import com.credo.soundgroove.util.EqualizerBandInfo
 import com.credo.soundgroove.util.EqualizerPreset
 import com.credo.soundgroove.util.LyricsPreferences
 import com.credo.soundgroove.util.PlaybackPreferences
+import com.credo.soundgroove.ui.motion.SgCoverImage
 import com.credo.soundgroove.ui.theme.*
 
 // ─── Create Playlist Sheet ──────────────────────────────────────────────────
@@ -328,10 +326,10 @@ fun AddToPlaylistSheet(
                         ) {
                             val firstSong = playlist.songs.firstOrNull()
                             if (firstSong?.albumArtUri != null) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(LocalContext.current)
-                                        .data(firstSong.albumArtUri).crossfade(true).build(),
-                                    contentDescription = null,
+                                SgCoverImage(
+                                    albumArtUri = firstSong.albumArtUri,
+                                    uriCrossfade = false,
+                                    decodeEdgeDp = 44.dp,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
                                 )
@@ -407,26 +405,15 @@ fun SongContextMenuSheet(
                 Box(
                     modifier = Modifier
                         .size(48.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(GraphiteCard),
+                        .clip(RoundedCornerShape(10.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (song.albumArtUri != null) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(song.albumArtUri).crossfade(true).build(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_songs),
-                            contentDescription = null,
-                            tint = TextSecondary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
+                    AlbumArtThumb(
+                        song = song,
+                        size = 48.dp,
+                        cornerRadius = 10.dp,
+                        accentColor = MaterialTheme.colorScheme.primary,
+                    )
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -437,7 +424,11 @@ fun SongContextMenuSheet(
                         maxLines = 1
                     )
                     Text(
-                        com.credo.soundgroove.util.SongDisplay.artist(song.artist),
+                        com.credo.soundgroove.util.SongDisplay.artist(
+                            song.artist,
+                            song.title,
+                            song.folderPath,
+                        ),
                         color = TextSecondary,
                         fontSize = 13.sp,
                         maxLines = 1
@@ -610,25 +601,27 @@ fun SongInfoBottomSheet(
     // court) pour éviter l'effet "pop" instantané dès que la sheet devient visible.
     val reducedMotion = rememberSgReducedMotion()
     val contentScale = remember { Animatable(if (reducedMotion) 1f else SgMotion.SheetContentInitialScale) }
-    val contentAlpha = remember { Animatable(if (reducedMotion) 1f else 0f) }
     LaunchedEffect(Unit) {
         if (!reducedMotion) {
-            launch { contentScale.animateTo(1f, animationSpec = SgMotion.sheetContentEnterSpec()) }
-            launch { contentAlpha.animateTo(1f, animationSpec = SgMotion.sheetContentEnterSpec()) }
+            contentScale.animateTo(1f, animationSpec = SgMotion.sheetContentEnterSpec())
         }
     }
+    // Opaque + scrim fort : évite le ghost du player (titre / contrôles) à travers la sheet.
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceOverlay.copy(alpha = 0.96f),
+        containerColor = SheetDeep,
+        scrimColor = ScrimOverlay,
+        tonalElevation = 0.dp,
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(SheetDeep)
                 .graphicsLayer {
+                    // Scale seul — pas d'alpha (sinon le player reste visible en fantôme).
                     scaleX = contentScale.value
                     scaleY = contentScale.value
-                    alpha = contentAlpha.value
                 }
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 26.dp)
@@ -641,25 +634,12 @@ fun SongInfoBottomSheet(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(GraphiteCard),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (song.albumArtUri != null) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(song.albumArtUri).crossfade(true).build(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Icon(Icons.Filled.MusicNote, null, tint = accentColor, modifier = Modifier.size(32.dp))
-                    }
-                }
+                AlbumArtThumb(
+                    song = song,
+                    size = 72.dp,
+                    cornerRadius = 16.dp,
+                    accentColor = accentColor,
+                )
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -671,7 +651,11 @@ fun SongInfoBottomSheet(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        com.credo.soundgroove.util.SongDisplay.artist(song.artist),
+                        com.credo.soundgroove.util.SongDisplay.artist(
+                            song.artist,
+                            song.title,
+                            song.folderPath,
+                        ),
                         color = accentColor,
                         fontSize = 14.sp,
                         maxLines = 1
@@ -681,7 +665,12 @@ fun SongInfoBottomSheet(
             Spacer(modifier = Modifier.height(16.dp))
             HorizontalDivider(color = GlassBorder.copy(alpha = 0.5f))
             Spacer(modifier = Modifier.height(8.dp))
-            SongInfoRow(Icons.Filled.Person, "Artiste", com.credo.soundgroove.util.SongDisplay.artist(song.artist), accentColor)
+            SongInfoRow(
+                Icons.Filled.Person,
+                "Artiste",
+                com.credo.soundgroove.util.SongDisplay.artist(song.artist, song.title, song.folderPath),
+                accentColor,
+            )
             SongInfoRow(Icons.Filled.MusicNote, "Titre", com.credo.soundgroove.util.SongDisplay.title(song.title, song.folderPath), accentColor)
             SongInfoRow(Icons.Filled.Album, "Album", com.credo.soundgroove.util.SongDisplay.album(song.albumName), accentColor)
             SongInfoRow(
@@ -1101,7 +1090,7 @@ fun EqualizerBottomSheet(
                             if (pinForTrack) {
                                 "Preset mémorisé pour la piste en cours"
                             } else {
-                                "Appliquer uniquement à la piste en cours"
+                                "Coche pour mémoriser le preset sur ce titre"
                             },
                             color = TextSecondary,
                             fontSize = 11.sp
@@ -1293,10 +1282,10 @@ fun EditMetadataBottomSheet(
                     contentAlignment = Alignment.Center
                 ) {
                     if (song.albumArtUri != null) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(song.albumArtUri).crossfade(true).build(),
-                            contentDescription = null,
+                        SgCoverImage(
+                            albumArtUri = song.albumArtUri,
+                            uriCrossfade = false,
+                            decodeEdgeDp = 64.dp,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
                         )
@@ -1393,44 +1382,46 @@ fun PlayerOptionsBottomSheet(
     playbackPitch: Float,
     equalizerEnabled: Boolean,
     equalizerPresetLabel: String,
-    vinylModeEnabled: Boolean,
     lyricsSyncOffsetMs: Long,
     onLyricsSyncOffsetChange: (Long) -> Unit,
     onOpenCrossfade: () -> Unit,
     onOpenSleepTimer: () -> Unit,
     onOpenPlaybackSpeed: () -> Unit,
     onOpenEqualizer: () -> Unit,
-    onToggleVinylMode: () -> Unit,
     onShowInfo: () -> Unit,
     onShare: () -> Unit,
     onShareCard: () -> Unit,
     onEditMetadata: () -> Unit,
     onSetRingtone: () -> Unit,
     onOpenLyrics: () -> Unit = {},
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    // Conservé pour compat call sites / backup — UI vinyle retirée du chemin Options (→ Paramètres Avancé).
+    @Suppress("UNUSED_PARAMETER") vinylModeEnabled: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") onToggleVinylMode: () -> Unit = {},
 ) {
     val reducedMotion = rememberSgReducedMotion()
     val contentScale = remember { Animatable(if (reducedMotion) 1f else SgMotion.SheetContentInitialScale) }
-    val contentAlpha = remember { Animatable(if (reducedMotion) 1f else 0f) }
     LaunchedEffect(Unit) {
         if (!reducedMotion) {
-            launch { contentScale.animateTo(1f, animationSpec = SgMotion.sheetContentEnterSpec()) }
-            launch { contentAlpha.animateTo(1f, animationSpec = SgMotion.sheetContentEnterSpec()) }
+            contentScale.animateTo(1f, animationSpec = SgMotion.sheetContentEnterSpec())
         }
     }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceOverlay.copy(alpha = 0.96f),
+        containerColor = SheetDeep,
+        scrimColor = ScrimOverlay,
+        tonalElevation = 0.dp,
         dragHandle = { BottomSheetDefaults.DragHandle(color = GlassBorder) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(SheetDeep)
                 .graphicsLayer {
+                    // Scale seul — pas d'alpha (évite ghost du player sous la sheet).
                     scaleX = contentScale.value
                     scaleY = contentScale.value
-                    alpha = contentAlpha.value
                 }
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 28.dp)
@@ -1443,13 +1434,35 @@ fun PlayerOptionsBottomSheet(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                "Transition, audio, affichage et actions",
+                "Essentiels d'abord, réglages ensuite",
                 color = TextSecondary,
                 fontSize = 12.sp
             )
 
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Transition", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Text("Essentiels", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(8.dp))
+            listOf(
+                Triple(Icons.Filled.Lyrics, "Paroles", onOpenLyrics),
+                Triple(Icons.Filled.Info, "Infos sur le morceau", onShowInfo),
+                Triple(Icons.Filled.GraphicEq, "Égaliseur", onOpenEqualizer),
+            ).forEach { (icon, label, action) ->
+                PlayerOptionsListRow(
+                    icon = icon,
+                    label = label,
+                    detail = when (label) {
+                        "Égaliseur" -> if (equalizerEnabled) equalizerPresetLabel else "Désactivé"
+                        else -> null
+                    },
+                    active = label == "Égaliseur" && equalizerEnabled,
+                    accentColor = accentColor,
+                    onClick = { onDismiss(); action() }
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Lecture", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1476,10 +1489,7 @@ fun PlayerOptionsBottomSheet(
                     modifier = Modifier.weight(1f)
                 )
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("Audio", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             val speedPitchActive = playbackSpeed != 1f || playbackPitch != 1f
             PlayerOptionsListRow(
                 icon = Icons.Filled.Speed,
@@ -1489,54 +1499,10 @@ fun PlayerOptionsBottomSheet(
                 accentColor = accentColor,
                 onClick = { onDismiss(); onOpenPlaybackSpeed() }
             )
-            Spacer(modifier = Modifier.height(6.dp))
-            PlayerOptionsListRow(
-                icon = Icons.Filled.GraphicEq,
-                label = "Égaliseur",
-                detail = if (equalizerEnabled) equalizerPresetLabel else "Désactivé",
-                active = equalizerEnabled,
-                accentColor = accentColor,
-                onClick = { onDismiss(); onOpenEqualizer() }
-            )
 
             Spacer(modifier = Modifier.height(16.dp))
             Text("Affichage", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (vinylModeEnabled) accentColor.copy(alpha = 0.1f) else GlassSurface.copy(alpha = 0.45f))
-                    .border(
-                        1.dp,
-                        if (vinylModeEnabled) accentColor.copy(alpha = 0.35f) else GlassBorder.copy(alpha = 0.35f),
-                        RoundedCornerShape(12.dp)
-                    )
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Album, null, tint = if (vinylModeEnabled) accentColor else TextSecondary, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text("Mode vinyle", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                        Text("Pochette en disque tournant", color = TextSecondary, fontSize = 11.sp)
-                    }
-                }
-                Switch(
-                    checked = vinylModeEnabled,
-                    onCheckedChange = { onToggleVinylMode() },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = accentColor,
-                        uncheckedThumbColor = TextSecondary,
-                        uncheckedTrackColor = GlassSurface
-                    )
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
             val syncOffsetActive = lyricsSyncOffsetMs != com.credo.soundgroove.lyrics.LyricsViewModel.DEFAULT_SYNC_OFFSET_MS
             Row(
                 modifier = Modifier
@@ -1596,13 +1562,11 @@ fun PlayerOptionsBottomSheet(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Actions", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Text("Plus", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(8.dp))
             val actionRows = listOf(
-                Triple(Icons.Filled.Lyrics, "Paroles", onOpenLyrics),
                 Triple(Icons.Filled.Share, "Partager", onShare),
                 Triple(Icons.Filled.Image, "Partager la carte", onShareCard),
-                Triple(Icons.Filled.Info, "Informations", onShowInfo),
                 Triple(Icons.Filled.Edit, "Modifier métadonnées", onEditMetadata),
                 Triple(Icons.Filled.Notifications, "Définir comme sonnerie", onSetRingtone)
             )

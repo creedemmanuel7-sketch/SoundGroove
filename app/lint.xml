@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Lint « security-ish » pour SoundGroove — à lancer via
+  ./gradlew.bat :app:lintDebug  (ou le job CI android-security.yml).
+-->
+<lint>
+    <issue id="UsesCleartextTraffic" severity="error" />
+    <issue id="InsecureBaseConfiguration" severity="error" />
+    <issue id="AcceptsUserCertificates" severity="error" />
+    <issue id="HardcodedDebugMode" severity="error" />
+    <issue id="WorldReadableFiles" severity="error" />
+    <issue id="WorldWriteableFiles" severity="error" />
+    <issue id="SetJavaScriptEnabled" severity="warning" />
+    <issue id="ExportedContentProvider" severity="warning" />
+    <issue id="ExportedReceiver" severity="warning" />
+    <issue id="ExportedService" severity="warning" />
+    <issue id="ExportedActivity" severity="informational" />
+    <issue id="AllowBackup" severity="informational" />
+    <issue id="ExpiredTargetSdkVersion" severity="error" />
+    <issue id="UnusedAttribute" severity="ignore" />
+</lint>

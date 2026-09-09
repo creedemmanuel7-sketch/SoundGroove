@@ -105,9 +105,8 @@ fun GestureHintBanner(
 }
 
 private val playerGestureHints = listOf(
+    // Une seule tip « glisser vers le bas », une fois via prefs — plus jamais ensuite.
     GestureHintIds.PLAYER_DISMISS to "Glisser vers le bas pour réduire au mini-player",
-    GestureHintIds.PLAYER_QUEUE to "Glisser vers le haut pour ouvrir la file d'attente",
-    GestureHintIds.PLAYER_LYRICS to "Glisser horizontalement pour afficher les paroles",
 )
 
 @Composable

@@ -1,0 +1,9 @@
+{
+  "name": "soundgroove-tools",
+  "private": true,
+  "type": "module",
+  "description": "Scripts locaux (ex. generate_sg_pulse_riv.mjs)",
+  "dependencies": {
+    "@stevysmith/rive-generator": "^0.1.1"
+  }
+}

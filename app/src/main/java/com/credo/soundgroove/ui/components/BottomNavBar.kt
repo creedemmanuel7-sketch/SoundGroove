@@ -40,7 +40,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -58,8 +57,6 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.session.MediaController
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
@@ -81,77 +78,86 @@ fun BottomNavBar(selectedTab: Int, accentColor: Color, onTabSelected: (Int) -> U
         NavItem("Profil", R.drawable.ic_profile)
     )
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = SgSpacing.sm, vertical = SgSpacing.xs)
-    ) {
-        GlassCard(
+    // Shell Accueil : pill au-dessus des navigationBars réelles
+    // (gestes ≈ mince, 3 boutons ≈ 48dp) — Spacer dédié, pas de hauteur fixe.
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(SgSpacing.navHeight),
-            cornerRadius = SgRadius.pill,
-            accentColor = accentColor
+                .padding(horizontal = SgSpacing.sm, vertical = SgSpacing.xs)
         ) {
-            Row(
+            GlassCard(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = SgSpacing.xs),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxWidth()
+                    .height(SgSpacing.navHeight),
+                cornerRadius = SgRadius.pill,
+                accentColor = accentColor
             ) {
-                val reducedMotion = rememberSgReducedMotion()
-                val pillSpec = if (reducedMotion) {
-                    androidx.compose.animation.core.snap()
-                } else {
-                    SgMotion.tweenFastOf<Color>()
-                }
-                tabs.forEachIndexed { index, item ->
-                    val selected = selectedTab == index
-                    val tabInteraction = remember(index) { MutableInteractionSource() }
-                    // Pill sélection : couleurs FastMs (Mode perf = snap).
-                    val tabBg by animateColorAsState(
-                        targetValue = if (selected) accentColor.copy(alpha = 0.20f) else Color.Transparent,
-                        animationSpec = pillSpec,
-                        label = "navTabBg"
-                    )
-                    val iconTint by animateColorAsState(
-                        targetValue = if (selected) accentColor else TextTertiary,
-                        animationSpec = pillSpec,
-                        label = "navIconTint"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .sgPressScale(tabInteraction, pressedScale = 0.94f, pressedAlpha = 0.85f)
-                            .clip(RoundedCornerShape(SgRadius.pill))
-                            .background(tabBg)
-                            .clickable(
-                                interactionSource = tabInteraction,
-                                indication = null,
-                            ) { onTabSelected(index) }
-                            .padding(vertical = SgSpacing.sm, horizontal = SgSpacing.xs),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                painter = androidx.compose.ui.res.painterResource(item.iconRes),
-                                contentDescription = item.label,
-                                tint = iconTint,
-                                modifier = Modifier.size(SgSpacing.iconSize)
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = item.label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = iconTint,
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
-                            )
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = SgSpacing.xs),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val reducedMotion = rememberSgReducedMotion()
+                    val pillSpec = if (reducedMotion) {
+                        androidx.compose.animation.core.snap()
+                    } else {
+                        SgMotion.tweenFastOf<Color>()
+                    }
+                    tabs.forEachIndexed { index, item ->
+                        val selected = selectedTab == index
+                        val tabInteraction = remember(index) { MutableInteractionSource() }
+                        // Pill sélection : couleurs FastMs (Mode perf = snap).
+                        val tabBg by animateColorAsState(
+                            targetValue = if (selected) accentColor.copy(alpha = 0.20f) else Color.Transparent,
+                            animationSpec = pillSpec,
+                            label = "navTabBg"
+                        )
+                        val iconTint by animateColorAsState(
+                            targetValue = if (selected) accentColor else TextTertiary,
+                            animationSpec = pillSpec,
+                            label = "navIconTint"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .sgPressScale(tabInteraction, pressedScale = 0.94f, pressedAlpha = 0.85f)
+                                .clip(RoundedCornerShape(SgRadius.pill))
+                                .background(tabBg)
+                                .clickable(
+                                    interactionSource = tabInteraction,
+                                    indication = null,
+                                ) { onTabSelected(index) }
+                                .padding(vertical = SgSpacing.sm, horizontal = SgSpacing.xs),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    painter = androidx.compose.ui.res.painterResource(item.iconRes),
+                                    contentDescription = item.label,
+                                    tint = iconTint,
+                                    modifier = Modifier.size(SgSpacing.iconSize)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = item.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = iconTint,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+        Spacer(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsBottomHeight(WindowInsets.navigationBars)
+        )
     }
 }
 

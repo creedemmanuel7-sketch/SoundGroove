@@ -10,6 +10,8 @@ object PlaybackPreferences {
     const val KEY_CROSSFADE_MS = "crossfade_duration_ms"
     const val KEY_PLAYBACK_SPEED = "playback_speed"
     const val KEY_PLAYBACK_PITCH = "playback_pitch"
+    const val KEY_SHUFFLE_ENABLED = "shuffle_mode_enabled"
+    const val KEY_REPEAT_MODE = "repeat_mode"
     const val KEY_EQUALIZER_ENABLED = "equalizer_enabled"
     const val KEY_EQUALIZER_PRESET = "equalizer_preset"
     const val KEY_EQUALIZER_BAND_LEVELS = "equalizer_band_levels"
@@ -35,6 +37,29 @@ object PlaybackPreferences {
 
     fun playbackPitch(context: Context): Float =
         prefs(context).getFloat(KEY_PLAYBACK_PITCH, 1.0f)
+
+    fun isShuffleEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SHUFFLE_ENABLED, false)
+
+    fun setShuffleEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SHUFFLE_ENABLED, enabled).apply()
+    }
+
+    /** Aligné sur [androidx.media3.common.Player.REPEAT_MODE_*]. */
+    fun repeatMode(context: Context): Int =
+        prefs(context).getInt(KEY_REPEAT_MODE, androidx.media3.common.Player.REPEAT_MODE_OFF)
+            .coerceIn(
+                androidx.media3.common.Player.REPEAT_MODE_OFF,
+                androidx.media3.common.Player.REPEAT_MODE_ONE,
+            )
+
+    fun setRepeatMode(context: Context, mode: Int) {
+        val clamped = mode.coerceIn(
+            androidx.media3.common.Player.REPEAT_MODE_OFF,
+            androidx.media3.common.Player.REPEAT_MODE_ONE,
+        )
+        prefs(context).edit().putInt(KEY_REPEAT_MODE, clamped).apply()
+    }
 
     fun crossfadeLabel(ms: Int): String = when (ms) {
         0 -> "Désactivé"
@@ -105,6 +130,20 @@ object PlaybackPreferences {
 
     fun replaceTrackEqualizerPresets(context: Context, presets: Map<Long, EqualizerPreset>) {
         saveTrackEqMap(context, presets.mapValues { it.value.name })
+    }
+
+    /**
+     * Retire les presets EQ per-track dont le MediaStore ID n'existe plus.
+     * No-op si [validSongIds] est vide (évite wipe après scan vide).
+     */
+    fun pruneOrphanTrackEqualizerPresets(context: Context, validSongIds: Set<Long>) {
+        if (validSongIds.isEmpty()) return
+        val map = loadTrackEqMap(context)
+        if (map.isEmpty()) return
+        val pruned = map.filterKeys { it in validSongIds }
+        if (pruned.size != map.size) {
+            saveTrackEqMap(context, pruned)
+        }
     }
 
     private fun loadTrackEqMap(context: Context): Map<Long, String> {

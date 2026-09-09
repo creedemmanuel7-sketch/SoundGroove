@@ -39,7 +39,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -57,8 +56,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.session.MediaController
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.ui.components.LibraryScanLoading
 import com.credo.soundgroove.data.model.Playlist
@@ -68,6 +65,7 @@ import com.credo.soundgroove.data.repository.LocalScrobbleStats
 import com.credo.soundgroove.ui.components.BottomNavBar
 import com.credo.soundgroove.ui.components.InfoRow
 import com.credo.soundgroove.ui.components.formatDuration
+import com.credo.soundgroove.ui.motion.SgCoverImage
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.util.MediaPermissions
 import com.credo.soundgroove.util.PlayerGuards
@@ -130,6 +128,8 @@ fun MainScreen(
     playlists: List<Playlist> = emptyList(),
     currentSong: Song? = null,
     isPlaying: Boolean = false,
+    isBuffering: Boolean = false,
+    isControllerConnecting: Boolean = false,
     playbackPosition: Long = 0L,
     playbackQueue: List<Song> = emptyList(),
     onPlaySongs: (List<Song>, Song) -> Unit = { _, _ -> },
@@ -150,6 +150,8 @@ fun MainScreen(
     onPersistentMiniPlayerChange: (Boolean) -> Unit = {},
     performanceModeEnabled: Boolean = false,
     onPerformanceModeChange: (Boolean) -> Unit = {},
+    vinylModeEnabled: Boolean = false,
+    onVinylModeChange: (Boolean) -> Unit = {},
     remoteHostEnabled: Boolean = false,
     remotePin: String? = null,
     remoteLanIp: String? = null,
@@ -298,10 +300,10 @@ fun MainScreen(
     BackHandler(enabled = showSongInfo) { showSongInfo = false }
     BackHandler(enabled = showPlaylistPicker) { showPlaylistPicker = false }
     BackHandler(enabled = showRecentlyPlayed) { showRecentlyPlayed = false }
-    LaunchedEffect(showRecentlyPlayed) {
-        onHomeMiniPlayerSuppressedChange(showRecentlyPlayed)
-    }
     var showSettings by remember { mutableStateOf(false) }
+    LaunchedEffect(showRecentlyPlayed, showSettings) {
+        onHomeMiniPlayerSuppressedChange(showRecentlyPlayed || showSettings)
+    }
     BackHandler(enabled = showSettings) { showSettings = false }
     var showEditMetadata by remember { mutableStateOf(false) }
     val activeSong = localCurrentSong ?: currentSong
@@ -349,22 +351,33 @@ fun MainScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
                     .padding(32.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
                         painter = painterResource(R.drawable.ic_songs),
-                        contentDescription = null,
+                        contentDescription = "Accès à la musique requis",
                         tint = accentColor,
                         modifier = Modifier.size(64.dp)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "SoundGroove a besoin d'accéder à votre musique pour la lire.",
+                        text = "Permission musique refusée",
                         color = TextPrimary,
-                        fontSize = 18.sp,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "SoundGroove lit uniquement les fichiers audio de l'appareil. " +
+                            "Sans accès stockage / musique, la bibliothèque reste vide — " +
+                            "aucun crash, tu pourras réessayer quand tu veux.",
+                        color = TextSecondary,
+                        fontSize = 15.sp,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(24.dp))
@@ -378,6 +391,13 @@ fun MainScreen(
                     ) {
                         Text("Accorder la permission", color = Color.White, fontWeight = FontWeight.Bold)
                     }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Si le dialogue ne s'affiche plus : Réglages système → Apps → SoundGroove → Autorisations.",
+                        color = TextTertiary,
+                        fontSize = 12.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
                 }
             }
         }
@@ -402,10 +422,12 @@ fun MainScreen(
                     label = "mainTab"
                 ) { tab ->
                 when (tab) {
-                    0 -> HomeTab(
+                    0, 2 -> HomeTab(
                         songs = songs,
                         currentSong = activeSong,
                         isPlaying = activeIsPlaying,
+                        isBuffering = isBuffering,
+                        isControllerConnecting = isControllerConnecting,
                         recentlyPlayed = recentlyPlayed,
                         favoriteSongs = favoriteSongs,
                         playlists = playlists,
@@ -415,7 +437,6 @@ fun MainScreen(
                         onPlaySong = { song, queue ->
                             localCurrentSong = song
                             playSong(song, queue)
-                            localIsPlaying = true
                             onNavigateToPlayer()
                         },
                         onToggleFavorite = onToggleFavorite,
@@ -431,20 +452,18 @@ fun MainScreen(
                         onAddToQueue = { song -> addToQueueEnd(song) },
                         onOpenPlayer = onNavigateToPlayer,
                         onResumeListening = {
+                            // Toujours ouvrir le Player (jamais la Queue).
                             when {
                                 activeSong != null && !activeIsPlaying -> {
                                     player.play()
-                                    onNavigateToPlayer()
                                 }
-                                activeSong != null -> onNavigateToPlayer()
-                                recentlyPlayed.isNotEmpty() -> {
+                                activeSong == null && recentlyPlayed.isNotEmpty() -> {
                                     val song = recentlyPlayed.first()
                                     localCurrentSong = song
                                     playSong(song, recentlyPlayed)
-                                    localIsPlaying = true
-                                    onNavigateToPlayer()
                                 }
                             }
+                            onNavigateToPlayer()
                         },
                         onNavigateToSearch = onNavigateToSearch,
                         onOpenSettings = { showSettings = true },
@@ -453,7 +472,8 @@ fun MainScreen(
                             onSelectedTabChange(1)
                         },
                         accentColor = accentColor,
-                        secondaryAccent = secondaryAccent
+                        secondaryAccent = secondaryAccent,
+                        scrobbleStats = scrobbleStats
                     )
 
                     1 -> LibraryTab(
@@ -561,6 +581,8 @@ fun MainScreen(
                     accentColor = accentColor,
                     onTabSelected = { tab ->
                         if (tab == 2) {
+                            // Sync highlight Recherche avant push route SEARCH.
+                            onSelectedTabChange(2)
                             onNavigateToSearch()
                         } else {
                             onSelectedTabChange(tab)
@@ -584,7 +606,6 @@ fun MainScreen(
             onSongClick = { song ->
                 localCurrentSong = song
                 playSong(song, recentlyPlayed)
-                localIsPlaying = true
                 onNavigateToPlayer()
             }
         )
@@ -637,6 +658,8 @@ fun MainScreen(
                 showSettings = false
                 onNavigateToCarMode()
             },
+            vinylModeEnabled = vinylModeEnabled,
+            onVinylModeChange = onVinylModeChange,
             remoteHostEnabled = remoteHostEnabled,
             remotePin = remotePin,
             remoteLanIp = remoteLanIp,
@@ -713,10 +736,10 @@ fun MainScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             if (song.albumArtUri != null) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(LocalContext.current)
-                                        .data(song.albumArtUri).crossfade(true).build(),
-                                    contentDescription = null,
+                                SgCoverImage(
+                                    albumArtUri = song.albumArtUri,
+                                    uriCrossfade = false,
+                                    decodeEdgeDp = 72.dp,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()
                                 )

@@ -39,12 +39,9 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -71,19 +68,19 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.session.MediaController
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Playlist
 import com.credo.soundgroove.data.model.Song
+import com.credo.soundgroove.ui.components.AlbumArtView
 import com.credo.soundgroove.ui.components.PlayerGestureHints
 import com.credo.soundgroove.ui.components.PlayerInlineLyricsPreview
 import com.credo.soundgroove.ui.components.SgSeekBar
 import com.credo.soundgroove.ui.components.formatDuration
+import com.credo.soundgroove.ui.motion.SgCoverImage
 import com.credo.soundgroove.ui.theme.*
 import com.credo.soundgroove.util.PlaybackPreferences
-import com.credo.soundgroove.util.PlayerGuards
 import com.credo.soundgroove.util.blendWithAlbumArt
+import com.credo.soundgroove.util.coverInitial
 import com.credo.soundgroove.util.displayArtist
 import com.credo.soundgroove.util.displayTitle
 import com.credo.soundgroove.util.ensureContrast
@@ -96,9 +93,6 @@ import kotlinx.coroutines.launch
 
 /** Interpolation linéaire simple — évite une dépendance à `androidx.compose.ui.util.lerp`. */
 private fun lerpFloat(start: Float, stop: Float, fraction: Float): Float = start + (stop - start) * fraction
-
-/** Délai sans interaction avant de masquer le chrome pendant la lecture. */
-private const val PLAYER_IDLE_CHROME_TIMEOUT_MS = 4_000L
 
 @Composable
 fun PlayerScreen(
@@ -136,7 +130,17 @@ fun PlayerScreen(
     albumCoverAccentEnabled: Boolean = false,
     /** Désactive le predictive back système quand la file d'attente overlay est ouverte. */
     queueOpen: Boolean = false,
+    /** Prepare / buffer ExoPlayer (STATE_BUFFERING) — timeout UI côté ViewModel. */
+    isBuffering: Boolean = false,
+    /** Cold-start MediaController : « connexion » distincte du buffer piste. */
+    isControllerConnecting: Boolean = false,
     lyricsSyncOffsetMs: Long = com.credo.soundgroove.lyrics.LyricsViewModel.DEFAULT_SYNC_OFFSET_MS,
+    shuffleEnabled: Boolean = false,
+    repeatMode: Int = androidx.media3.common.Player.REPEAT_MODE_OFF,
+    onSkipNext: () -> Unit = {},
+    onSkipPrevious: () -> Unit = {},
+    onToggleShuffle: () -> Unit = {},
+    onCycleRepeat: () -> Unit = {},
 ) {
     val surfaceBg = MaterialTheme.colorScheme.background
     val rolePalette = rememberAlbumArtRolePalette(
@@ -177,8 +181,6 @@ fun PlayerScreen(
     var progress by remember { mutableStateOf(0f) }
     var isSeeking by remember { mutableStateOf(false) }
     var seekPosition by remember { mutableStateOf(0f) }
-    var isShuffled by remember { mutableStateOf(false) }
-    var repeatMode by remember { mutableStateOf(0) }
     var duration by remember { mutableStateOf(0L) }
     var currentPosition by remember { mutableStateOf(0L) }
     var dragOffsetX by remember { mutableStateOf(0f) }
@@ -213,45 +215,14 @@ fun PlayerScreen(
     val artOffsetX = remember { Animatable(0f) }
     val artOffsetY = remember { Animatable(SgMotion.PlayerArtEnterOffsetY) }
     val chromeAlpha = remember { Animatable(0f) }
-    /** 0 = chrome visible, 1 = chrome masqué après idle (lecture immersive). */
-    val idleChromeHidden = remember { Animatable(0f) }
-    var idleInteractionEpoch by remember { mutableIntStateOf(0) }
     val dismissRootOffsetY = remember { Animatable(0f) }
     var isExiting by remember { mutableStateOf(false) }
     val reducedMotion = rememberSgReducedMotion()
-
-    fun bumpIdleTimer() {
-        idleInteractionEpoch++
-        scope.launch {
-            if (idleChromeHidden.value > 0.01f) {
-                idleChromeHidden.animateTo(0f, animationSpec = SgMotion.playerChromeEnterSpec())
-            } else {
-                idleChromeHidden.snapTo(0f)
-            }
-        }
-    }
-
-    LaunchedEffect(
-        isPlaying,
-        idleInteractionEpoch,
-        reducedMotion,
-        isSeeking,
-        isExiting,
-        lyricsPeekProgress,
-        queueOpen,
-        isDismissDragging,
-    ) {
-        if (reducedMotion || !isPlaying || isSeeking || isExiting ||
-            lyricsPeekProgress > 0.001f || queueOpen || isDismissDragging
-        ) {
-            idleChromeHidden.snapTo(0f)
-            return@LaunchedEffect
-        }
-        delay(PLAYER_IDLE_CHROME_TIMEOUT_MS)
-        if (!isPlaying || isSeeking || isExiting || lyricsPeekProgress > 0.001f || queueOpen) {
-            return@LaunchedEffect
-        }
-        idleChromeHidden.animateTo(1f, animationSpec = SgMotion.playerChromeExitSpec())
+    // Ignore swipe-up → Queue pendant le morph d'entrée (évite Reprendre → File).
+    var queueSwipeArmed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(450)
+        queueSwipeArmed = true
     }
 
     // Fondu des "lampes" (scrim ambiance) : évite le snap brutal quand Palette
@@ -446,6 +417,11 @@ fun PlayerScreen(
 
     LaunchedEffect(reducedMotion) {
         runEnterAnimation()
+        // Filet anti chrome invisible après morph shared (captures QA mid-transition).
+        kotlinx.coroutines.delay(700)
+        if (chromeAlpha.value < 0.95f) {
+            chromeAlpha.snapTo(1f)
+        }
     }
 
     val predictiveBackEnabled =
@@ -468,16 +444,21 @@ fun PlayerScreen(
         dismissPlayer(fromInteractiveDrag = dismissMorphProgress >= dismissCommitFraction)
     })
 
-    LaunchedEffect(player) {
+    LaunchedEffect(player, song.id, isPlaying, isBuffering) {
         while (true) {
             try {
-                currentPosition = player.currentPosition
-                duration = player.duration.coerceAtLeast(1L)
-                progress = currentPosition.toFloat() / duration.toFloat()
+                currentPosition = player.currentPosition.coerceAtLeast(0L)
+                val playerDur = player.duration
+                duration = when {
+                    playerDur > 0L -> playerDur
+                    song.duration > 0L -> song.duration
+                    else -> 1L
+                }
+                progress = (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
             } catch (_: Exception) {
                 break
             }
-            kotlinx.coroutines.delay(500)
+            kotlinx.coroutines.delay(if (isPlaying || isBuffering) 200L else 500L)
         }
     }
 
@@ -512,14 +493,6 @@ fun PlayerScreen(
                             true
                         }
                     )
-                    if (idleChromeHidden.value > 0.01f) {
-                        add(
-                            CustomAccessibilityAction("Afficher tous les contrôles") {
-                                bumpIdleTimer()
-                                true
-                            }
-                        )
-                    }
                 }
             }
             .offset { IntOffset(0, dismissRootOffsetY.value.toInt()) }
@@ -529,8 +502,7 @@ fun PlayerScreen(
             // `lyricsPeekProgress` partagé côté AppNavigation). `size` est la taille
             // réelle du layout au moment du dessin — pas besoin de re-mesurer.
             .graphicsLayer { translationX = -lyricsPeekProgress * size.width }
-            .pointerInput(Unit) { detectTapGestures { bumpIdleTimer() } }
-            .pointerInput(Unit) {
+                        .pointerInput(Unit) {
                 detectVerticalDragGestures(
                     onDragEnd = {
                         val offset = verticalDragOffset
@@ -539,7 +511,7 @@ fun PlayerScreen(
                             // seuil fixe d'origine, tranché net.
                             when {
                                 offset > 120f -> dismissPlayer()
-                                offset < -120f -> onSwipeUp()
+                                queueSwipeArmed && offset < -120f -> onSwipeUp()
                             }
                         } else {
                             val wasDismissDragging = isDismissDragging
@@ -548,7 +520,7 @@ fun PlayerScreen(
                                     wasDismissDragging && offset / dismissDragDistancePx >= dismissCommitFraction ->
                                         dismissPlayer(fromInteractiveDrag = true)
                                     wasDismissDragging -> cancelDismissDrag()
-                                    offset < -120f -> onSwipeUp()
+                                    queueSwipeArmed && offset < -120f -> onSwipeUp()
                                 }
                             }
                         }
@@ -601,23 +573,17 @@ fun PlayerScreen(
                 )
             }
     ) {
-        // Fond flouté — image sous-échantillonnée avant le flou (perf : un flou sur
-        // une image déjà petite coûte beaucoup moins cher qu'un flou 100dp sur la
-        // résolution native, surtout en fallback logiciel sous Android 12/API 31).
-        // Mode perf / reduced motion : pas de blur — Palette plate uniquement.
-        val coilCrossfadeMs = sgCoilCrossfadeMs(SgMotion.FastMs)
-        if (!reducedMotion && song.albumArtUri != null) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(song.albumArtUri)
-                    .size(480, 960)
-                    .crossfade(coilCrossfadeMs)
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
+        // Fond flouté — image sous-échantillonnée ; blur off en Mode perf / reduced.
+        // Rayon bas (12dp) pour rester proche de 60 FPS vs ancien 20dp.
+        val allowBlur = rememberSgAllowBlur()
+        if (allowBlur && song.albumArtUri != null) {
+            SgCoverImage(
+                albumArtUri = song.albumArtUri,
+                decodeWidth = 360,
+                decodeHeight = 720,
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(20.dp)
+                    .sgSoftBlur(enabled = true, radius = 12.dp)
             )
         }
         
@@ -640,8 +606,9 @@ fun PlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .sgConstrainWidth(SgAdaptive.PlayerChromeMax)
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = sgScreenHorizontal()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(modifier = Modifier.height(40.dp))
@@ -652,7 +619,7 @@ fun PlayerScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .graphicsLayer { alpha = chromeAlpha.value * (1f - idleChromeHidden.value) },
+                    .graphicsLayer { alpha = chromeAlpha.value },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -705,7 +672,8 @@ fun PlayerScreen(
             Box(
                 modifier = Modifier
                     .weight(1f, fill = true)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(SgRadius.xl)),
                 contentAlignment = Alignment.Center
             ) {
             Box(
@@ -736,8 +704,9 @@ fun PlayerScreen(
                             Modifier
                         }
                     )
-                    .fillMaxWidth(0.82f)
+                    .fillMaxWidth(0.94f)
                     .aspectRatio(1f)
+                    .clip(RoundedCornerShape(SgRadius.xl))
                     .then(
                         if (hasRealSharedTransition && !interactiveDismissActive) {
                             Modifier.sgSharedAlbumArt(key = "album_art_${song.id}")
@@ -745,15 +714,15 @@ fun PlayerScreen(
                             Modifier
                         }
                     )
-                    .pointerInput(player.mediaItemCount) {
+                    .pointerInput(onSkipNext, onSkipPrevious) {
                         detectHorizontalDragGestures(
                             onDragEnd = {
                                 val thresholdPx = with(density) { swipeThreshold.toPx() }
                                 val offset = dragOffsetX
                                 scope.launch {
                                     when {
-                                        offset < -thresholdPx -> PlayerGuards.safeSeekToNext(player)
-                                        offset > thresholdPx -> PlayerGuards.safeSeekToPrevious(player)
+                                        offset < -thresholdPx -> onSkipNext()
+                                        offset > thresholdPx -> onSkipPrevious()
                                     }
                                     dragOffsetX = 0f
                                 }
@@ -771,11 +740,16 @@ fun PlayerScreen(
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Crossfade(
-                    targetState = vinylModeEnabled,
-                    animationSpec = if (reducedMotion) snap() else SgMotion.tweenMediumOf(),
-                    label = "vinylMode"
-                ) { vinylOn ->
+                val skipArtSpec = if (reducedMotion) {
+                    fadeIn(snap()) togetherWith fadeOut(snap())
+                } else {
+                    fadeIn(tween(200)) togetherWith fadeOut(tween(180))
+                }
+                AnimatedContent(
+                    targetState = song.id to vinylModeEnabled,
+                    transitionSpec = { skipArtSpec },
+                    label = "playerSkipArt"
+                ) { (_, vinylOn) ->
                     if (vinylOn) {
                         VinylDisc(
                             song = song,
@@ -788,28 +762,20 @@ fun PlayerScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .border(1.dp, displayAccent.copy(alpha = 0.22f), RoundedCornerShape(SgRadius.xl))
-                                .clip(RoundedCornerShape(SgRadius.xl))
-                                .background(SurfaceElevated),
+                                .clip(RoundedCornerShape(SgRadius.xl)),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (song.albumArtUri != null) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(LocalContext.current)
-                                        .data(song.albumArtUri)
-                                        .crossfade(coilCrossfadeMs)
-                                        .build(),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_songs),
-                                    contentDescription = null,
-                                    tint = TextSecondary,
-                                    modifier = Modifier.size(80.dp)
-                                )
-                            }
+                            AlbumArtView(
+                                albumArtUri = song.albumArtUri,
+                                modifier = Modifier.fillMaxSize(),
+                                shape = RoundedCornerShape(SgRadius.xl),
+                                accentColor = displayAccent,
+                                placeholderLabel = song.coverInitial(),
+                                placeholderIconSize = 80.dp,
+                                placeholderLabelSize = 48.sp,
+                                fallbackSeed = song.id.toString(),
+                                decodeEdgeDp = 480.dp,
+                            )
                         }
                     }
                 }
@@ -823,7 +789,7 @@ fun PlayerScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .graphicsLayer { alpha = chromeAlpha.value * (1f - idleChromeHidden.value) },
+                    .graphicsLayer { alpha = chromeAlpha.value },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
             // Titre + Favori
@@ -840,33 +806,35 @@ fun PlayerScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .then(
-                                if (hasRealSharedTransition && !interactiveDismissActive) {
-                                    Modifier.sgSharedBounds(key = "track_meta_${song.id}")
-                                } else {
-                                    Modifier
-                                }
+                    val skipMetaSpec = if (reducedMotion) {
+                        fadeIn(snap()) togetherWith fadeOut(snap())
+                    } else {
+                        fadeIn(tween(200)) togetherWith fadeOut(tween(180))
+                    }
+                    AnimatedContent(
+                        targetState = song.id,
+                        transitionSpec = { skipMetaSpec },
+                        label = "playerSkipMeta",
+                        modifier = Modifier.weight(1f)
+                    ) { _ ->
+                        Column {
+                            Text(
+                                text = song.displayTitle(),
+                                color = TextPrimary,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                    ) {
-                        Text(
-                            text = song.displayTitle(),
-                            color = TextPrimary,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = song.displayArtist(),
-                            color = ensureContrast(displayAccent, surfaceBg, minRatio = 4.5f),
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = song.displayArtist(),
+                                color = ensureContrast(displayAccent, surfaceBg, minRatio = 4.5f),
+                                fontSize = 14.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                     // Cœur : fill + pulse 1→1.12→1 une seule fois (SpringSoft) ; pas de particules.
                     val favoriteScale = remember { Animatable(1f) }
@@ -918,14 +886,12 @@ fun PlayerScreen(
             SgSeekBar(
                 value = if (isSeeking) seekPosition else progress.coerceIn(0f, 1f),
                 onValueChange = { value ->
-                    if (!isSeeking) bumpIdleTimer()
                     isSeeking = true
                     seekPosition = value
                 },
                 onValueChangeFinished = {
                     player.seekTo((seekPosition * duration).toLong())
                     isSeeking = false
-                    bumpIdleTimer()
                 },
                 accentColor = displayAccent,
                 inactiveTrackColor = CardSurface,
@@ -947,14 +913,22 @@ fun PlayerScreen(
             Spacer(modifier = Modifier.height(18.dp))
 
             // Contrôles — tint FastMs (pas de rotation 360°) ; play = morph icône + press.
+            // Shuffle / repeat : état dérivé d'ExoPlayer via ViewModel (pas de state local).
+            // Inactif = TextPrimary (contraste fort) ; actif = accent sur CardSurface (≥4.5:1).
             val controlTintSpec = if (reducedMotion) snap() else SgMotion.tweenFastOf<Color>()
+            val shuffleActiveTint = ensureContrast(displayAccent, CardSurface, minRatio = 4.5f)
             val shuffleTint by animateColorAsState(
-                targetValue = if (isShuffled) displayAccent else TextSecondary,
+                targetValue = if (shuffleEnabled) shuffleActiveTint else TextPrimary,
                 animationSpec = controlTintSpec,
                 label = "shuffleTint"
             )
+            val repeatActiveTint = ensureContrast(displayAccent, CardSurface, minRatio = 4.5f)
             val repeatTint by animateColorAsState(
-                targetValue = if (repeatMode > 0) displayAccent else TextSecondary,
+                targetValue = if (repeatMode != androidx.media3.common.Player.REPEAT_MODE_OFF) {
+                    repeatActiveTint
+                } else {
+                    TextPrimary
+                },
                 animationSpec = controlTintSpec,
                 label = "repeatTint"
             )
@@ -966,24 +940,39 @@ fun PlayerScreen(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SgTapTarget(
-                    onClick = {
-                        isShuffled = !isShuffled
-                        player.shuffleModeEnabled = isShuffled
+                SgTapTarget(onClick = onToggleShuffle) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .then(
+                                if (shuffleEnabled) {
+                                    Modifier.background(
+                                        shuffleActiveTint.copy(alpha = 0.18f),
+                                        CircleShape,
+                                    )
+                                } else {
+                                    Modifier
+                                }
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_shuffle),
+                            contentDescription = if (shuffleEnabled) {
+                                "Lecture aléatoire activée"
+                            } else {
+                                "Lecture aléatoire"
+                            },
+                            tint = shuffleTint,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_shuffle),
-                        contentDescription = "Shuffle",
-                        tint = shuffleTint,
-                        modifier = Modifier.size(24.dp)
-                    )
                 }
 
                 Box(
                     modifier = Modifier
                         .size(52.dp)
-                        .clickable { PlayerGuards.safeSeekToPrevious(player) },
+                        .clickable(onClick = onSkipPrevious),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -997,16 +986,6 @@ fun PlayerScreen(
                 Box(
                     modifier = Modifier
                         .size(68.dp)
-                        .then(
-                            if (hasRealSharedTransition && !interactiveDismissActive) {
-                                Modifier.sgSharedBounds(
-                                    key = sgPlayControlSharedKey(song.id),
-                                    clipShape = CircleShape,
-                                )
-                            } else {
-                                Modifier
-                            }
-                        )
                         .sgPressScale(playInteraction)
                         .background(
                             Brush.radialGradient(listOf(displayAccent, displaySecondaryAccent)),
@@ -1016,29 +995,39 @@ fun PlayerScreen(
                             interactionSource = playInteraction,
                             indication = null
                         ) {
-                            bumpIdleTimer()
                             onPlayPause()
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Crossfade(
-                        targetState = isPlaying,
-                        animationSpec = if (reducedMotion) snap() else SgMotion.tweenFastOf(),
-                        label = "playPauseIcon"
-                    ) { playing ->
-                        Icon(
-                            painter = painterResource(if (playing) R.drawable.ic_pause else R.drawable.ic_play),
-                            contentDescription = if (playing) "Pause" else "Lecture",
-                            tint = Color.White,
-                            modifier = Modifier.size(36.dp)
-                        )
+                    when {
+                        !isPlaying && (isBuffering || isControllerConnecting) -> {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 2.5.dp,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                        else -> {
+                            Crossfade(
+                                targetState = isPlaying,
+                                animationSpec = if (reducedMotion) snap() else SgMotion.tweenFastOf(),
+                                label = "playPauseIcon"
+                            ) { playing ->
+                                Icon(
+                                    painter = painterResource(if (playing) R.drawable.ic_pause else R.drawable.ic_play),
+                                    contentDescription = if (playing) "Pause" else "Lecture",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                            }
+                        }
                     }
                 }
 
                 Box(
                     modifier = Modifier
                         .size(52.dp)
-                        .clickable { PlayerGuards.safeSeekToNext(player) },
+                        .clickable(onClick = onSkipNext),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -1049,22 +1038,39 @@ fun PlayerScreen(
                     )
                 }
 
-                SgTapTarget(
-                    onClick = {
-                        repeatMode = (repeatMode + 1) % 3
-                        player.repeatMode = when (repeatMode) {
-                            1 -> androidx.media3.common.Player.REPEAT_MODE_ALL
-                            2 -> androidx.media3.common.Player.REPEAT_MODE_ONE
-                            else -> androidx.media3.common.Player.REPEAT_MODE_OFF
-                        }
+                SgTapTarget(onClick = onCycleRepeat) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .then(
+                                if (repeatMode != androidx.media3.common.Player.REPEAT_MODE_OFF) {
+                                    Modifier.background(
+                                        repeatActiveTint.copy(alpha = 0.18f),
+                                        CircleShape,
+                                    )
+                                } else {
+                                    Modifier
+                                }
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = painterResource(
+                                if (repeatMode == androidx.media3.common.Player.REPEAT_MODE_ONE) {
+                                    R.drawable.ic_repeat_one
+                                } else {
+                                    R.drawable.ic_repeat
+                                }
+                            ),
+                            contentDescription = when (repeatMode) {
+                                androidx.media3.common.Player.REPEAT_MODE_ALL -> "Répéter tout"
+                                androidx.media3.common.Player.REPEAT_MODE_ONE -> "Répéter un titre"
+                                else -> "Répétition désactivée"
+                            },
+                            tint = repeatTint,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
-                ) {
-                    Icon(
-                        painter = painterResource(if (repeatMode == 2) R.drawable.ic_repeat_one else R.drawable.ic_repeat),
-                        contentDescription = "Répéter",
-                        tint = repeatTint,
-                        modifier = Modifier.size(24.dp)
-                    )
                 }
             }
 
@@ -1117,62 +1123,6 @@ fun PlayerScreen(
             }
         }
 
-        if (idleChromeHidden.value > 0.01f) {
-            // Bouton explicite pour réafficher le chrome (demande utilisateur).
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(top = 8.dp)
-                    .graphicsLayer { alpha = idleChromeHidden.value.coerceIn(0f, 1f) }
-            ) {
-                SgTapTarget(onClick = { bumpIdleTimer() }, minSize = 48.dp) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(GlassSurface.copy(alpha = 0.55f), CircleShape)
-                            .border(1.dp, GlassBorder.copy(alpha = 0.4f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.KeyboardArrowUp,
-                            contentDescription = "Afficher les contrôles",
-                            tint = TextPrimary.copy(alpha = 0.9f),
-                            modifier = Modifier.size(26.dp)
-                        )
-                    }
-                }
-            }
-            PlayerImmersiveMiniControls(
-                progress = if (isSeeking) seekPosition else progress.coerceIn(0f, 1f),
-                isPlaying = isPlaying,
-                accentColor = displayAccent,
-                inactiveTrackColor = CardSurface,
-                visibility = idleChromeHidden.value,
-                reducedMotion = reducedMotion,
-                onPlayPause = {
-                    bumpIdleTimer()
-                    onPlayPause()
-                },
-                onSeek = { value ->
-                    if (!isSeeking) bumpIdleTimer()
-                    isSeeking = true
-                    seekPosition = value
-                },
-                onSeekFinished = {
-                    player.seekTo((seekPosition * duration).toLong())
-                    isSeeking = false
-                    bumpIdleTimer()
-                },
-                onShowChrome = { bumpIdleTimer() },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
-            )
-        }
-
         if (!queueOpen && lyricsPeekProgress < 0.001f && !isExiting) {
             PlayerGestureHints(
                 modifier = Modifier
@@ -1181,82 +1131,6 @@ fun PlayerScreen(
                     .padding(bottom = 16.dp)
             )
         }
-    }
-}
-
-/**
- * Contrôles minimaux affichés quand le chrome principal est masqué (mode immersif).
- * Barre de progression ultra-fine + play/pause flottant — seek et lecture restent
- * accessibles sans réafficher tout le chrome.
- */
-@Composable
-private fun PlayerImmersiveMiniControls(
-    progress: Float,
-    isPlaying: Boolean,
-    accentColor: Color,
-    inactiveTrackColor: Color,
-    visibility: Float,
-    reducedMotion: Boolean,
-    onPlayPause: () -> Unit,
-    onSeek: (Float) -> Unit,
-    onSeekFinished: () -> Unit,
-    onShowChrome: () -> Unit = {},
-    modifier: Modifier = Modifier
-) {
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress,
-        animationSpec = if (reducedMotion) snap() else SgMotion.tweenProgress(),
-        label = "immersiveProgress"
-    )
-    Column(
-        modifier = modifier
-            .graphicsLayer { alpha = visibility.coerceIn(0f, 1f) }
-            .semantics {
-                contentDescription =
-                    "Contrôles de lecture. Utiliser le bouton en haut pour afficher tous les contrôles."
-            },
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        TextButton(
-            onClick = onShowChrome,
-            colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
-        ) {
-            Icon(
-                imageVector = Icons.Filled.KeyboardArrowUp,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("Contrôles", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        SgTapTarget(onClick = onPlayPause, minSize = 52.dp) {
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .background(
-                        Brush.radialGradient(listOf(accentColor, accentColor.copy(alpha = 0.85f))),
-                        CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
-                    contentDescription = if (isPlaying) "Pause" else "Lecture",
-                    tint = Color.White,
-                    modifier = Modifier.size(26.dp)
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(14.dp))
-        SgSeekBar(
-            value = animatedProgress.coerceIn(0f, 1f),
-            onValueChange = onSeek,
-            onValueChangeFinished = onSeekFinished,
-            accentColor = accentColor,
-            inactiveTrackColor = inactiveTrackColor.copy(alpha = 0.35f),
-            modifier = Modifier.fillMaxWidth()
-        )
     }
 }
 
@@ -1314,7 +1188,7 @@ private fun PlayerActiveModesIndicator(
     ) {
         Icon(
             imageVector = Icons.Filled.Tune,
-            contentDescription = null,
+            contentDescription = "Égaliseur et options audio",
             tint = accentColor,
             modifier = Modifier.size(14.dp)
         )
@@ -1384,13 +1258,9 @@ private fun VinylDisc(
             contentAlignment = Alignment.Center
         ) {
             if (song.albumArtUri != null) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(song.albumArtUri)
-                        .crossfade(sgCoilCrossfadeMs(SgMotion.FastMs))
-                        .build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                SgCoverImage(
+                    albumArtUri = song.albumArtUri,
+                    decodeEdgeDp = 280.dp,
                     modifier = Modifier.fillMaxSize()
                 )
             } else {

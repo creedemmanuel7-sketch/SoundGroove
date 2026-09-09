@@ -51,7 +51,7 @@ Basé sur le code et la documentation du dépôt (`docs/`, `app/`). Pas de featu
 - Favoris, playlists (dont smart), historique / récemment joué
 - Overrides métadonnées et pochettes personnalisées
 - Gapless, crossfade, vitesse / pitch, sleep timer
-- Égaliseur 10 bandes (presets ; EQ per-track en fondation, UX partielle)
+- Égaliseur 10 bandes (presets + override « Pour ce morceau » par piste)
 - Scrobbling / stats d'écoute **locales** (seuil 50 % / 4 min)
 
 ### Paroles
@@ -74,7 +74,7 @@ Basé sur le code et la documentation du dépôt (`docs/`, `app/`). Pas de featu
 ### Système
 
 - Widget home (layouts compact / large, shuffle sur grand format)
-- Android Auto browse (Playlists / Dossiers / Favoris via `MediaLibraryService`)
+- Android Auto browse + recherche (`onSearch` / `onGetSearchResult`) + smart playlists
 - Backup / import-export réglages et playlists (`BackupSnapshot`)
 - Gestion de cache bornée (paroles, WebView, cartes de partage) + section Stockage dans Réglages
 - Partage morceau + lien site (`https://soundgroove.app`)
@@ -266,11 +266,12 @@ Pas de compte utilisateur ni de télémétrie tierce documentée dans l'app.
 
 Suivi vivant dans **[docs/ROADMAP_APP_NEXT.md](docs/ROADMAP_APP_NEXT.md)**.
 
-Exemples de suites documentées (non exhaustif) :
+Suites app livrées (août 2026) : EQ per-track, soft-crossfade `SgCoverImage`,
+Android Auto search, accent Rive optionnel — détail dans
+[docs/ROADMAP_APP_NEXT.md](docs/ROADMAP_APP_NEXT.md).
 
-- Finaliser l'UX EQ « pour ce morceau » dans `EqualizerBottomSheet`
-- Audit perf listes (`key` / `contentType` LazyColumn)
-- Android Auto : recherche browse / smart playlists dans l'arbre si besoin
+Prochaines pistes : extraction `ListeningPageHeader` si Accueil / Bibliothèque /
+Profil convergent ; site vitrine (`website/`) hors scope app.
 
 Desktop Windows (CMP) : voir [docs/desktop/](docs/desktop/) et [desktop/README.md](desktop/README.md).
 

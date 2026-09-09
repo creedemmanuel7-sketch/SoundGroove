@@ -1,21 +1,40 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# SoundGroove — R8 / ProGuard (release minify + full mode AGP 8+)
+# Media3, Room et la plupart des libs AndroidX livrent déjà des consumer rules ;
+# ici : keeps ciblés + attributs utiles aux crash reports.
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+-keepattributes SourceFile,LineNumberTable,Signature,InnerClasses,EnclosingMethod
+-keepattributes RuntimeVisibleAnnotations,AnnotationDefault
+-renamesourcefileattribute SourceFile
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# ── Room ────────────────────────────────────────────────────────────────────
+-keep class * extends androidx.room.RoomDatabase
+-keep @androidx.room.Entity class *
+-keep @androidx.room.Dao interface *
+-dontwarn androidx.room.paging.**
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# ── Media3 / session (consumer rules + filets) ──────────────────────────────
+-dontwarn androidx.media3.**
+-dontwarn com.google.android.exoplayer2.**
+
+# ── Rive (JNI / reflection) ─────────────────────────────────────────────────
+-keep class app.rive.** { *; }
+-keep class com.facebook.jni.** { *; }
+-keep class com.facebook.soloader.** { *; }
+
+# ── Java-WebSocket (remote LAN host) ────────────────────────────────────────
+-keep class org.java_websocket.** { *; }
+
+# ── Coil ────────────────────────────────────────────────────────────────────
+-dontwarn coil.**
+
+# ── Kotlin / coroutines ─────────────────────────────────────────────────────
+-dontwarn kotlinx.coroutines.**
+-keepclassmembers class kotlinx.coroutines.** {
+    volatile <fields>;
+}
+
+# ── Parcelable / enums app ──────────────────────────────────────────────────
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
