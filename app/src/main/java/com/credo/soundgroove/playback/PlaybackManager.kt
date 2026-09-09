@@ -610,7 +610,7 @@ class PlaybackManager(
         expectedMediaId: String,
         logicalIndex: Int,
     ) {
-        suspend fun apply(): Boolean {
+        fun apply(): Boolean {
             if (live.currentMediaItem?.mediaId != expectedMediaId) return true
             if (live.mediaItemCount == 1) {
                 if (before.isNotEmpty()) live.addMediaItems(0, before)
