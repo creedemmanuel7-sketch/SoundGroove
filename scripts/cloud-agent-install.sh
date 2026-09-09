@@ -139,7 +139,8 @@ gradle_wrapper_deps() {
     chmod +x "${root}/gradlew"
     echo "[cloud-agent-install] Gradle wrapper + help (download dist)"
     (cd "${root}" && ./gradlew --version)
-    (cd "${root}" && ./gradlew help --offline >/dev/null 2>&1 || ./gradlew help)
+    # `help` configure le projet : ne pas masquer un échec (pas de ||).
+    (cd "${root}" && ./gradlew help)
   fi
 }
 
@@ -161,8 +162,8 @@ install_android_sdk
 install_flutter
 write_local_properties
 install_website
-gradle_wrapper_deps
 flutter_pub_get_if_module
+gradle_wrapper_deps
 
 echo "[cloud-agent-install] done"
 java -version
