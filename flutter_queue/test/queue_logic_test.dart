@@ -8,7 +8,7 @@ void main() {
   });
 
   test('remaining duration includes current remainder and upcoming', () {
-    expect(remainingDurationMs([60000, 120000, 30000], 0, 20000), 130000);
+    expect(remainingDurationMs([60000, 120000, 30000], 0, 20000), 190000);
     expect(remainingDurationMs([60000, 120000, 30000], 2, 20000), 10000);
     expect(remainingDurationMs([], 0, 0), 0);
   });

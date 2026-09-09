@@ -17,7 +17,7 @@ class QueuePresentationTest {
     @Test
     fun remainingDuration_includesCurrentRemainderAndUpcoming() {
         val durations = longArrayOf(60_000L, 120_000L, 30_000L)
-        assertEquals(130_000L, QueuePresentation.remainingDurationMs(durations, 0, 20_000L))
+        assertEquals(190_000L, QueuePresentation.remainingDurationMs(durations, 0, 20_000L))
         assertEquals(30_000L, QueuePresentation.remainingDurationMs(durations, 1, 120_000L))
         assertEquals(10_000L, QueuePresentation.remainingDurationMs(durations, 2, 20_000L))
         assertEquals(0L, QueuePresentation.remainingDurationMs(longArrayOf(), 0, 0L))
