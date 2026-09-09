@@ -17,6 +17,8 @@ val localProperties = Properties().apply {
 fun localProp(key: String, default: String): String =
     (localProperties.getProperty(key) ?: default).replace("\"", "\\\"")
 
+val includeFlutterQueue = rootProject.findProject(":flutter") != null
+
 android {
     namespace = "com.credo.soundgroove"
     compileSdk = 36
@@ -37,6 +39,7 @@ android {
             "LRCLIB_BASE_URL",
             "\"${localProp("lrclib.base.url", "https://lrclib.net")}\"",
         )
+        buildConfigField("boolean", "FLUTTER_QUEUE", includeFlutterQueue.toString())
     }
 
     buildTypes {
@@ -53,11 +56,11 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "17"
     }
     buildFeatures {
         compose = true
@@ -86,6 +89,10 @@ android {
             )
         }
     }
+}
+
+if (includeFlutterQueue) {
+    android.sourceSets.getByName("main").java.srcDir("src/flutterQueue/kotlin")
 }
 
 ksp {
@@ -134,4 +141,7 @@ dependencies {
     implementation("com.google.guava:guava:32.1.2-android")
     implementation("androidx.palette:palette-ktx:1.0.0")
     implementation("org.java-websocket:Java-WebSocket:1.5.7")
+    if (includeFlutterQueue) {
+        implementation(project(":flutter"))
+    }
 }

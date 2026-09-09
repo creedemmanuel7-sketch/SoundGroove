@@ -23,11 +23,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.credo.soundgroove.ui.screens.CarModeScreen
+import com.credo.soundgroove.queue.QueuePane
 import com.credo.soundgroove.ui.screens.LyricsScreen
 import com.credo.soundgroove.ui.screens.LyricsWebSearchScreen
 import com.credo.soundgroove.ui.screens.PlayerScreen
 import com.credo.soundgroove.ui.screens.PlayerQueueBanner
-import com.credo.soundgroove.ui.screens.QueueScreen
+import com.credo.soundgroove.ui.screens.PlayerQueueBanner
 import com.credo.soundgroove.data.model.Playlist
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -693,16 +694,18 @@ private fun AppNavigationContent(
                             }
                         }
                         if (queueMorph > 0.02f) {
-                            QueueScreen(
+                            QueuePane(
                                 playlist = playbackQueue,
                                 currentIndex = playbackQueueIndex,
                                 isPlaying = isPlaying,
                                 accentColor = accentColor,
                                 morphProgress = queueMorph,
+                                playbackPositionMs = playbackPosition,
                                 onClose = { closeQueue() },
                                 onPlaySong = { index -> viewModel.seekToQueueIndex(index) },
                                 onRemoveSong = { index -> viewModel.removeFromPlaybackQueue(index) },
                                 onMoveSong = { from, to -> viewModel.moveInPlaybackQueue(from, to) },
+                                onClearUpcoming = { viewModel.clearUpcoming() },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .weight((0.22f + queueMorph * 0.78f).coerceIn(0.22f, 1f)),
