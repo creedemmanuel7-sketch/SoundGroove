@@ -38,6 +38,16 @@ local.properties
 *.keystore
 **/keystore.properties
 
+# Flutter add-to-app (module flutter_queue) — sources Dart versionnées, host généré non.
+flutter_queue/.dart_tool/
+flutter_queue/.android/
+flutter_queue/.ios/
+flutter_queue/.idea/
+flutter_queue/*.iml
+flutter_queue/.flutter-plugins-dependencies
+flutter_queue/.packages
+flutter_queue/build/
+
 # google-services.json : N/A tant qu’il n’y a pas de Firebase.
 # Si Firebase est ajouté, versionner le fichier client est courant (clés « publiques »
 # Android) mais les règles Firestore/Storage doivent rester strictes côté serveur.

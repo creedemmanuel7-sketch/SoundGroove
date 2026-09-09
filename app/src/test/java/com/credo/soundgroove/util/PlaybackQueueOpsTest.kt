@@ -44,4 +44,16 @@ class PlaybackQueueOpsTest {
         assertEquals(listOf("a", "c", "b"), PlaybackQueueOps.moveItems(queue, from = 1, to = 2))
         assertEquals(listOf("a", "c"), PlaybackQueueOps.removeItemAt(queue, 1))
     }
+
+    @Test
+    fun stableKeys_delegateToJava() {
+        assertEquals(listOf("1#0", "1#1"), PlaybackQueueOps.stableKeys(listOf(1L, 1L)))
+        assertEquals("9#0", PlaybackQueueOps.stableKey(9L, 0))
+    }
+
+    @Test
+    fun remainingDuration_andClearUpcoming() {
+        assertEquals(90_000L, PlaybackQueueOps.remainingDurationMs(longArrayOf(40_000L, 50_000L), 0, 0L))
+        assertEquals(listOf("a", "b"), PlaybackQueueOps.clearUpcoming(listOf("a", "b", "c", "d"), 1))
+    }
 }

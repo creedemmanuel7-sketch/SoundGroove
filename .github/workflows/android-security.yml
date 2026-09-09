@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "app/**"
+      - "flutter_queue/**"
       - "gradle/**"
       - "*.gradle.kts"
       - "gradle.properties"
@@ -11,6 +12,7 @@ on:
   pull_request:
     paths:
       - "app/**"
+      - "flutter_queue/**"
       - "gradle/**"
       - "*.gradle.kts"
       - "gradle.properties"
@@ -29,6 +31,27 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        id: flutter
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get (queue module)
+        run: flutter pub get
+        working-directory: flutter_queue
+
+      - name: Write local.properties
+        run: |
+          SDK_DIR="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          FLUTTER_DIR="$(dirname "$(dirname "$(readlink -f "$(command -v flutter)")")")"
+          printf 'sdk.dir=%s\nflutter.sdk=%s\n' "$SDK_DIR" "$FLUTTER_DIR" > local.properties
+          cat local.properties
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.StrictMode
 import android.util.Log
 import com.credo.soundgroove.BuildConfig
+import com.credo.soundgroove.queue.QueueFlutterRuntime
 
 /**
  * Point d'entrée application — StrictMode **debug only** (disk/network main thread).
@@ -21,6 +22,7 @@ class SoundGrooveApplication : Application() {
         }.onFailure {
             Log.w("SG_AUDIO", "PlaybackService prewarm failed", it)
         }
+        QueueFlutterRuntime.prewarm(this)
         if (BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(
                 StrictMode.ThreadPolicy.Builder()
