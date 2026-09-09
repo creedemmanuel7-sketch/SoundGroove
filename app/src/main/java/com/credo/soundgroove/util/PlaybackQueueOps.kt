@@ -1,9 +1,14 @@
 package com.credo.soundgroove.util
 
+import com.credo.soundgroove.playback.QueuePresentation
+
 /**
  * Opérations pures sur une file d'attente — sans Media3 / ExoPlayer.
  * Utilisable pour tests JVM et pour factoriser les mutations de file
  * côté ViewModel sans toucher au moteur de lecture.
+ *
+ * Les clés stables / sections / durée restante vivent en Java
+ * ([QueuePresentation]) pour les tests JVM partagés Flutter/Kotlin.
  */
 object PlaybackQueueOps {
 
@@ -50,4 +55,18 @@ object PlaybackQueueOps {
     }
 
     fun append(ids: List<Long>, songId: Long): List<Long> = ids + songId
+
+    fun stableKey(songId: Long, occurrence: Int): String =
+        QueuePresentation.stableKey(songId, occurrence)
+
+    fun stableKeys(ids: List<Long>): List<String> = QueuePresentation.stableKeys(ids)
+
+    fun remainingDurationMs(durationsMs: LongArray, currentIndex: Int, positionMs: Long): Long =
+        QueuePresentation.remainingDurationMs(durationsMs, currentIndex, positionMs)
+
+    fun <T> clearUpcoming(items: List<T>, currentIndex: Int): List<T> {
+        if (items.isEmpty()) return items
+        val end = QueuePresentation.sizeAfterClearUpcoming(items.size, currentIndex)
+        return items.subList(0, end).toList()
+    }
 }
