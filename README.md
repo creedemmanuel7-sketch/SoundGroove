@@ -97,7 +97,7 @@ Dossier prévu : [`screenshots_/`](screenshots_/)
 
 | Couche | Technologie | Notes |
 |--------|-------------|--------|
-| Langage | Kotlin **2.0.21** | AGP **8.13.2**, JDK 11 |
+| Langage | Kotlin **2.0.21** | AGP **8.13.2**, Gradle 8.14.3, bytecode Java 17 (JDK 17 ou 21) |
 | UI | Jetpack Compose + Material 3 | BOM `2024.09.00` |
 | Navigation | Navigation Compose **2.8.3** | + SharedTransitionLayout |
 | Lecture | Media3 ExoPlayer + Session **1.3.1** | `PlaybackService` = `MediaLibraryService` |
@@ -171,10 +171,11 @@ Index docs : [docs/index.md](docs/index.md) · Vue d'ensemble : [docs/project-ov
 ### Prérequis
 
 - [Android Studio](https://developer.android.com/studio) récent (compatible AGP 8.13)
-- JDK **11+**
+- JDK **17** ou **21** (`JAVA_HOME` doit pointer vers un dossier qui contient `bin/java`)
 - SDK Android avec **compileSdk 36**
 - Émulateur ou appareil physique (**API 24+**)
 - Gradle Wrapper du dépôt (`gradlew` / `gradlew.bat`)
+- Windows : [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md) (`JAVA_HOME`, JBR Android Studio, `local.properties`)
 
 ### Build app (debug)
 
@@ -186,7 +187,9 @@ Index docs : [docs/index.md](docs/index.md) · Vue d'ensemble : [docs/project-ov
 .\gradlew.bat :app:assembleDebug
 ```
 
-APK : `app/build/outputs/apk/debug/app-debug.apk`
+APK : `app/build/outputs/apk/debug/app-debug.apk` (`app\build\outputs\apk\debug\app-debug.apk` sous Windows).
+
+Si Windows affiche `JAVA_HOME is set to an invalid directory` : le chemin n’existe pas ou il n’y a pas `bin\java.exe` — voir [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md).
 
 ### Autres commandes
 
@@ -259,6 +262,7 @@ Pas de compte utilisateur ni de télémétrie tierce documentée dans l'app.
 | [docs/architecture-app.md](docs/architecture-app.md) | Architecture Android |
 | [docs/development-guide-app.md](docs/development-guide-app.md) | Guide dev app |
 | [docs/SMOKE_TEST_CHECKLIST.md](docs/SMOKE_TEST_CHECKLIST.md) | Smoke tests |
+| [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md) | Build APK sous Windows (`JAVA_HOME`, Flutter, chemin APK) |
 
 ---
 
