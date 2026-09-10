@@ -8,10 +8,13 @@ export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/home/ubuntu/android-sdk}"
 export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
 export PATH="${JAVA_HOME}/bin:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/emulator:${ANDROID_SDK_ROOT}/platform-tools:${PATH}"
 
-AVD_NAME="${SOUNDGROOVE_AVD_NAME:-SoundGroove_API34}"
+AVD_NAME="${SOUNDGROOVE_AVD_NAME:-SoundGroove_ATD34}"
 STATUS_FILE="${SOUNDGROOVE_EMU_STATUS:-/tmp/soundgroove-emulator.status}"
 LOG_FILE="${SOUNDGROOVE_EMU_LOG:-/tmp/soundgroove-emulator.log}"
-BOOT_TIMEOUT_SEC="${SOUNDGROOVE_EMU_BOOT_TIMEOUT_SEC:-180}"
+BOOT_TIMEOUT_SEC="${SOUNDGROOVE_EMU_BOOT_TIMEOUT_SEC:-300}"
+# Nested KVM is often advertised (/dev/kvm) but the guest never runs (qemu ~0% CPU).
+# TCG (-accel off) is slow but boots in this Cloud Agent VM.
+ACCEL="${SOUNDGROOVE_EMU_ACCEL:-off}"
 ADB="${ANDROID_SDK_ROOT}/platform-tools/adb"
 EMU="${ANDROID_SDK_ROOT}/emulator/emulator"
 
@@ -35,8 +38,12 @@ fi
 
 mkdir -p "${HOME}/.android"
 if ! avdmanager list avd 2>/dev/null | grep -q "Name: ${AVD_NAME}"; then
-  write_status "failed: AVD ${AVD_NAME} missing — run scripts/cloud-agent-install.sh"
-  exit 0
+  if avdmanager list avd 2>/dev/null | grep -q "Name: SoundGroove_API34"; then
+    AVD_NAME="SoundGroove_API34"
+  else
+    write_status "failed: AVD ${AVD_NAME} missing — run scripts/cloud-agent-install.sh"
+    exit 0
+  fi
 fi
 
 "${ADB}" start-server >/dev/null 2>&1 || true
@@ -77,16 +84,12 @@ if boot_completed; then
 fi
 
 if [[ -z "$(device_online)" ]]; then
-  ACCEL_ARGS=(-accel on)
-  if [[ ! -r /dev/kvm ]]; then
-    ACCEL_ARGS=(-accel off)
-  fi
-  echo "[cloud-agent-start] launching ${AVD_NAME}" | tee -a "${LOG_FILE}"
+  echo "[cloud-agent-start] launching ${AVD_NAME} accel=${ACCEL}" | tee -a "${LOG_FILE}"
   nohup "${EMU}" -avd "${AVD_NAME}" \
     -no-window -no-audio -no-boot-anim \
     -gpu swiftshader_indirect \
-    "${ACCEL_ARGS[@]}" \
-    -memory 2048 -cores 2 \
+    -accel "${ACCEL}" \
+    -memory 1536 -cores 2 \
     -no-snapshot-save -no-snapshot-load \
     -netdelay none -netspeed full \
     >> "${LOG_FILE}" 2>&1 &

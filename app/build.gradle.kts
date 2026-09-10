@@ -40,6 +40,13 @@ android {
             "\"${localProp("lrclib.base.url", "https://lrclib.net")}\"",
         )
         buildConfigField("boolean", "FLUTTER_QUEUE", includeFlutterQueue.toString())
+        // Cloud / émulateur : ./gradlew :app:assembleDebug -PemulatorAbi=x86_64
+        val emulatorAbi = (project.findProperty("emulatorAbi") as String?)?.trim()
+        if (!emulatorAbi.isNullOrEmpty()) {
+            ndk {
+                abiFilters += emulatorAbi
+            }
+        }
     }
 
     buildTypes {

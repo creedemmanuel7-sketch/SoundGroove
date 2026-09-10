@@ -87,13 +87,16 @@ install_android_sdk() {
     "build-tools;36.0.0" \
     "build-tools;35.0.0" \
     "emulator" \
-    "system-images;android-34;google_apis;x86_64"
+    "system-images;android-34;google_apis;x86_64" \
+    "system-images;android-34;aosp_atd;x86_64"
   create_avd_if_needed
 }
 
 create_avd_if_needed() {
   local avdmanager="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/avdmanager"
-  local avd_name="${SOUNDGROOVE_AVD_NAME:-SoundGroove_API34}"
+  # ATD boots faster headless ; google_apis as fallback.
+  local avd_name="${SOUNDGROOVE_AVD_NAME:-SoundGroove_ATD34}"
+  local pkg="${SOUNDGROOVE_AVD_PACKAGE:-system-images;android-34;aosp_atd;x86_64}"
   if [[ ! -x "${avdmanager}" ]]; then
     echo "[cloud-agent-install] skip AVD (avdmanager missing)"
     return 0
@@ -102,17 +105,17 @@ create_avd_if_needed() {
     echo "[cloud-agent-install] AVD ${avd_name} already exists"
     return 0
   fi
-  echo "[cloud-agent-install] Creating AVD ${avd_name}"
+  echo "[cloud-agent-install] Creating AVD ${avd_name} (${pkg})"
   echo "no" | "${avdmanager}" create avd \
     --name "${avd_name}" \
-    --package "system-images;android-34;google_apis;x86_64" \
+    --package "${pkg}" \
     --device "pixel_6" \
     --force
   local config="${HOME}/.android/avd/${avd_name}.avd/config.ini"
   if [[ -f "${config}" ]]; then
     {
       echo "hw.keyboard=yes"
-      echo "hw.ramSize=2048"
+      echo "hw.ramSize=1536"
       echo "hw.gpu.enabled=yes"
       echo "hw.gpu.mode=swiftshader_indirect"
     } >> "${config}"
