@@ -92,9 +92,7 @@ class PlaybackManager(
     private var lastLoggedPlaybackState: Int = Int.MIN_VALUE
     private var bufferingUiTimedOut = false
     private var queueExpandJob: Job? = null
-    private var expandFallbackJob: Job? = null
     private var progressStarted = false
-    private var playIssuedAtMs: Long = 0L
     private val invalidMediaIds = mutableSetOf<String>()
     private val playbackErrorRetries = AtomicInteger(0)
     private var consecutiveAutoSkips = 0
@@ -190,7 +188,6 @@ class PlaybackManager(
 
         val generation = playGeneration.incrementAndGet()
         queueExpandJob?.cancel()
-        expandFallbackJob?.cancel()
         pendingExpand = null
         pendingPlayRequest = null
         applyOptimisticPlayUi(safeQueue, index, startSong)
@@ -332,7 +329,6 @@ class PlaybackManager(
         persistPlaybackSession()
         playerCommandGate.cancel()
         queueExpandJob?.cancel()
-        expandFallbackJob?.cancel()
         pendingExpand = null
         mediaControllerListener?.let { listener ->
             _mediaController.value?.removeListener(listener)
@@ -401,7 +397,7 @@ class PlaybackManager(
                 syncPlaybackUiFlags(controller)
                 if (isPlaying) {
                     PlayLatencyTracker.markIsPlaying()
-                    maybeExpandQueue(controller, fallback = false)
+                    maybeExpandQueue(controller)
                 }
             }
 
@@ -559,7 +555,7 @@ class PlaybackManager(
                 syncPlaybackUiFlags(player)
                 if (isPlaying) {
                     PlayLatencyTracker.markIsPlaying()
-                    maybeExpandQueue(player, fallback = false)
+                    maybeExpandQueue(player)
                 }
             }
 
@@ -645,42 +641,25 @@ class PlaybackManager(
         index: Int,
         generation: Int,
     ) {
-        expandFallbackJob?.cancel()
-        playIssuedAtMs = SystemClock.elapsedRealtime()
         if (queue.size <= 1) {
             pendingExpand = null
             return
         }
         val mediaId = queue.getOrNull(index)?.uri?.toString() ?: return
         pendingExpand = PendingExpand(queue, index, generation, mediaId)
-        expandFallbackJob = scope.launch {
-            delay(PlaybackStartPolicy.EXPAND_FALLBACK_MS)
-            val live = playbackEngine() ?: return@launch
-            maybeExpandQueue(live, fallback = true)
-        }
+        maybeExpandQueue(player)
     }
 
-    private fun maybeExpandQueue(player: Player, fallback: Boolean) {
+    private fun maybeExpandQueue(player: Player) {
         val pending = pendingExpand ?: return
         val genOk = pending.generation == playGeneration.get()
         val idOk = player.currentMediaItem?.mediaId == pending.expectedMediaId
         val heard = PlaybackStartPolicy.isFirstAudioHeard(player.isPlaying, player.currentPosition)
-        val ok = if (fallback) {
-            val elapsed = if (playIssuedAtMs == 0L) {
-                PlaybackStartPolicy.EXPAND_FALLBACK_MS
-            } else {
-                SystemClock.elapsedRealtime() - playIssuedAtMs
-            }
-            PlaybackStartPolicy.shouldExpandFallback(true, elapsed, genOk, idOk)
-        } else {
-            PlaybackStartPolicy.shouldExpandAfterFirstAudio(true, heard, genOk, idOk)
-        }
-        if (!ok) return
+        if (!PlaybackStartPolicy.shouldExpandAfterFirstAudio(true, heard, genOk, idOk)) return
         pendingExpand = null
-        expandFallbackJob?.cancel()
         val window = PlaybackWindowOps.compute(pending.index, pending.queue.size, EXPAND_RADIUS)
         PlayLatencyTracker.markExpand(
-            if (fallback) "fallback" else "first-audio",
+            "first-audio",
             pending.index - window.start,
             window.endExclusive - pending.index - 1,
         )
@@ -784,7 +763,6 @@ class PlaybackManager(
                 }
             } else if (addOnly || PlaybackStartPolicy.shouldResetPlaylistToExpand(live.mediaItemCount)) {
                 pendingExpand = null
-                expandFallbackJob?.cancel()
                 return true
             } else if (live.mediaItemCount != window.size() ||
                 (before.isNotEmpty() && peekPlayerMediaId(live, 0) != before.first().mediaId)
@@ -813,7 +791,6 @@ class PlaybackManager(
             rememberWindow(window)
             _playbackQueueIndex.value = logicalIndex
             pendingExpand = null
-            expandFallbackJob?.cancel()
             return true
         }
 
@@ -914,7 +891,6 @@ class PlaybackManager(
         } else {
             playGeneration.incrementAndGet()
             queueExpandJob?.cancel()
-            expandFallbackJob?.cancel()
             pendingExpand = null
             reshapePlayerWindow(player, queue, logicalIndex, keepPlaying = play, keepPosition = false)
             if (play) beginPlayUiPending("seek-logical-reshape")
@@ -1063,7 +1039,7 @@ class PlaybackManager(
                 val player = playbackEngine()
                 publishPlaybackProgress(player)
                 if (player != null && pendingExpand != null) {
-                    maybeExpandQueue(player, fallback = false)
+                    maybeExpandQueue(player)
                 }
                 if (player?.isPlaying == true) {
                     val now = System.currentTimeMillis()
@@ -1230,7 +1206,6 @@ class PlaybackManager(
         if (targetIndex == from && delta != 0) return
         playGeneration.incrementAndGet()
         queueExpandJob?.cancel()
-        expandFallbackJob?.cancel()
         pendingExpand = null
         beginPlayUiPending("skip")
         seekLogicalIndex(engine, queue, targetIndex, play = true)

@@ -4,18 +4,12 @@ package com.credo.soundgroove.playback;
  * Politique UI / expand au tap — pur Java, testable JVM.
  * UI honnête : icône pause seulement si le player joue vraiment ; spinner court
  * pendant le prepare. Fast-start 1 MediaItem ; expand après le premier sample
- * (addMediaItems, jamais un reset playlist). Fallback expand pour ne pas casser skip.
+ * (addMediaItems, jamais un reset playlist). Pas d'expand à un délai fixe.
  */
 public final class PlaybackStartPolicy {
 
     /** Spinner honnête pendant le prepare local — assez court pour ne pas masquer un échec. */
     public static final long BUFFERING_SPINNER_MAX_MS = 2_500L;
-
-    /**
-     * Si le premier sample n'est pas encore là, expand quand même pour que skip / file
-     * fonctionnent — après le tap, pas pendant {@code play()}.
-     */
-    public static final long EXPAND_FALLBACK_MS = 1_500L;
 
     private PlaybackStartPolicy() {}
 
@@ -59,8 +53,9 @@ public final class PlaybackStartPolicy {
     }
 
     /**
-     * Expand après le premier sample — pas au {@code play()} (addMediaItems trop tôt
-     * retarde / casse le premier rendu).
+     * Expand après le premier sample — jamais au {@code play()} ni après un délai
+     * arbitraire. {@code addMediaItems} trop tôt retarde / casse le premier rendu.
+     * Skip utilise la file logique ({@code seekLogicalIndex} / reshape), pas cette fenêtre.
      */
     public static boolean shouldExpandAfterFirstAudio(
             boolean pendingExpand,
@@ -69,22 +64,6 @@ public final class PlaybackStartPolicy {
             boolean mediaIdMatches
     ) {
         return pendingExpand && firstAudioHeard && generationCurrent && mediaIdMatches;
-    }
-
-    /**
-     * File / skip : si l'audio n'est pas encore là après {@link #EXPAND_FALLBACK_MS},
-     * expand add-only quand même. Ne jamais reset la playlist.
-     */
-    public static boolean shouldExpandFallback(
-            boolean pendingExpand,
-            long elapsedSincePlayMs,
-            boolean generationCurrent,
-            boolean mediaIdMatches
-    ) {
-        return pendingExpand
-                && elapsedSincePlayMs >= EXPAND_FALLBACK_MS
-                && generationCurrent
-                && mediaIdMatches;
     }
 
     public static boolean canExpandWithAddOnly(int mediaItemCount) {

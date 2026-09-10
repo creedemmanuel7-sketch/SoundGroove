@@ -47,7 +47,7 @@ class PlayLatencyTrackerTest {
     @Test
     fun markExpand_isNoOpWithoutCrash() {
         PlayLatencyTracker.markTap("expand")
-        PlayLatencyTracker.markExpand("play-issued", 2, 3)
+        PlayLatencyTracker.markExpand("first-audio", 2, 3)
         PlayLatencyTracker.markIsPlaying()
         assertTrue(PlayLatencyTracker.lastLatencyMs() >= 0L)
     }

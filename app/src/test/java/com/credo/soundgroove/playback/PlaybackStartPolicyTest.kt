@@ -86,42 +86,6 @@ class PlaybackStartPolicyTest {
     }
 
     @Test
-    fun expand_fallbackAfterDelayNotAtPlay() {
-        assertFalse(
-            PlaybackStartPolicy.shouldExpandFallback(
-                true,
-                0L,
-                true,
-                true,
-            ),
-        )
-        assertFalse(
-            PlaybackStartPolicy.shouldExpandFallback(
-                true,
-                PlaybackStartPolicy.EXPAND_FALLBACK_MS - 1,
-                true,
-                true,
-            ),
-        )
-        assertTrue(
-            PlaybackStartPolicy.shouldExpandFallback(
-                true,
-                PlaybackStartPolicy.EXPAND_FALLBACK_MS,
-                true,
-                true,
-            ),
-        )
-        assertFalse(
-            PlaybackStartPolicy.shouldExpandFallback(
-                true,
-                PlaybackStartPolicy.EXPAND_FALLBACK_MS,
-                false,
-                true,
-            ),
-        )
-    }
-
-    @Test
     fun expand_addOnlyOnSingleItem() {
         assertTrue(PlaybackStartPolicy.canExpandWithAddOnly(1))
         assertFalse(PlaybackStartPolicy.canExpandWithAddOnly(65))
@@ -146,7 +110,5 @@ class PlaybackStartPolicyTest {
     fun spinnerTimeout_isShortNotStickySilence() {
         assertTrue(PlaybackStartPolicy.BUFFERING_SPINNER_MAX_MS <= 3_000L)
         assertTrue(PlaybackStartPolicy.BUFFERING_SPINNER_MAX_MS >= 800L)
-        assertTrue(PlaybackStartPolicy.EXPAND_FALLBACK_MS >= 800L)
-        assertTrue(PlaybackStartPolicy.EXPAND_FALLBACK_MS < 5_000L)
     }
 }
