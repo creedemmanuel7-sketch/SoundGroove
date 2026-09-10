@@ -37,6 +37,22 @@ class PlayLatencyTrackerTest {
     }
 
     @Test
+    fun markCommandPath_isNoOpWithoutCrash() {
+        PlayLatencyTracker.markTap("path")
+        PlayLatencyTracker.markCommandPath("in_process", true, false, 0L)
+        PlayLatencyTracker.markIsPlaying()
+        assertTrue(PlayLatencyTracker.lastLatencyMs() >= 0L)
+    }
+
+    @Test
+    fun markExpand_isNoOpWithoutCrash() {
+        PlayLatencyTracker.markTap("expand")
+        PlayLatencyTracker.markExpand("first-audio", 2, 3)
+        PlayLatencyTracker.markIsPlaying()
+        assertTrue(PlayLatencyTracker.lastLatencyMs() >= 0L)
+    }
+
+    @Test
     fun markFirstNonZeroPosition_ignoresZero() {
         PlayLatencyTracker.markTap("pos")
         PlayLatencyTracker.markFirstNonZeroPosition(0L)

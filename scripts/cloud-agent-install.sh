@@ -22,7 +22,7 @@ export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
 FLUTTER_HOME="${FLUTTER_HOME:-/home/ubuntu/flutter}"
 CMDLINE_TOOLS_ZIP_URL="${CMDLINE_TOOLS_ZIP_URL:-https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip}"
 
-export PATH="${JAVA_HOME}/bin:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools:${FLUTTER_HOME}/bin:${PATH}"
+export PATH="${JAVA_HOME}/bin:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/emulator:${ANDROID_SDK_ROOT}/platform-tools:${FLUTTER_HOME}/bin:${PATH}"
 
 echo "[cloud-agent-install] JAVA_HOME=${JAVA_HOME}"
 "${JAVA_HOME}/bin/java" -version
@@ -33,7 +33,7 @@ persist_env() {
 export JAVA_HOME="${JAVA_HOME}"
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT}"
 export ANDROID_HOME="${ANDROID_SDK_ROOT}"
-export PATH="\${JAVA_HOME}/bin:\${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:\${ANDROID_SDK_ROOT}/platform-tools:${FLUTTER_HOME}/bin:\${PATH}"
+export PATH="\${JAVA_HOME}/bin:\${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:\${ANDROID_SDK_ROOT}/emulator:\${ANDROID_SDK_ROOT}/platform-tools:${FLUTTER_HOME}/bin:\${PATH}"
 EOF
 )"
   mkdir -p "${HOME}"
@@ -83,8 +83,43 @@ install_android_sdk() {
   "${sdkmanager}" --sdk_root="${ANDROID_SDK_ROOT}" --install \
     "platform-tools" \
     "platforms;android-36" \
+    "platforms;android-34" \
     "build-tools;36.0.0" \
-    "build-tools;35.0.0"
+    "build-tools;35.0.0" \
+    "emulator" \
+    "system-images;android-34;google_apis;x86_64" \
+    "system-images;android-34;aosp_atd;x86_64"
+  create_avd_if_needed
+}
+
+create_avd_if_needed() {
+  local avdmanager="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/avdmanager"
+  # ATD boots faster headless ; google_apis as fallback.
+  local avd_name="${SOUNDGROOVE_AVD_NAME:-SoundGroove_ATD34}"
+  local pkg="${SOUNDGROOVE_AVD_PACKAGE:-system-images;android-34;aosp_atd;x86_64}"
+  if [[ ! -x "${avdmanager}" ]]; then
+    echo "[cloud-agent-install] skip AVD (avdmanager missing)"
+    return 0
+  fi
+  if "${avdmanager}" list avd 2>/dev/null | grep -q "Name: ${avd_name}"; then
+    echo "[cloud-agent-install] AVD ${avd_name} already exists"
+    return 0
+  fi
+  echo "[cloud-agent-install] Creating AVD ${avd_name} (${pkg})"
+  echo "no" | "${avdmanager}" create avd \
+    --name "${avd_name}" \
+    --package "${pkg}" \
+    --device "pixel_6" \
+    --force
+  local config="${HOME}/.android/avd/${avd_name}.avd/config.ini"
+  if [[ -f "${config}" ]]; then
+    {
+      echo "hw.keyboard=yes"
+      echo "hw.ramSize=1536"
+      echo "hw.gpu.enabled=yes"
+      echo "hw.gpu.mode=swiftshader_indirect"
+    } >> "${config}"
+  fi
 }
 
 install_flutter() {

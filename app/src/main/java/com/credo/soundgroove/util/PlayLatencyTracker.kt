@@ -42,6 +42,18 @@ object PlayLatencyTracker {
         logI("playIssued playWhenReady=$playWhenReady" + sinceTapSuffix())
     }
 
+    fun markCommandPath(
+        path: String,
+        playWhenReady: Boolean,
+        isPlaying: Boolean,
+        positionMs: Long,
+    ) {
+        logI(
+            "cmdPath=$path playWhenReady=$playWhenReady isPlaying=$isPlaying pos=$positionMs" +
+                sinceTapSuffix(),
+        )
+    }
+
     fun markPlaybackState(stateLabel: String, playWhenReady: Boolean, isPlaying: Boolean) {
         logI(
             "state=$stateLabel playWhenReady=$playWhenReady isPlaying=$isPlaying" +
@@ -73,6 +85,10 @@ object PlayLatencyTracker {
         if (positionMs <= 0L) return
         if (!firstNonZeroLogged.compareAndSet(false, true)) return
         logI("firstNonZeroPosition posMs=$positionMs" + sinceTapSuffix())
+    }
+
+    fun markExpand(mode: String, addBefore: Int, addAfter: Int) {
+        logI("expand mode=$mode before=$addBefore after=$addAfter" + sinceTapSuffix())
     }
 
     fun lastLatencyMs(): Long = lastLatencyMs.get()

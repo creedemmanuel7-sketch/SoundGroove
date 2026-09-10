@@ -1,6 +1,5 @@
 package com.credo.soundgroove.playback
 
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -8,55 +7,54 @@ import org.junit.Test
 class PlaybackStartPolicyTest {
 
     @Test
-    fun tap_showsPlayingIconImmediatelyEvenIfPlayerSilent() {
-        assertTrue(PlaybackStartPolicy.showPlayingIcon(true, false, false))
-        assertTrue(PlaybackStartPolicy.showPlayingIcon(true, true, false))
-        assertTrue(PlaybackStartPolicy.showPlayingIcon(false, true, false))
-        assertFalse(PlaybackStartPolicy.showPlayingIcon(false, false, false))
+    fun playingIcon_neverFakesPlayback() {
+        assertFalse(PlaybackStartPolicy.showPlayingIcon(false))
+        assertTrue(PlaybackStartPolicy.showPlayingIcon(true))
     }
 
     @Test
-    fun userPause_alwaysShowsPausedIcon() {
-        assertFalse(PlaybackStartPolicy.showPlayingIcon(true, true, true))
-        assertFalse(PlaybackStartPolicy.showPlayingIcon(true, false, true))
-        assertTrue(PlaybackStartPolicy.shouldClearStickyOnPause(true))
-        assertFalse(PlaybackStartPolicy.shouldClearStickyOnPause(false))
-    }
-
-    @Test
-    fun spinner_hiddenWhileStickyPlay() {
-        assertFalse(
+    fun spinner_whileWantsPlayAndNotPlaying() {
+        assertTrue(
             PlaybackStartPolicy.showBufferingSpinner(
-                true,
                 false,
                 true,
                 true,
+                false,
                 false,
             ),
         )
         assertTrue(
             PlaybackStartPolicy.showBufferingSpinner(
                 false,
+                true,
                 false,
+                false,
+                false,
+            ),
+        )
+        assertFalse(
+            PlaybackStartPolicy.showBufferingSpinner(
                 true,
                 true,
+                true,
+                false,
                 false,
             ),
         )
         assertFalse(
             PlaybackStartPolicy.showBufferingSpinner(
                 false,
+                true,
+                true,
                 false,
-                true,
-                true,
                 true,
             ),
         )
-        assertFalse(
+        assertTrue(
             PlaybackStartPolicy.showBufferingSpinner(
                 false,
-                true,
-                true,
+                false,
+                false,
                 true,
                 false,
             ),
@@ -64,7 +62,22 @@ class PlaybackStartPolicyTest {
     }
 
     @Test
-    fun expand_onlyAfterFirstAudioAndMatchingItem() {
+    fun toggle_doesNotPauseSilentPrepareWithoutSpinner() {
+        assertFalse(PlaybackStartPolicy.shouldPauseOnToggle(false, true, false))
+        assertTrue(PlaybackStartPolicy.shouldPauseOnToggle(true, true, false))
+        assertTrue(PlaybackStartPolicy.shouldPauseOnToggle(false, true, true))
+        assertFalse(PlaybackStartPolicy.shouldPauseOnToggle(false, false, false))
+    }
+
+    @Test
+    fun firstAudio_requiresPlayingOrPosition() {
+        assertFalse(PlaybackStartPolicy.isFirstAudioHeard(false, 0L))
+        assertTrue(PlaybackStartPolicy.isFirstAudioHeard(true, 0L))
+        assertTrue(PlaybackStartPolicy.isFirstAudioHeard(false, 12L))
+    }
+
+    @Test
+    fun expand_onlyAfterFirstAudio() {
         assertTrue(PlaybackStartPolicy.shouldExpandAfterFirstAudio(true, true, true, true))
         assertFalse(PlaybackStartPolicy.shouldExpandAfterFirstAudio(true, false, true, true))
         assertFalse(PlaybackStartPolicy.shouldExpandAfterFirstAudio(true, true, false, true))
@@ -73,24 +86,29 @@ class PlaybackStartPolicyTest {
     }
 
     @Test
-    fun expand_addOnlyOnSingleItem_neverResetsPlaylist() {
+    fun expand_addOnlyOnSingleItem() {
         assertTrue(PlaybackStartPolicy.canExpandWithAddOnly(1))
-        assertFalse(PlaybackStartPolicy.canExpandWithAddOnly(0))
         assertFalse(PlaybackStartPolicy.canExpandWithAddOnly(65))
         assertFalse(PlaybackStartPolicy.shouldResetPlaylistToExpand(1))
-        assertFalse(PlaybackStartPolicy.shouldResetPlaylistToExpand(40))
     }
 
     @Test
-    fun coldStart_isSingleTrackUnlessAlreadyInQueue() {
-        assertEquals(1, PlaybackStartPolicy.coldStartQueueSize(false, 4000))
-        assertEquals(12, PlaybackStartPolicy.coldStartQueueSize(true, 12))
-        assertEquals(0, PlaybackStartPolicy.coldStartQueueSize(true, 0))
+    fun preferInProcess_whenServicePlayerExists() {
+        assertTrue(PlaybackStartPolicy.preferInProcessPlayer(true))
+        assertFalse(PlaybackStartPolicy.preferInProcessPlayer(false))
     }
 
     @Test
-    fun spinnerTimeoutToken_isShort() {
-        assertTrue(PlaybackStartPolicy.BUFFERING_SPINNER_MAX_MS <= 1_000L)
-        assertTrue(PlaybackStartPolicy.BUFFERING_SPINNER_MAX_MS >= 400L)
+    fun catalogQueue_whenTapOutsideCurrentQueue() {
+        assertTrue(PlaybackStartPolicy.useCatalogAsLogicalQueue(false, 4000))
+        assertFalse(PlaybackStartPolicy.useCatalogAsLogicalQueue(true, 4000))
+        assertFalse(PlaybackStartPolicy.useCatalogAsLogicalQueue(false, 1))
+        assertFalse(PlaybackStartPolicy.useCatalogAsLogicalQueue(false, 0))
+    }
+
+    @Test
+    fun spinnerTimeout_isShortNotStickySilence() {
+        assertTrue(PlaybackStartPolicy.BUFFERING_SPINNER_MAX_MS <= 3_000L)
+        assertTrue(PlaybackStartPolicy.BUFFERING_SPINNER_MAX_MS >= 800L)
     }
 }

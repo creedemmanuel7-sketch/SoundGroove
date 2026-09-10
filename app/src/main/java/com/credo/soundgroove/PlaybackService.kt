@@ -219,6 +219,9 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
+    /** ExoPlayer de la session — même process, sans round-trip MediaController/binder. */
+    fun localPlayer(): Player? = mediaSession?.player
+
     private fun applyPlaybackPreferences(player: ExoPlayer) {
         val prefs = PlaybackPreferences.prefs(this)
         val speed = prefs.getFloat(PlaybackPreferences.KEY_PLAYBACK_SPEED, 1.0f)

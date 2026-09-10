@@ -169,11 +169,32 @@ public final class PlaybackWindowOps {
             Window window
     ) {
         if (window == null || logicalMediaIds == null || window.size() == 0) return false;
-        if (playerCount != window.size()) return false;
         String expectedFirst = getOrEmpty(logicalMediaIds, window.start);
         String expectedLast = getOrEmpty(logicalMediaIds, window.endExclusive - 1);
-        return expectedFirst.equals(nullToEmpty(playerFirstId))
-                && expectedLast.equals(nullToEmpty(playerLastId));
+        return isPlayerHoldingWindow(
+                playerCount,
+                playerFirstId,
+                playerLastId,
+                expectedFirst,
+                expectedLast,
+                window.size()
+        );
+    }
+
+    /**
+     * Variante O(1) : 2 ids attendus, pas un {@code List} de toute la bibliothèque.
+     */
+    public static boolean isPlayerHoldingWindow(
+            int playerCount,
+            String playerFirstId,
+            String playerLastId,
+            String expectedFirstId,
+            String expectedLastId,
+            int expectedSize
+    ) {
+        if (expectedSize <= 0 || playerCount != expectedSize) return false;
+        return nullToEmpty(expectedFirstId).equals(nullToEmpty(playerFirstId))
+                && nullToEmpty(expectedLastId).equals(nullToEmpty(playerLastId));
     }
 
     /**
