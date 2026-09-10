@@ -22,7 +22,10 @@ class SoundGrooveApplication : Application() {
         }.onFailure {
             Log.w("SG_AUDIO", "PlaybackService prewarm failed", it)
         }
-        QueueFlutterRuntime.prewarm(this)
+        // FlutterEngine hors du chemin du premier play (concurrence binder / ExoPlayer).
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            QueueFlutterRuntime.prewarm(this)
+        }, 4_000L)
         if (BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(
                 StrictMode.ThreadPolicy.Builder()

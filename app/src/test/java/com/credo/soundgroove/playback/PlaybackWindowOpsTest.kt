@@ -128,5 +128,25 @@ class PlaybackWindowOpsTest {
                 window,
             ),
         )
+        assertTrue(
+            PlaybackWindowOps.isPlayerHoldingWindow(
+                window.size(),
+                ids[window.start],
+                ids[window.endExclusive - 1],
+                ids[window.start],
+                ids[window.endExclusive - 1],
+                window.size(),
+            ),
+        )
+        assertFalse(
+            PlaybackWindowOps.isPlayerHoldingWindow(
+                window.size(),
+                ids[window.start],
+                ids[window.endExclusive - 1],
+                ids[window.start],
+                ids[window.endExclusive - 1],
+                window.size() + 1,
+            ),
+        )
     }
 }
