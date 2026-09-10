@@ -1,6 +1,6 @@
 package com.credo.soundgroove.ui.screens
 
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -73,8 +73,6 @@ import com.credo.soundgroove.playback.QueuePresentation
 import com.credo.soundgroove.ui.components.NowPlayingBars
 import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.motion.SgCoverImage
-import com.credo.soundgroove.ui.theme.CardSurface
-import com.credo.soundgroove.ui.theme.ErrorRed
 import com.credo.soundgroove.ui.theme.GlassBorder
 import com.credo.soundgroove.ui.theme.GraphiteCard
 import com.credo.soundgroove.ui.theme.SgMotion
@@ -87,6 +85,7 @@ import com.credo.soundgroove.ui.theme.rememberSgReducedMotion
 import com.credo.soundgroove.ui.theme.sgNavigationBarsBottom
 import com.credo.soundgroove.ui.theme.sgPressScale
 import com.credo.soundgroove.ui.theme.sgSheetGradientBrush
+import com.credo.soundgroove.playback.QueueSheetMotion
 import com.credo.soundgroove.util.displayArtist
 import com.credo.soundgroove.util.displayTitle
 import kotlin.math.roundToInt
@@ -123,10 +122,10 @@ fun QueueScreen(
     val reducedMotion = rememberSgReducedMotion()
     val density = LocalDensity.current
     val rowHeightPx = with(density) { 64.dp.toPx() }
-    val collapseThreshold = with(density) { 56.dp.toPx() }
+    val collapseThreshold = with(density) { QueueSheetMotion.DEFAULT_THRESHOLD_DP.dp.toPx() }
+    val collapseDrag = remember { Animatable(0f) }
     var draggingIndex by remember { mutableIntStateOf(-1) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
-    var collapseDrag by remember { mutableFloatStateOf(0f) }
     var historyExpanded by remember { mutableStateOf(false) }
     var didInitialScroll by remember { mutableStateOf(false) }
     val safeCurrentIndex = currentIndex.coerceIn(0, (playlist.size - 1).coerceAtLeast(0))
@@ -179,35 +178,45 @@ fun QueueScreen(
             .fillMaxHeight()
             .clip(RoundedCornerShape(topStart = SgRadius.xl, topEnd = SgRadius.xl))
             .background(sgSheetGradientBrush())
-            .graphicsLayer { alpha = morphProgress.coerceIn(0f, 1f) },
+            .graphicsLayer {
+                alpha = morphProgress.coerceIn(0f, 1f)
+                translationY = QueueSheetMotion.dragTranslationY(collapseDrag.value)
+            },
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Spacer(modifier = Modifier.height(SgSpacing.sm))
-            Box(
-                modifier = Modifier
-                    .width(40.dp)
-                    .height(4.dp)
-                    .background(GlassBorder, RoundedCornerShape(2.dp))
-                    .align(Alignment.CenterHorizontally),
+            QueueCollapseHandle(
+                accentColor = accentColor,
+                onClose = onClose,
+                onVerticalDrag = { amount ->
+                    if (amount > 0f) {
+                        scope.launch {
+                            collapseDrag.snapTo(collapseDrag.value + amount)
+                        }
+                    }
+                },
+                onDragEnd = {
+                    val dismiss = QueueSheetMotion.shouldDismiss(
+                        collapseDrag.value,
+                        collapseThreshold,
+                        0f,
+                    )
+                    if (dismiss) {
+                        onClose()
+                    } else {
+                        scope.launch {
+                            collapseDrag.animateTo(0f, SgMotion.queueSheetSpec())
+                        }
+                    }
+                },
+                onDragCancel = {
+                    scope.launch { collapseDrag.animateTo(0f, SgMotion.queueSheetSpec()) }
+                },
             )
-            Spacer(modifier = Modifier.height(SgSpacing.md))
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .pointerInput(Unit) {
-                        detectVerticalDragGestures(
-                            onDragEnd = {
-                                if (collapseDrag > collapseThreshold) onClose()
-                                collapseDrag = 0f
-                            },
-                            onDragCancel = { collapseDrag = 0f },
-                            onVerticalDrag = { _, amount ->
-                                if (amount > 0f) collapseDrag += amount
-                            },
-                        )
-                    }
-                    .padding(horizontal = SgSpacing.xl),
+                    .padding(horizontal = SgSpacing.xl, vertical = SgSpacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -223,7 +232,10 @@ fun QueueScreen(
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
-                TextButton(onClick = onClose) {
+                TextButton(
+                    onClick = onClose,
+                    modifier = Modifier.heightIn(min = SgSpacing.hitTarget),
+                ) {
                     Text("Fermer", color = accentColor, fontWeight = FontWeight.SemiBold)
                 }
             }
@@ -246,11 +258,12 @@ fun QueueScreen(
                         .weight(1f)
                         .heightIn(min = 280.dp),
                     contentPadding = PaddingValues(
-                        start = SgSpacing.lg,
-                        end = SgSpacing.lg,
-                        bottom = 72.dp + sgNavigationBarsBottom(),
+                        start = SgSpacing.xl,
+                        end = SgSpacing.xl,
+                        top = SgSpacing.sm,
+                        bottom = 80.dp + sgNavigationBarsBottom(),
                     ),
-                    verticalArrangement = Arrangement.spacedBy(SgSpacing.xs),
+                    verticalArrangement = Arrangement.spacedBy(SgSpacing.md),
                 ) {
                     if (sections.hasHistory()) {
                         item(key = "history_header", contentType = "section") {
@@ -381,6 +394,52 @@ private fun isNowPlayingVisible(listState: LazyListState): Boolean {
 }
 
 @Composable
+fun QueueCollapseHandle(
+    accentColor: Color,
+    onClose: () -> Unit,
+    onVerticalDrag: (Float) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val handleInteraction = remember { MutableInteractionSource() }
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = SgSpacing.hitTarget)
+            .pointerInput(Unit) {
+                detectVerticalDragGestures(
+                    onDragEnd = onDragEnd,
+                    onDragCancel = onDragCancel,
+                    onVerticalDrag = { _, amount -> onVerticalDrag(amount) },
+                )
+            }
+            .clickable(
+                interactionSource = handleInteraction,
+                indication = null,
+                onClick = onClose,
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(modifier = Modifier.height(SgSpacing.sm))
+        Box(
+            modifier = Modifier
+                .width(56.dp)
+                .height(6.dp)
+                .clip(RoundedCornerShape(SgRadius.pill))
+                .background(accentColor.copy(alpha = 0.38f))
+                .border(1.dp, GlassBorder.copy(alpha = 0.45f), RoundedCornerShape(SgRadius.pill)),
+        )
+        Icon(
+            imageVector = Icons.Filled.ExpandMore,
+            contentDescription = "Fermer la file",
+            tint = TextPrimary.copy(alpha = 0.55f),
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
 private fun QueueSectionHeader(
     title: String,
     meta: String,
@@ -461,9 +520,8 @@ private fun QueueNowPlayingCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .glassEffect(cornerRadius = SgRadius.md, accentColor = accentColor)
-            .border(1.dp, accentColor.copy(alpha = 0.45f), RoundedCornerShape(SgRadius.md))
-            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.md),
+            .glassEffect(cornerRadius = SgRadius.lg, accentColor = accentColor)
+            .padding(horizontal = SgSpacing.lg, vertical = SgSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         QueueArt(song = song, accentColor = accentColor, size = 56)
@@ -505,10 +563,10 @@ private fun QueueHistoryRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(SgRadius.md))
-            .background(CardSurface.copy(alpha = 0.72f))
+            .glassEffect(cornerRadius = SgRadius.md, accentColor = accentColor)
             .clickable(onClick = onPlay)
-            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.sm)
-            .alpha(0.72f),
+            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.md)
+            .alpha(0.78f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         QueueArt(song = song, accentColor = accentColor, size = 40)
@@ -544,11 +602,6 @@ private fun QueueUpcomingRow(
     onDragEnd: () -> Unit,
     onDragCancel: () -> Unit,
 ) {
-    val borderColor by animateColorAsState(
-        targetValue = if (isDragging) accentColor.copy(alpha = 0.55f) else GlassBorder.copy(alpha = 0.35f),
-        animationSpec = SgMotion.tweenFastOf(),
-        label = "queue_row_border",
-    )
     val dragScale by animateFloatAsState(
         targetValue = if (isDragging) 1.02f else 1f,
         animationSpec = SgMotion.SpringSoft,
@@ -564,11 +617,9 @@ private fun QueueUpcomingRow(
                 scaleY = dragScale
             }
             .offset { IntOffset(0, dragOffsetY.roundToInt()) }
-            .clip(RoundedCornerShape(SgRadius.md))
-            .background(CardSurface.copy(alpha = 0.97f))
-            .border(1.dp, borderColor, RoundedCornerShape(SgRadius.md))
+            .glassEffect(cornerRadius = SgRadius.md, accentColor = accentColor)
             .clickable(onClick = onPlay)
-            .padding(horizontal = SgSpacing.sm, vertical = SgSpacing.sm + 2.dp),
+            .padding(horizontal = SgSpacing.md, vertical = SgSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -662,59 +713,72 @@ fun PlayerQueueBanner(
     val prevInteraction = remember { MutableInteractionSource() }
     val playInteraction = remember { MutableInteractionSource() }
     val nextInteraction = remember { MutableInteractionSource() }
-    Box(
+    val metaInteraction = remember { MutableInteractionSource() }
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(com.credo.soundgroove.ui.theme.sgFullScreenGradientBrush())
-            .clickable { onExpand() },
+            .glassEffect(cornerRadius = 0.dp, accentColor = accentColor),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Row(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .weight(1f)
                 .padding(horizontal = SgSpacing.xl),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
+            Row(
                 modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(SgRadius.sm))
-                    .background(GraphiteCard),
-                contentAlignment = Alignment.Center,
+                    .weight(1f)
+                    .clickable(
+                        interactionSource = metaInteraction,
+                        indication = null,
+                        onClick = onExpand,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (song.albumArtUri != null) {
-                    SgCoverImage(
-                        albumArtUri = song.albumArtUri,
-                        uriCrossfade = true,
-                        decodeEdgeDp = 52.dp,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(SgRadius.sm))
+                        .background(GraphiteCard),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (song.albumArtUri != null) {
+                        SgCoverImage(
+                            albumArtUri = song.albumArtUri,
+                            uriCrossfade = true,
+                            decodeEdgeDp = 52.dp,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_songs),
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(SgSpacing.md))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = song.displayTitle(),
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                } else {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_songs),
-                        contentDescription = null,
-                        tint = accentColor,
-                        modifier = Modifier.size(22.dp),
+                    Text(
+                        text = song.displayArtist(),
+                        color = TextPrimary.copy(alpha = 0.72f),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-            }
-            Spacer(modifier = Modifier.width(SgSpacing.md))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = song.displayTitle(),
-                    color = TextPrimary,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = song.displayArtist(),
-                    color = TextPrimary.copy(alpha = 0.72f),
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -722,7 +786,7 @@ fun PlayerQueueBanner(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(SgSpacing.hitTarget)
                         .sgPressScale(prevInteraction, pressedScale = 0.9f)
                         .clickable(interactionSource = prevInteraction, indication = null, onClick = onSkipPrevious),
                     contentAlignment = Alignment.Center,
@@ -736,7 +800,7 @@ fun PlayerQueueBanner(
                 }
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(48.dp)
                         .sgPressScale(playInteraction, pressedScale = 0.9f)
                         .clip(CircleShape)
                         .background(accentColor)
@@ -752,7 +816,7 @@ fun PlayerQueueBanner(
                 }
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(SgSpacing.hitTarget)
                         .sgPressScale(nextInteraction, pressedScale = 0.9f)
                         .clickable(interactionSource = nextInteraction, indication = null, onClick = onSkipNext),
                     contentAlignment = Alignment.Center,
@@ -768,10 +832,16 @@ fun PlayerQueueBanner(
         }
         Box(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(GlassBorder.copy(alpha = 0.4f)),
-        )
+                .size(SgSpacing.hitTarget)
+                .clickable(onClick = onExpand),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.ExpandMore,
+                contentDescription = "Fermer la file",
+                tint = TextPrimary.copy(alpha = 0.62f),
+                modifier = Modifier.size(26.dp),
+            )
+        }
     }
 }

@@ -28,7 +28,6 @@ import com.credo.soundgroove.ui.screens.LyricsScreen
 import com.credo.soundgroove.ui.screens.LyricsWebSearchScreen
 import com.credo.soundgroove.ui.screens.PlayerScreen
 import com.credo.soundgroove.ui.screens.PlayerQueueBanner
-import com.credo.soundgroove.ui.screens.PlayerQueueBanner
 import com.credo.soundgroove.data.model.Playlist
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -214,7 +213,7 @@ private fun AppNavigationContent(
         showQueue = true
         scope.launch {
             if (reducedMotion) queueBannerProgress.snapTo(1f)
-            else queueBannerProgress.animateTo(1f, animationSpec = tween(SgMotion.FastMs, easing = SgMotion.EmphasizedDecelerate))
+            else queueBannerProgress.animateTo(1f, animationSpec = SgMotion.queueSheetSpec())
         }
     }
 
@@ -223,7 +222,7 @@ private fun AppNavigationContent(
             if (reducedMotion) {
                 queueBannerProgress.snapTo(0f)
             } else {
-                queueBannerProgress.animateTo(0f, animationSpec = tween(SgMotion.FastMs, easing = SgMotion.EmphasizedAccelerate))
+                queueBannerProgress.animateTo(0f, animationSpec = SgMotion.queueSheetSpec())
             }
             showQueue = false
         }
@@ -379,7 +378,7 @@ private fun AppNavigationContent(
         if (reducedMotion) {
             queueBannerProgress.snapTo(1f)
         } else {
-            queueBannerProgress.animateTo(1f, animationSpec = SgMotion.SpringSnappy)
+            queueBannerProgress.animateTo(1f, animationSpec = SgMotion.queueSheetSpec())
         }
     }
 

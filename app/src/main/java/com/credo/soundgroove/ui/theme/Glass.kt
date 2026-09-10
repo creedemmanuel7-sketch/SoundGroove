@@ -18,11 +18,11 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun surfaceBrush(accentColor: Color = MaterialTheme.colorScheme.primary): Brush = Brush.linearGradient(
-    // Opacité ↑ : contraste texte sur glass/blur (WCAG AA sur dark violet).
+    // Verre plus prononcé : plus translucide, liseré accent, highlight haut.
     colors = listOf(
-        SurfaceElevated.copy(alpha = if (IsLightTheme) 0.88f else 0.82f),
-        SurfaceOverlay.copy(alpha = if (IsLightTheme) 0.78f else 0.70f),
-        accentColor.copy(alpha = if (IsLightTheme) 0.05f else 0.04f)
+        SurfaceElevated.copy(alpha = if (IsLightTheme) 0.78f else 0.58f),
+        SurfaceOverlay.copy(alpha = if (IsLightTheme) 0.66f else 0.42f),
+        accentColor.copy(alpha = if (IsLightTheme) 0.10f else 0.14f)
     )
 )
 
@@ -30,7 +30,7 @@ fun surfaceBrush(accentColor: Color = MaterialTheme.colorScheme.primary): Brush 
 fun Modifier.glassEffect(
     cornerRadius: Dp = SgRadius.lg,
     accentColor: Color = MaterialTheme.colorScheme.primary,
-    borderAlpha: Float = if (IsLightTheme) 0.12f else 0.08f
+    borderAlpha: Float = if (IsLightTheme) 0.22f else 0.28f
 ): Modifier {
     val edgeColor = if (IsLightTheme) Color.Black else Color.White
     return this
@@ -41,8 +41,9 @@ fun Modifier.glassEffect(
             brush = Brush.linearGradient(
                 colors = listOf(
                     edgeColor.copy(alpha = borderAlpha),
-                    accentColor.copy(alpha = borderAlpha * 0.4f),
-                    edgeColor.copy(alpha = borderAlpha * 0.15f)
+                    accentColor.copy(alpha = (borderAlpha * 0.85f).coerceAtMost(0.55f)),
+                    GlassHighlight.copy(alpha = if (IsLightTheme) 0.18f else 0.32f),
+                    edgeColor.copy(alpha = borderAlpha * 0.22f)
                 )
             ),
             shape = RoundedCornerShape(cornerRadius)
@@ -71,9 +72,10 @@ fun GlassCard(
                 width = 1.dp,
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        edgeColor.copy(alpha = if (IsLightTheme) 0.10f else 0.08f),
-                        accentColor.copy(alpha = 0.045f),
-                        edgeColor.copy(alpha = if (IsLightTheme) 0.04f else 0.015f)
+                        edgeColor.copy(alpha = if (IsLightTheme) 0.16f else 0.28f),
+                        accentColor.copy(alpha = if (IsLightTheme) 0.18f else 0.32f),
+                        GlassHighlight.copy(alpha = if (IsLightTheme) 0.20f else 0.36f),
+                        edgeColor.copy(alpha = if (IsLightTheme) 0.06f else 0.10f)
                     )
                 ),
                 shape = RoundedCornerShape(cornerRadius)
