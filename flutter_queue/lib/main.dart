@@ -82,17 +82,34 @@ class _QueuePageState extends State<QueuePage> {
       body: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
+            GestureDetector(
+              onTap: () => _methodChannel.invokeMethod('close'),
+                    onVerticalDragEnd: (details) {
+                if ((details.primaryVelocity ?? 0) > 900) {
+                  _methodChannel.invokeMethod('close');
+                }
+              },
+              child: SizedBox(
+                height: queueHandleHit,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: queueHandleWidth,
+                      height: queueHandleHeight,
+                      decoration: BoxDecoration(
+                        color: Color(queueGlassFill),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: const Color(queueGlassStroke)),
+                      ),
+                    ),
+                    Icon(Icons.expand_more, color: Colors.white.withValues(alpha: 0.55), size: 22),
+                  ],
+                ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
+              padding: const EdgeInsets.fromLTRB(20, 8, 8, 12),
               child: Row(
                 children: [
                   Expanded(
@@ -118,16 +135,19 @@ class _QueuePageState extends State<QueuePage> {
                       ],
                     ),
                   ),
-                  TextButton(
-                    onPressed: () => _methodChannel.invokeMethod('close'),
-                    child: Text('Fermer', style: TextStyle(color: accent, fontWeight: FontWeight.w600)),
+                  SizedBox(
+                    height: queueHandleHit,
+                    child: TextButton(
+                      onPressed: () => _methodChannel.invokeMethod('close'),
+                      child: Text('Fermer', style: TextStyle(color: accent, fontWeight: FontWeight.w600)),
+                    ),
                   ),
                 ],
               ),
             ),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
                 children: [
                   if (history.isNotEmpty)
                     _SectionTap(
@@ -242,12 +262,12 @@ class _NowPlayingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(vertical: queueRowGap),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(graphiteCard),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accent.withValues(alpha: 0.45)),
+        color: const Color(queueGlassFill),
+        borderRadius: BorderRadius.circular(queueCardRadius),
+        border: Border.all(color: accent.withValues(alpha: 0.38)),
       ),
       child: Row(
         children: [
@@ -300,6 +320,7 @@ class _TrackTile extends StatelessWidget {
     return Opacity(
       opacity: dimmed ? 0.72 : 1,
       child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         onTap: onTap,
         leading: Row(
           mainAxisSize: MainAxisSize.min,

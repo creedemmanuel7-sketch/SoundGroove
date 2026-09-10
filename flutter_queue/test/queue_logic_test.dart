@@ -21,4 +21,11 @@ void main() {
     expect(remainingLabel(125000, 3, 4), contains('4 titres'));
     expect(remainingLabel(0, 0, 1), '0:00 · 1 titre');
   });
+
+  test('queue glass layout tokens stay airy', () {
+    expect(queueHandleHit, 48);
+    expect(queueHandleWidth, greaterThan(queueHandleHeight * 4));
+    expect(queueRowGap, greaterThanOrEqualTo(12));
+    expect(queueCardRadius, greaterThanOrEqualTo(16));
+  });
 }

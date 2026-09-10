@@ -65,6 +65,9 @@ object SgMotion {
     /** Morph mini-player ↔ Player : plus court que SlowMs pour limiter la latence perçue. */
     const val PlayerMorphMs = 220
 
+    /** Ouverture / fermeture file (ressort, pas un snap 150 ms). */
+    const val QueueSheetMs = 240
+
     /** Révélation circulaire lors d'un changement de thème. */
     const val ThemeRevealMs = 280
 
@@ -99,6 +102,9 @@ object SgMotion {
 
     val SpringSnappy = spring<Float>(dampingRatio = 0.78f, stiffness = 650f)
     val SpringSoft = spring<Float>(dampingRatio = 0.82f, stiffness = 480f)
+    val SpringQueue = spring<Float>(dampingRatio = 0.86f, stiffness = 380f)
+
+    fun queueSheetSpec(): AnimationSpec<Float> = SpringQueue
 
     fun tweenFast() = tween<Float>(FastMs, easing = EmphasizedDecelerate)
     fun tweenMedium() = tween<Float>(MediumMs, easing = EmphasizedDecelerate)

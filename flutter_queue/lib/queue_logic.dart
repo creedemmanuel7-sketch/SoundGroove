@@ -2,6 +2,15 @@ const graphiteAbyss = 0xFF0A0A0C;
 const graphiteCard = 0xFF17181C;
 const brandPurple = 0xFFA855F7;
 
+/// Handle de fermeture (dp) — aéré, pas une ligne 1 px.
+const queueHandleWidth = 56.0;
+const queueHandleHeight = 6.0;
+const queueHandleHit = 48.0;
+const queueCardRadius = 18.0;
+const queueRowGap = 12.0;
+const queueGlassFill = 0x22FFFFFF;
+const queueGlassStroke = 0x3DFFFFFF;
+
 String stableKey(int songId, int occurrence) => '$songId#$occurrence';
 
 List<String> stableKeys(List<int> ids) {
