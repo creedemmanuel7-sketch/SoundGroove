@@ -107,10 +107,22 @@ class PlaybackManager(
     @Volatile private var playerWindowEndExclusive: Int = 0
     private var orderBeforeShuffle: List<Song>? = null
 
+    /** Tap → icône « en lecture » jusqu'à pause utilisateur / erreur, même si l'audio n'a pas encore démarré. */
+    @Volatile private var stickyPlay: Boolean = false
+
+    private var pendingExpand: PendingExpand? = null
+
     private data class PendingPlayRequest(
         val generation: Int,
         val queue: List<Song>,
         val startSong: Song,
+    )
+
+    private data class PendingExpand(
+        val queue: List<Song>,
+        val index: Int,
+        val generation: Int,
+        val expectedMediaId: String,
     )
 
     private val playerCommandGate = PlayerCommandGate(
@@ -154,12 +166,11 @@ class PlaybackManager(
 
     fun playSong(song: Song) {
         val current = _playbackQueue.value
-        val inQueue = current.indexOfFirst { it.id == song.id }
-        if (inQueue >= 0) {
+        val inQueue = current.indexOfFirst { it.id == song.id } >= 0
+        if (PlaybackStartPolicy.coldStartQueueSize(inQueue, current.size) > 1) {
             playSongs(current, song)
             return
         }
-        // Ne plus dumper toute la bibliothèque dans la file UI / le player.
         playSongs(listOf(song), song)
     }
 
@@ -171,6 +182,7 @@ class PlaybackManager(
 
         val generation = playGeneration.incrementAndGet()
         queueExpandJob?.cancel()
+        pendingExpand = null
         pendingPlayRequest = null
         applyOptimisticPlayUi(safeQueue, index, startSong)
         PlayLatencyTracker.markTap("fast-start")
@@ -311,6 +323,7 @@ class PlaybackManager(
         persistPlaybackSession()
         playerCommandGate.cancel()
         queueExpandJob?.cancel()
+        pendingExpand = null
         mediaControllerListener?.let { listener ->
             _mediaController.value?.removeListener(listener)
             mediaControllerListener = null
@@ -366,13 +379,27 @@ class PlaybackManager(
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 syncPlaybackUiFlags(controller)
-                if (playbackState == Player.STATE_READY) publishPlaybackProgress(controller)
+                if (playbackState == Player.STATE_READY) {
+                    publishPlaybackProgress(controller)
+                    maybeExpandAfterFirstAudio(controller)
+                }
                 if (playbackState == Player.STATE_ENDED) {
                     handleLogicalQueueEnded(controller)
                 }
             }
 
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                syncPlaybackUiFlags(controller)
+                if (isPlaying) {
+                    PlayLatencyTracker.markIsPlaying()
+                    maybeExpandAfterFirstAudio(controller)
+                }
+            }
+
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) {
+                    stickyPlay = false
+                }
                 syncPlaybackUiFlags(controller)
             }
 
@@ -445,8 +472,10 @@ class PlaybackManager(
         _playbackError.value = null
         playbackErrorRetries.set(0)
         consecutiveAutoSkips = 0
-        beginPlayUiPending("play-tap")
-        _isPlaying.value = false
+        stickyPlay = true
+        _isPlaying.value = true
+        bufferingUiTimedOut = false
+        setBufferingUi(false, "optimistic-play")
     }
 
     private fun playSongsExclusive(queue: List<Song>, startSong: Song, index: Int, generation: Int) {
@@ -459,23 +488,27 @@ class PlaybackManager(
         ensureAudibleVolume(controller)
 
         if (tryFastSeekPlayback(controller, queue, index, generation)) {
+            armExpandAfterFirstAudio(queue, index, generation)
+            maybeExpandAfterFirstAudio(controller)
             schedulePersistPlaybackSession()
             return
         }
 
         val mediaItem = songToMediaItem(queue[index])
         PlayLatencyTracker.markSetMediaItem(mediaItem.mediaId, generation)
-        controller.setMediaItem(mediaItem, true)
+        controller.setMediaItem(mediaItem, /* resetPosition = */ true)
         rememberWindow(PlaybackWindowOps.Window(index, index + 1, index))
         if (generation != playGeneration.get()) return
         PlayLatencyTracker.markPrepare("cold-start", queue.size, index, 0L)
+        controller.playWhenReady = true
         controller.prepare()
         ensureAudibleVolume(controller)
         PlayLatencyTracker.markPlayIssued(true)
         controller.play()
-        if (queue.size > 1) {
-            expandQueueAroundCurrent(controller, queue, index, keepPlaying = true, generation = generation)
-        }
+        stickyPlay = true
+        _isPlaying.value = true
+        armExpandAfterFirstAudio(queue, index, generation)
+        maybeExpandAfterFirstAudio(controller)
         schedulePersistPlaybackSession()
     }
 
@@ -520,11 +553,11 @@ class PlaybackManager(
         controller.seekTo(playerIndex, 0L)
         ensureAudibleVolume(controller)
         PlayLatencyTracker.markPlayIssued(true)
+        controller.playWhenReady = true
         controller.play()
+        stickyPlay = true
+        _isPlaying.value = true
         _playbackQueueIndex.value = index
-        if (PlaybackWindowOps.shouldReExpand(currentWindow(), index, queue.size, EXPAND_RADIUS, EXPAND_HYSTERESIS)) {
-            expandQueueAroundCurrent(controller, queue, index, keepPlaying = true, generation = generation)
-        }
         return true
     }
 
@@ -539,6 +572,40 @@ class PlaybackManager(
     private fun rememberWindow(window: PlaybackWindowOps.Window) {
         playerWindowStart = window.start
         playerWindowEndExclusive = window.endExclusive
+    }
+
+    private fun armExpandAfterFirstAudio(queue: List<Song>, index: Int, generation: Int) {
+        if (queue.size <= 1) {
+            pendingExpand = null
+            return
+        }
+        val mediaId = queue.getOrNull(index)?.uri?.toString() ?: return
+        pendingExpand = PendingExpand(queue, index, generation, mediaId)
+    }
+
+    private fun maybeExpandAfterFirstAudio(controller: MediaController) {
+        val pending = pendingExpand ?: return
+        val mediaId = controller.currentMediaItem?.mediaId
+        val heard = controller.isPlaying ||
+            (controller.playWhenReady && controller.playbackState == Player.STATE_READY)
+        if (!PlaybackStartPolicy.shouldExpandAfterFirstAudio(
+                true,
+                heard,
+                pending.generation == playGeneration.get(),
+                mediaId == pending.expectedMediaId,
+            )
+        ) {
+            return
+        }
+        pendingExpand = null
+        expandQueueAroundCurrent(
+            controller,
+            pending.queue,
+            pending.index,
+            keepPlaying = true,
+            generation = pending.generation,
+            addOnly = true,
+        )
     }
 
     private fun isSamePlaybackContext(queue: List<Song>): Boolean {
@@ -577,6 +644,7 @@ class PlaybackManager(
         startIndex: Int,
         keepPlaying: Boolean,
         generation: Int,
+        addOnly: Boolean = false,
     ) {
         queueExpandJob?.cancel()
         val expectedMediaId = queue.getOrNull(startIndex)?.uri?.toString() ?: return
@@ -596,6 +664,7 @@ class PlaybackManager(
                     keepPlaying = keepPlaying,
                     expectedMediaId = expectedMediaId,
                     logicalIndex = startIndex,
+                    addOnly = addOnly,
                 )
             }
         }
@@ -609,31 +678,39 @@ class PlaybackManager(
         keepPlaying: Boolean,
         expectedMediaId: String,
         logicalIndex: Int,
+        addOnly: Boolean = false,
     ) {
         fun apply(): Boolean {
             if (live.currentMediaItem?.mediaId != expectedMediaId) return true
-            if (live.mediaItemCount == 1) {
+            val playWhenReadyBefore = live.playWhenReady
+            if (PlaybackStartPolicy.canExpandWithAddOnly(live.mediaItemCount)) {
                 if (before.isNotEmpty()) live.addMediaItems(0, before)
                 if (after.isNotEmpty()) live.addMediaItems(after)
+            } else if (addOnly || PlaybackStartPolicy.shouldResetPlaylistToExpand(live.mediaItemCount)) {
+                // Fast-start : ne jamais setMediaItems (coupe playWhenReady / le buffer).
+                return true
             } else if (live.mediaItemCount != window.size() ||
                 (before.isNotEmpty() && peekPlayerMediaId(live, 0) != before.first().mediaId)
             ) {
                 val position = live.currentPosition.coerceAtLeast(0L)
-                val playWhenReady = live.playWhenReady
                 val items = ArrayList<MediaItem>(window.size())
                 items.addAll(before)
                 live.currentMediaItem?.let { items.add(it) } ?: return false
                 items.addAll(after)
                 live.setMediaItems(items, before.size, position)
                 live.prepare()
-                if (keepPlaying || playWhenReady) {
+                if (keepPlaying || playWhenReadyBefore) {
                     ensureAudibleVolume(live)
+                    live.playWhenReady = true
                     live.play()
                 }
             }
-            if (keepPlaying && live.playWhenReady && !live.isPlaying) {
-                ensureAudibleVolume(live)
-                live.play()
+            if (keepPlaying && !addOnly) {
+                live.playWhenReady = true
+                if (!live.isPlaying) {
+                    ensureAudibleVolume(live)
+                    live.play()
+                }
             }
             rememberWindow(window)
             _playbackQueueIndex.value = logicalIndex
@@ -690,6 +767,7 @@ class PlaybackManager(
             logical,
             keepPlaying = controller.playWhenReady,
             generation = playGeneration.get(),
+            addOnly = false,
         )
     }
 
@@ -736,6 +814,7 @@ class PlaybackManager(
         } else {
             playGeneration.incrementAndGet()
             queueExpandJob?.cancel()
+            pendingExpand = null
             reshapePlayerWindow(controller, queue, logicalIndex, keepPlaying = play, keepPosition = false)
             if (play) beginPlayUiPending("seek-logical-reshape")
         }
@@ -844,6 +923,7 @@ class PlaybackManager(
                 _playbackPosition.value = position
                 _playbackDuration.value = safeQueue[index].duration.takeIf { it > 0L } ?: 0L
                 _isPlaying.value = false
+                stickyPlay = false
                 setBufferingUi(false, "session-restore")
                 if (safeQueue.size > 1) {
                     expandQueueAroundCurrent(controller, safeQueue, index, keepPlaying = false, generation = restoreGen)
@@ -880,6 +960,7 @@ class PlaybackManager(
                             ?: song.duration.takeIf { it > 0L } ?: 0L
                         onScrobbleProgress(song, controller.currentPosition, duration)
                     }
+                    PlayLatencyTracker.markFirstNonZeroPosition(controller.currentPosition)
                     if (now - lastSessionPersistAtMs >= SESSION_PERSIST_INTERVAL_MS) {
                         lastSessionPersistAtMs = now
                         persistPlaybackSession()
@@ -897,16 +978,32 @@ class PlaybackManager(
     private fun syncPlaybackUiFlags(player: Player?) {
         if (player == null) {
             setBufferingUi(false, "no-player")
-            _isPlaying.value = false
+            _isPlaying.value = PlaybackStartPolicy.showPlayingIcon(stickyPlay, false, false)
             return
         }
         val playing = player.isPlaying
         val wantsPlay = player.playWhenReady
         val state = player.playbackState
-        if (state != lastLoggedPlaybackState) lastLoggedPlaybackState = state
-        _isPlaying.value = playing
-        if (playing) bufferingUiTimedOut = false
-        val exoBuffering = wantsPlay && !playing && state == Player.STATE_BUFFERING
+        if (state != lastLoggedPlaybackState) {
+            lastLoggedPlaybackState = state
+            PlayLatencyTracker.markPlaybackState(
+                playbackStateLabel(state),
+                wantsPlay,
+                playing,
+            )
+        }
+        if (playing) {
+            stickyPlay = true
+            bufferingUiTimedOut = false
+        }
+        _isPlaying.value = PlaybackStartPolicy.showPlayingIcon(stickyPlay, playing, false)
+        val exoBuffering = PlaybackStartPolicy.showBufferingSpinner(
+            stickyPlay,
+            playing,
+            wantsPlay,
+            state == Player.STATE_BUFFERING,
+            bufferingUiTimedOut,
+        )
         setBufferingUi(exoBuffering, if (exoBuffering) "STATE_BUFFERING" else "clear")
     }
 
@@ -917,11 +1014,12 @@ class PlaybackManager(
             return
         }
         _isBuffering.value = buffering
+        PlayLatencyTracker.markBuffering(buffering, reason)
         bufferingUiTimeoutJob?.cancel()
         if (buffering) {
             bufferingUiTimeoutJob = scope.launch {
-                delay(BUFFERING_UI_TIMEOUT_MS)
-                if (_isBuffering.value && !_isPlaying.value) {
+                delay(PlaybackStartPolicy.BUFFERING_SPINNER_MAX_MS)
+                if (_isBuffering.value) {
                     bufferingUiTimedOut = true
                     _isBuffering.value = false
                 }
@@ -930,8 +1028,10 @@ class PlaybackManager(
     }
 
     private fun beginPlayUiPending(reason: String) {
+        stickyPlay = true
+        _isPlaying.value = true
         bufferingUiTimedOut = false
-        setBufferingUi(true, reason)
+        setBufferingUi(false, reason)
     }
 
     private fun publishPlaybackProgress(controller: Player?) {
@@ -959,11 +1059,17 @@ class PlaybackManager(
                     _playbackError.value = controllerNotReadyMessage()
                     return
                 }
-                if (controller.isPlaying || (controller.playWhenReady && _isBuffering.value)) {
+                val treatAsPlaying = controller.isPlaying || controller.playWhenReady || stickyPlay
+                if (treatAsPlaying) {
+                    stickyPlay = false
+                    _isPlaying.value = false
                     controller.pause()
                 } else {
+                    stickyPlay = true
+                    _isPlaying.value = true
                     ensureAudibleVolume(controller)
                     beginPlayUiPending("play-pause")
+                    controller.playWhenReady = true
                     controller.play()
                 }
             }
@@ -1012,6 +1118,7 @@ class PlaybackManager(
         if (targetIndex == from && delta != 0) return
         playGeneration.incrementAndGet()
         queueExpandJob?.cancel()
+        pendingExpand = null
         beginPlayUiPending("skip")
         seekLogicalIndex(controller, queue, targetIndex, play = true)
         syncPlaybackUiFlags(controller)
@@ -1073,6 +1180,7 @@ class PlaybackManager(
             invalidMediaIds.add(mediaId)
         }
         setBufferingUi(false, "playback-error")
+        stickyPlay = false
         _isPlaying.value = false
         PlaybackService.instance?.ensureAudibleVolume()
 
@@ -1120,9 +1228,16 @@ class PlaybackManager(
         PlaybackService.instance?.ensureAudibleVolume()
     }
 
+    private fun playbackStateLabel(state: Int): String = when (state) {
+        Player.STATE_IDLE -> "IDLE"
+        Player.STATE_BUFFERING -> "BUFFERING"
+        Player.STATE_READY -> "READY"
+        Player.STATE_ENDED -> "ENDED"
+        else -> "STATE_$state"
+    }
+
     companion object {
         private const val TAG = "PlaybackManager"
-        private const val BUFFERING_UI_TIMEOUT_MS = 2_500L
         private const val EXPAND_RADIUS = 32
         private const val EXPAND_HYSTERESIS = 8
         private const val EXPAND_LOCK_RETRIES = 3
