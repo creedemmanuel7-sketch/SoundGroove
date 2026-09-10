@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -178,66 +179,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            SettingsSection(title = "Apparence") {
-                Text(
-                    text = "Thème",
-                    color = TextSecondary,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-                ThemePicker(
-                    currentTheme = currentTheme,
-                    selectedRingColor = accentColor,
-                    onThemeClick = { theme, origin ->
-                        launchThemeReveal(
-                            revealState, scope, theme, currentTheme, origin, onThemeSelected
-                        )
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Couleur d'accent",
-                    color = TextSecondary,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-                AccentSwatchRow(
-                    currentAccent = currentAccent,
-                    selectedRingColor = TextPrimary,
-                    manualSelectionEnabled = !albumCoverAccentEnabled,
-                    onAccentSelected = onAccentSelected
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                SettingsToggleRow(
-                    icon = Icons.Filled.Album,
-                    title = "Accent de la pochette",
-                    description = if (albumCoverAccentEnabled) {
-                        "Couleur extraite du morceau en cours"
-                    } else {
-                        "Utiliser l'accent choisi ci-dessus"
-                    },
-                    checked = albumCoverAccentEnabled,
-                    accentColor = accentColor,
-                    onCheckedChange = onAlbumCoverAccentChange
-                )
-
-                if (albumCoverAccentEnabled) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Les pastilles restent votre choix de repli lorsque cette option est désactivée.",
-                        color = TextTertiary,
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(22.dp))
-
             SettingsSection(title = "Lecture") {
                 Row(
                     modifier = Modifier
@@ -299,11 +240,6 @@ fun SettingsScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = GlassBorder.copy(alpha = 0.4f))
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // NavigationRow plates (pas de fill accent sur les wells)
                 SettingsNavRow(
                     icon = Icons.Filled.Speed,
                     title = "Vitesse et tonalité",
@@ -322,10 +258,6 @@ fun SettingsScreen(
                     },
                     onClick = onOpenPlaybackSpeed
                 )
-
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = GlassBorder.copy(alpha = 0.4f))
-                Spacer(modifier = Modifier.height(16.dp))
 
                 SettingsNavRow(
                     icon = Icons.Filled.GraphicEq,
@@ -388,11 +320,7 @@ fun SettingsScreen(
                         modifier = Modifier.size(20.dp)
                     )
                 }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            SettingsSection(title = "Confort") {
+            
                 SettingsToggleRow(
                     icon = Icons.Filled.Notifications,
                     title = "Notifications intelligentes",
@@ -411,15 +339,6 @@ fun SettingsScreen(
                     onCheckedChange = onPersistentMiniPlayerChange
                 )
                 Spacer(modifier = Modifier.height(12.dp))
-                SettingsToggleRow(
-                    icon = Icons.Filled.Bolt,
-                    title = "Mode performance",
-                    description = "Réduire les effets visuels lors des longues sessions",
-                    checked = performanceModeEnabled,
-                    accentColor = accentColor,
-                    onCheckedChange = onPerformanceModeChange
-                )
-                Spacer(modifier = Modifier.height(12.dp))
                 SettingsVectorActionRow(
                     icon = Icons.Filled.DirectionsCar,
                     title = "Mode voiture",
@@ -427,11 +346,7 @@ fun SettingsScreen(
                     accentColor = accentColor,
                     onClick = onOpenCarMode
                 )
-            }
-
-            Spacer(modifier = Modifier.height(22.dp))
-
-            SettingsSection(title = "Avancé") {
+            
                 Text(
                     text = "Outils niche — hors chemin d'écoute quotidien",
                     color = TextTertiary,
@@ -474,29 +389,9 @@ fun SettingsScreen(
                         fontSize = 12.sp,
                     )
                 }
-            }
+                        }
 
-            Spacer(modifier = Modifier.height(22.dp))
-
-            SettingsSection(title = "Données") {
-                SettingsActionRow(
-                    iconRes = R.drawable.ic_songs,
-                    title = "Exporter les données",
-                    description = "Favoris, playlists, thème et accent au format JSON",
-                    accentColor = accentColor,
-                    onClick = onExportBackup
-                )
-                Spacer(modifier = Modifier.height(14.dp))
-                SettingsActionRow(
-                    iconRes = R.drawable.ic_playlists,
-                    title = "Restaurer une sauvegarde",
-                    description = "Remplacer favoris et playlists depuis un fichier JSON",
-                    accentColor = accentColor,
-                    onClick = { showImportConfirm = true }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(22.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             SettingsSection(title = "Bibliothèque") {
                 SettingsActionRow(
@@ -536,13 +431,83 @@ fun SettingsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(18.dp))
+
+            SettingsSection(title = "Apparence") {
+                Text(
+                    text = "Thème",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                ThemePicker(
+                    currentTheme = currentTheme,
+                    selectedRingColor = accentColor,
+                    onThemeClick = { theme, origin ->
+                        launchThemeReveal(
+                            revealState, scope, theme, currentTheme, origin, onThemeSelected
+                        )
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Couleur d'accent",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                AccentSwatchRow(
+                    currentAccent = currentAccent,
+                    selectedRingColor = TextPrimary,
+                    manualSelectionEnabled = !albumCoverAccentEnabled,
+                    onAccentSelected = onAccentSelected
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                SettingsToggleRow(
+                    icon = Icons.Filled.Album,
+                    title = "Accent de la pochette",
+                    description = if (albumCoverAccentEnabled) {
+                        "Couleur extraite du morceau en cours"
+                    } else {
+                        "Utiliser l'accent choisi ci-dessus"
+                    },
+                    checked = albumCoverAccentEnabled,
+                    accentColor = accentColor,
+                    onCheckedChange = onAlbumCoverAccentChange
+                )
+
+                if (albumCoverAccentEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Les pastilles restent votre choix de repli lorsque cette option est désactivée.",
+                        color = TextTertiary,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+                }
+            
+                SettingsToggleRow(
+                    icon = Icons.Filled.Bolt,
+                    title = "Mode performance",
+                    description = "Moins d'effets visuels",
+                    checked = performanceModeEnabled,
+                    accentColor = accentColor,
+                    onCheckedChange = onPerformanceModeChange
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
 
             SettingsSection(title = "Stockage") {
                 SettingsActionRow(
                     iconRes = R.drawable.ic_trash,
                     title = "Vider le cache",
-                    description = "Paroles en cache, recherche web et cartes de partage · ${cacheSizeLabel ?: "Calcul…"}",
+                    description = "Cache paroles / recherche · ${cacheSizeLabel ?: "Calcul…"}",
                     accentColor = accentColor,
                     onClick = { showClearCacheConfirm = true }
                 )
@@ -563,11 +528,27 @@ fun SettingsScreen(
                         lineHeight = 15.sp
                     )
                 }
-            }
+            
+                SettingsActionRow(
+                    iconRes = R.drawable.ic_songs,
+                    title = "Exporter les données",
+                    description = "Favoris, playlists, thème et accent au format JSON",
+                    accentColor = accentColor,
+                    onClick = onExportBackup
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                SettingsActionRow(
+                    iconRes = R.drawable.ic_playlists,
+                    title = "Restaurer une sauvegarde",
+                    description = "Remplacer favoris et playlists depuis un fichier JSON",
+                    accentColor = accentColor,
+                    onClick = { showImportConfirm = true }
+                )
+                        }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            SettingsSection(title = "Statistiques") {
+            SettingsSection(title = "À propos") {
                 StatRowIcon(R.drawable.ic_songs, "Morceaux", "$songCount")
                 Spacer(modifier = Modifier.height(10.dp))
                 StatRowIcon(R.drawable.ic_favorite_filled, "Favoris", "$favoriteCount")
@@ -587,11 +568,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(10.dp))
                     StatRowIcon(R.drawable.ic_repeat, "Scrobbles locaux", "$scrobbleTotal")
                 }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            SettingsSection(title = "À propos") {
+            
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -614,7 +591,7 @@ fun SettingsScreen(
                     fontSize = 12.sp,
                     lineHeight = 18.sp
                 )
-            }
+                        }
 
             Spacer(modifier = Modifier.height(28.dp))
                 }
@@ -805,6 +782,7 @@ private fun RemoteHostInfoCard(
 @Composable
 private fun SettingsSection(
     title: String,
+    accentColor: Color = MaterialTheme.colorScheme.primary,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
@@ -813,10 +791,20 @@ private fun SettingsSection(
             .padding(vertical = SgSpacing.sm)
     ) {
         ListeningSectionHeader(title = title)
-        Spacer(modifier = Modifier.height(14.dp))
-        content()
-        Spacer(modifier = Modifier.height(14.dp))
-        HorizontalDivider(color = GlassBorder.copy(alpha = 0.22f))
+        Spacer(modifier = Modifier.height(10.dp))
+        GlassCard(
+            modifier = Modifier.fillMaxWidth(),
+            cornerRadius = SgRadius.lg,
+            accentColor = accentColor,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = SgSpacing.md, vertical = SgSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                content = content,
+            )
+        }
     }
 }
 
@@ -899,8 +887,8 @@ private fun SettingsToggleRow(
         }
         Spacer(modifier = Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-            Text(description, color = TextSecondary, fontSize = 12.sp)
+            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(description, color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         SgSwitch(
             checked = checked,
@@ -941,8 +929,8 @@ private fun SettingsVectorActionRow(
         }
         Spacer(modifier = Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-            Text(description, color = TextSecondary, fontSize = 12.sp)
+            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(description, color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Icon(
             imageVector = Icons.Filled.ChevronRight,
@@ -984,8 +972,8 @@ private fun SettingsActionRow(
         }
         Spacer(modifier = Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-            Text(description, color = TextSecondary, fontSize = 12.sp)
+            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(description, color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Icon(
             imageVector = Icons.Filled.ChevronRight,
@@ -1043,8 +1031,8 @@ private fun SettingsNavRow(
         }
         Spacer(modifier = Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-            Text(subtitle, color = TextSecondary, fontSize = 12.sp)
+            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Icon(
             imageVector = Icons.Filled.ChevronRight,
