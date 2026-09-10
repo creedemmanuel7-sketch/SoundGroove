@@ -583,7 +583,7 @@ fun PlayerScreen(
                 decodeHeight = 720,
                 modifier = Modifier
                     .fillMaxSize()
-                    .sgSoftBlur(enabled = true, radius = 16.dp)
+                    .sgSoftBlur(enabled = true, radius = 12.dp)
             )
         }
         

@@ -2,6 +2,7 @@ package com.credo.soundgroove.playback
 
 import android.app.Application
 import android.content.ComponentName
+import android.content.Intent
 import android.os.SystemClock
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -487,6 +488,20 @@ class PlaybackManager(
         val engine = playbackEngine()
         if (engine == null) {
             pendingPlayRequest = PendingPlayRequest(generation, queue, startSong)
+            PlayLatencyTracker.markCommandPath("pending_no_engine", false, false, 0L)
+            runCatching {
+                application.startService(Intent(application, PlaybackService::class.java))
+            }
+            scope.launch {
+                repeat(40) {
+                    delay(50)
+                    if (generation != playGeneration.get()) return@launch
+                    if (playbackEngine() != null) {
+                        flushPendingPlayRequest()
+                        return@launch
+                    }
+                }
+            }
             return
         }
         val path = if (PlaybackStartPolicy.preferInProcessPlayer(
@@ -648,8 +663,10 @@ class PlaybackManager(
 
     private fun maybeExpandQueue(player: Player, fallback: Boolean) {
         val pending = pendingExpand ?: return
+        if (queueExpandJob?.isActive == true) return
         val genOk = pending.generation == playGeneration.get()
         val idOk = player.currentMediaItem?.mediaId == pending.expectedMediaId
+            || pending.expectedMediaId == pendingPlayMediaId
         val heard = PlaybackStartPolicy.isFirstAudioHeard(player.isPlaying, player.currentPosition)
         val ok = if (fallback) {
             val elapsed = if (playIssuedAtMs == 0L) {
@@ -659,14 +676,17 @@ class PlaybackManager(
             }
             PlaybackStartPolicy.shouldExpandFallback(true, elapsed, genOk, idOk)
         } else {
-            PlaybackStartPolicy.shouldExpandAfterFirstAudio(true, heard, genOk, idOk)
+            PlaybackStartPolicy.shouldExpandAfterPlayIssued(true, true, genOk, idOk)
+                || PlaybackStartPolicy.shouldExpandAfterFirstAudio(true, heard, genOk, idOk)
         }
         if (!ok) return
-        pendingExpand = null
-        expandFallbackJob?.cancel()
         val window = PlaybackWindowOps.compute(pending.index, pending.queue.size, EXPAND_RADIUS)
         PlayLatencyTracker.markExpand(
-            if (fallback) "fallback" else "first-audio",
+            when {
+                fallback -> "fallback"
+                heard -> "first-audio"
+                else -> "play-issued"
+            },
             pending.index - window.start,
             window.endExclusive - pending.index - 1,
         )
@@ -724,10 +744,14 @@ class PlaybackManager(
         queueExpandJob = scope.launch(Dispatchers.Default) {
             val before = queue.subList(window.start, window.logicalIndex).map { songToMediaItem(it) }
             val after = queue.subList(window.logicalIndex + 1, window.endExclusive).map { songToMediaItem(it) }
-            withContext(Dispatchers.Main.immediate) {
+            withContext(Dispatchers.Main) {
                 if (!isActive || generation != playGeneration.get()) return@withContext
                 val live = playbackEngine() ?: return@withContext
-                if (live.currentMediaItem?.mediaId != expectedMediaId) return@withContext
+                if (live.currentMediaItem?.mediaId != expectedMediaId
+                    && expectedMediaId != pendingPlayMediaId
+                ) {
+                    return@withContext
+                }
                 applyExpandWithRetry(
                     live = live,
                     before = before,
@@ -753,12 +777,20 @@ class PlaybackManager(
         addOnly: Boolean = false,
     ) {
         fun apply(): Boolean {
-            if (live.currentMediaItem?.mediaId != expectedMediaId) return true
+            val currentId = live.currentMediaItem?.mediaId
+            if (currentId != null && currentId != expectedMediaId) return true
+            if (currentId == null) return false
             val playWhenReadyBefore = live.playWhenReady
             if (PlaybackStartPolicy.canExpandWithAddOnly(live.mediaItemCount)) {
                 if (before.isNotEmpty()) live.addMediaItems(0, before)
                 if (after.isNotEmpty()) live.addMediaItems(after)
+                if ((keepPlaying || playWhenReadyBefore) && !live.playWhenReady) {
+                    live.playWhenReady = true
+                    live.play()
+                }
             } else if (addOnly || PlaybackStartPolicy.shouldResetPlaylistToExpand(live.mediaItemCount)) {
+                pendingExpand = null
+                expandFallbackJob?.cancel()
                 return true
             } else if (live.mediaItemCount != window.size() ||
                 (before.isNotEmpty() && peekPlayerMediaId(live, 0) != before.first().mediaId)
@@ -776,12 +808,18 @@ class PlaybackManager(
                     live.play()
                 }
             }
-            if (keepPlaying && !addOnly && playWhenReadyBefore && !live.isPlaying) {
+            if (keepPlaying && playWhenReadyBefore && !live.playWhenReady) {
+                ensureAudibleVolume(live)
+                live.playWhenReady = true
+                live.play()
+            } else if (keepPlaying && !addOnly && playWhenReadyBefore && !live.isPlaying) {
                 ensureAudibleVolume(live)
                 live.play()
             }
             rememberWindow(window)
             _playbackQueueIndex.value = logicalIndex
+            pendingExpand = null
+            expandFallbackJob?.cancel()
             return true
         }
 
@@ -1011,7 +1049,7 @@ class PlaybackManager(
             .take(PlaybackSessionStore.MAX_QUEUE_IDS)
             .toList()
             .ifEmpty { listOf(song.id) }
-        val position = _mediaController.value?.currentPosition ?: _playbackPosition.value
+        val position = playbackEngine()?.currentPosition ?: _playbackPosition.value
         PlaybackSessionStore.save(application, song.id, position, queueIds)
     }
 

@@ -77,7 +77,16 @@ class PlaybackStartPolicyTest {
     }
 
     @Test
-    fun expand_onlyAfterFirstAudio() {
+    fun expand_afterPlayIssued_doesNotWaitForAudio() {
+        assertTrue(PlaybackStartPolicy.shouldExpandAfterPlayIssued(true, true, true, true))
+        assertFalse(PlaybackStartPolicy.shouldExpandAfterPlayIssued(true, false, true, true))
+        assertFalse(PlaybackStartPolicy.shouldExpandAfterPlayIssued(false, true, true, true))
+        assertFalse(PlaybackStartPolicy.shouldExpandAfterPlayIssued(true, true, false, true))
+        assertFalse(PlaybackStartPolicy.shouldExpandAfterPlayIssued(true, true, true, false))
+    }
+
+    @Test
+    fun expand_firstAudio_isSecondaryNetNotStickyPlay() {
         assertTrue(PlaybackStartPolicy.shouldExpandAfterFirstAudio(true, true, true, true))
         assertFalse(PlaybackStartPolicy.shouldExpandAfterFirstAudio(true, false, true, true))
         assertFalse(PlaybackStartPolicy.shouldExpandAfterFirstAudio(true, true, false, true))

@@ -45,6 +45,14 @@ class PlayLatencyTrackerTest {
     }
 
     @Test
+    fun markExpand_isNoOpWithoutCrash() {
+        PlayLatencyTracker.markTap("expand")
+        PlayLatencyTracker.markExpand("play-issued", 2, 3)
+        PlayLatencyTracker.markIsPlaying()
+        assertTrue(PlayLatencyTracker.lastLatencyMs() >= 0L)
+    }
+
+    @Test
     fun markFirstNonZeroPosition_ignoresZero() {
         PlayLatencyTracker.markTap("pos")
         PlayLatencyTracker.markFirstNonZeroPosition(0L)
