@@ -3,9 +3,8 @@ package com.credo.soundgroove.playback;
 /**
  * Politique UI / expand au tap — pur Java, testable JVM.
  * UI honnête : icône pause seulement si le player joue vraiment ; spinner court
- * pendant le prepare. Fast-start 1 MediaItem ; expand dès {@code play()} émis
- * (addMediaItems add-only, jamais un reset playlist) — ne pas attendre {@code isPlaying}
- * (sinon skip / file cassés pendant 5–10 s). Fallback si l'expand immédiat rate.
+ * pendant le prepare. Fast-start 1 MediaItem ; expand après le premier sample
+ * (addMediaItems, jamais un reset playlist). Fallback expand pour ne pas casser skip.
  */
 public final class PlaybackStartPolicy {
 
@@ -60,21 +59,8 @@ public final class PlaybackStartPolicy {
     }
 
     /**
-     * Expand dès que {@code play()} a été émis — sans attendre {@code isPlaying}.
-     * L'ajout est asynchrone / add-only pour ne pas bloquer le premier rendu.
-     */
-    public static boolean shouldExpandAfterPlayIssued(
-            boolean pendingExpand,
-            boolean playIssued,
-            boolean generationCurrent,
-            boolean mediaIdMatches
-    ) {
-        return pendingExpand && playIssued && generationCurrent && mediaIdMatches;
-    }
-
-    /**
-     * Filet : si l'expand {@link #shouldExpandAfterPlayIssued} n'a pas abouti,
-     * un {@code isPlaying} / position &gt; 0 peut relancer l'expand.
+     * Expand après le premier sample — pas au {@code play()} (addMediaItems trop tôt
+     * retarde / casse le premier rendu).
      */
     public static boolean shouldExpandAfterFirstAudio(
             boolean pendingExpand,

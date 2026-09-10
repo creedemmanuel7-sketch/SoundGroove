@@ -653,7 +653,6 @@ class PlaybackManager(
         }
         val mediaId = queue.getOrNull(index)?.uri?.toString() ?: return
         pendingExpand = PendingExpand(queue, index, generation, mediaId)
-        maybeExpandQueue(player, fallback = false)
         expandFallbackJob = scope.launch {
             delay(PlaybackStartPolicy.EXPAND_FALLBACK_MS)
             val live = playbackEngine() ?: return@launch
@@ -663,10 +662,8 @@ class PlaybackManager(
 
     private fun maybeExpandQueue(player: Player, fallback: Boolean) {
         val pending = pendingExpand ?: return
-        if (queueExpandJob?.isActive == true) return
         val genOk = pending.generation == playGeneration.get()
         val idOk = player.currentMediaItem?.mediaId == pending.expectedMediaId
-            || pending.expectedMediaId == pendingPlayMediaId
         val heard = PlaybackStartPolicy.isFirstAudioHeard(player.isPlaying, player.currentPosition)
         val ok = if (fallback) {
             val elapsed = if (playIssuedAtMs == 0L) {
@@ -676,17 +673,14 @@ class PlaybackManager(
             }
             PlaybackStartPolicy.shouldExpandFallback(true, elapsed, genOk, idOk)
         } else {
-            PlaybackStartPolicy.shouldExpandAfterPlayIssued(true, true, genOk, idOk)
-                || PlaybackStartPolicy.shouldExpandAfterFirstAudio(true, heard, genOk, idOk)
+            PlaybackStartPolicy.shouldExpandAfterFirstAudio(true, heard, genOk, idOk)
         }
         if (!ok) return
+        pendingExpand = null
+        expandFallbackJob?.cancel()
         val window = PlaybackWindowOps.compute(pending.index, pending.queue.size, EXPAND_RADIUS)
         PlayLatencyTracker.markExpand(
-            when {
-                fallback -> "fallback"
-                heard -> "first-audio"
-                else -> "play-issued"
-            },
+            if (fallback) "fallback" else "first-audio",
             pending.index - window.start,
             window.endExclusive - pending.index - 1,
         )
