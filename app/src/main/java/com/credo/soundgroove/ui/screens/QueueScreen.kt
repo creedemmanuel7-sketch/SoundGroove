@@ -70,9 +70,11 @@ import androidx.compose.ui.unit.dp
 import com.credo.soundgroove.R
 import com.credo.soundgroove.data.model.Song
 import com.credo.soundgroove.playback.QueuePresentation
+import com.credo.soundgroove.playback.QueueSheetMotion
 import com.credo.soundgroove.ui.components.NowPlayingBars
 import com.credo.soundgroove.ui.components.SgEmptyState
 import com.credo.soundgroove.ui.motion.SgCoverImage
+import com.credo.soundgroove.ui.theme.ErrorRed
 import com.credo.soundgroove.ui.theme.GlassBorder
 import com.credo.soundgroove.ui.theme.GraphiteCard
 import com.credo.soundgroove.ui.theme.SgMotion
@@ -85,7 +87,6 @@ import com.credo.soundgroove.ui.theme.rememberSgReducedMotion
 import com.credo.soundgroove.ui.theme.sgNavigationBarsBottom
 import com.credo.soundgroove.ui.theme.sgPressScale
 import com.credo.soundgroove.ui.theme.sgSheetGradientBrush
-import com.credo.soundgroove.playback.QueueSheetMotion
 import com.credo.soundgroove.util.displayArtist
 import com.credo.soundgroove.util.displayTitle
 import kotlin.math.roundToInt
